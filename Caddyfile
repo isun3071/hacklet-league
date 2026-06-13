@@ -1,0 +1,26 @@
+# HackLet League — Caddy config.
+# SITE_ADDRESS and ACME_EMAIL are injected from .env via docker-compose.
+# With a real domain in SITE_ADDRESS, Caddy provisions + renews Let's Encrypt
+# certs automatically. With ":80" it serves plain HTTP (local testing).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	root * /srv
+	encode zstd gzip
+	file_server
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# --- Stage 1+ (uncomment when backend/frontend services exist) ---
+	# handle /api/* { reverse_proxy backend:8000 }
+	# handle /ws/*  { reverse_proxy backend:8000 }
+	# handle        { reverse_proxy frontend:3000 }
+}

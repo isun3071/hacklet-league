@@ -1,0 +1,41 @@
+# HackLet League — portable deployment stack.
+#
+# Host-agnostic by design: this runs identically on the home Proxmox Ubuntu VM
+# today and on a Hetzner VPS later. The only thing that differs between hosts is
+# the .env file. Moving hosts = clone repo + copy .env + (restore DB once one
+# exists) + `docker compose up -d`. See DEPLOY.md.
+#
+# Stage 0: Caddy serves the static landing page over HTTPS (automatic Let's
+# Encrypt). Stage 1+ services slot in where marked below.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (e.g. hackletleague.com, or :80 for local)}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (for Let's Encrypt)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./landing:/srv:ro
+      - caddy_data:/data        # persists issued TLS certs — DO NOT delete (LE rate limits)
+      - caddy_config:/config
+
+  # ----------------------------------------------------------------------------
+  # Stage 1+ services are added here (kept out now to respect Stage 0 scope):
+  #
+  #   db:        image postgres:16   + volume pgdata + .env credentials
+  #   redis:     image redis:7
+  #   backend:   build: ./backend    (Django + daphne / ASGI)
+  #   frontend:  build: ./frontend   (Next.js, `next start`)
+  #
+  # Caddy then reverse-proxies /api and /ws -> backend, everything else -> frontend
+  # (see the commented handle blocks in Caddyfile).
+  # ----------------------------------------------------------------------------
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HackLet League — competitive AI-assisted defensive coding</title>
+  <meta
+    name="description"
+    content="Hackathon, but minutes instead of hours. 24 minutes, one sanctioned AI, then automated adversarial testing and live judging. Get launch updates."
+  />
+  <meta name="theme-color" content="#0a0c0b" />
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://hackletleague.com/" />
+  <meta property="og:title" content="HackLet League" />
+  <meta
+    property="og:description"
+    content="Hackathon, but minutes instead of hours — with a cheering audience. A competitive format for AI-assisted defensive coding."
+  />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="HackLet League" />
+  <meta
+    name="twitter:description"
+    content="Hackathon, but minutes instead of hours — with a cheering audience."
+  />
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#signup">Skip to signup</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <span class="wordmark">HackLet<span class="wordmark-accent">League</span></span>
+      <a class="header-cta" href="#signup">Get updates</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container">
+        <p class="kicker">A competitive format for AI-assisted defensive coding</p>
+        <h1 class="hero-title">The fuzz is what separates hacklets from slop.</h1>
+        <p class="hero-sub">
+          24 minutes. One AI. Build something that survives adversarial testing. If
+          you can direct AI well — and prove it — you&rsquo;ll feel at home here.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#signup">Get launch updates</a>
+          <a class="btn btn-ghost" href="#how">See how a round works</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- What it is -->
+    <section class="section" id="what">
+      <div class="container narrow">
+        <h2 class="section-title">The format</h2>
+        <p class="lead">
+          <strong class="lead-strong">Hackathon, but minutes instead of hours — with a cheering audience.</strong>
+          Players get 24 minutes and a single mid-tier AI model to build, document,
+          and defend a web application. No web search. No second AI tool. No
+          copy-paste from outside. Just judgment, prompting fluency, and nerve.
+        </p>
+        <p class="lead">
+          When the clock hits zero, the network cuts and the code freezes — partial
+          AI responses roll back, and an automatic commit captures exactly what
+          existed at the buzzer. Then the real test begins.
+        </p>
+      </div>
+    </section>
+
+    <!-- How a round works -->
+    <section class="section section-alt" id="how">
+      <div class="container">
+        <h2 class="section-title centered">How a round works</h2>
+        <ol class="steps">
+          <li class="step">
+            <span class="step-num">01</span>
+            <h3>Build · 24 min</h3>
+            <p>
+              Direct the AI. Write code in your own IDE. Probe your own defenses with
+              live fuzz tests, and spend a finite token budget wisely. The room
+              watches your score climb in real time.
+            </p>
+          </li>
+          <li class="step">
+            <span class="step-num">02</span>
+            <h3>Fuzz · the gauntlet</h3>
+            <p>
+              At freeze, your app faces the full catalog: SQL injection, XSS, auth
+              bypass, malformed input, encoding tricks, the works. Defended earns
+              points. Broken loses them. Hidden tests stay hidden until the reveal.
+            </p>
+          </li>
+          <li class="step">
+            <span class="step-num">03</span>
+            <h3>Defend · pitch &amp; cross-ex</h3>
+            <p>
+              60 seconds to pitch what you built. 60 seconds under judge questioning.
+              Then categorical awards and the composite champion — Most Resilient,
+              Best Pitch, Best Overall, and the audience's People's Hacklet.
+            </p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- The thesis -->
+    <section class="band">
+      <div class="container narrow">
+        <p class="band-quote">The models do the typing. The judgment is yours.</p>
+        <p class="band-sub">
+          Anyone can vibe-code a demo. HackLet measures whether it holds up when
+          something attacks it — the AI-complementary skills that don&rsquo;t get easier
+          as the models get better: engineering judgment, verification reflex,
+          resource calibration, defense under questioning.
+        </p>
+      </div>
+    </section>
+
+    <!-- Signup -->
+    <section class="section" id="signup">
+      <div class="container narrow signup">
+        <h2 class="section-title centered">Season one is coming.</h2>
+        <p class="lead centered">
+          HackLet League is in active development. Drop your email for launch news,
+          early events, and a heads-up when the first chapter opens.
+        </p>
+
+        <!-- Buttondown embed.
+             Replace YOUR_BUTTONDOWN_USERNAME (both spots) with your Buttondown
+             username before deploying. See landing/README.md. -->
+        <form
+          class="signup-form"
+          action="https://buttondown.email/api/emails/embed-subscribe/YOUR_BUTTONDOWN_USERNAME"
+          method="post"
+          target="popupwindow"
+          onsubmit="window.open('https://buttondown.email/YOUR_BUTTONDOWN_USERNAME', 'popupwindow')"
+        >
+          <label class="sr-only" for="bd-email">Email address</label>
+          <input
+            id="bd-email"
+            type="email"
+            name="email"
+            inputmode="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+          />
+          <button type="submit" class="btn btn-primary">Notify me</button>
+        </form>
+        <p class="fineprint">No spam. Unsubscribe anytime.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span class="wordmark small">HackLet<span class="wordmark-accent">League</span></span>
+      <p class="footer-note">
+        Built for engineers who direct AI well — and can prove it. In development, 2026.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

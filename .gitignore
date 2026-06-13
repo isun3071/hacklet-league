@@ -1,0 +1,22 @@
+# Secrets / per-host config — never commit
+.env
+.env.*
+!.env.example
+
+# Runtime
+*.log
+
+# Python (Stage 1+)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (Stage 1+)
+node_modules/
+.next/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
