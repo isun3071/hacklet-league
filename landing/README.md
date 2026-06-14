@@ -20,10 +20,10 @@ python3 -m http.server 8000
 
 ### 1. Buttondown (email signup)
 
-1. Create an account at <https://buttondown.email> and note your **username**.
-2. In `index.html`, replace **both** occurrences of `YOUR_BUTTONDOWN_USERNAME`
-   (the form `action` URL and the `onsubmit` popup URL).
-3. Send yourself a test subscribe after deploy to confirm it lands in Buttondown.
+The form is already wired to the `iansun20` Buttondown account — endpoint
+`https://buttondown.com/api/emails/embed-subscribe/iansun20` (form `action` +
+`onsubmit` popup). After deploy, send yourself a test subscribe to confirm it
+lands in the Buttondown dashboard.
 
 ### 2. Cloudflare Pages (hosting)
 

@@ -177,13 +177,13 @@
         a season to sign up for.
       </p>
 
-      <!-- Buttondown embed. Replace YOUR_BUTTONDOWN_USERNAME (both spots). See landing/README.md. -->
+      <!-- Buttondown signup (account: iansun20) -->
       <form
         class="signup-form"
-        action="https://buttondown.email/api/emails/embed-subscribe/YOUR_BUTTONDOWN_USERNAME"
+        action="https://buttondown.com/api/emails/embed-subscribe/iansun20"
         method="post"
         target="popupwindow"
-        onsubmit="window.open('https://buttondown.email/YOUR_BUTTONDOWN_USERNAME', 'popupwindow')"
+        onsubmit="window.open('https://buttondown.com/iansun20', 'popupwindow')"
       >
         <label class="sr-only" for="bd-email">email address</label>
         <span class="form-prompt">subscribe:~$</span>
@@ -191,6 +191,7 @@
           id="bd-email" type="email" name="email" inputmode="email"
           autocomplete="email" placeholder="you@example.com" required
         />
+        <input type="hidden" name="embed" value="1" />
         <button type="submit" class="btn">[ notify me ]</button>
       </form>
     </section>
