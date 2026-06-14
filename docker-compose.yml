@@ -1,12 +1,11 @@
 # HackLet League — portable deployment stack.
 #
-# Host-agnostic by design: this runs identically on the home Proxmox Ubuntu VM
-# today and on a Hetzner VPS later. The only thing that differs between hosts is
-# the .env file. Moving hosts = clone repo + copy .env + (restore DB once one
-# exists) + `docker compose up -d`. See DEPLOY.md.
+# Host-agnostic: runs identically on the home Proxmox VM today and a Hetzner VPS
+# later. Only .env differs between hosts. See DEPLOY.md.
 #
-# Stage 0: Caddy serves the static landing page over HTTPS (automatic Let's
-# Encrypt). Stage 1+ services slot in where marked below.
+#   caddy    -> serves the landing page at /, reverse-proxies /api /admin /static to backend
+#   backend  -> Django (gunicorn). Runs migrate + collectstatic on start.
+#   db       -> PostgreSQL 16
 
 services:
   caddy:
@@ -21,21 +20,40 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./landing:/srv:ro
-      - caddy_data:/data        # persists issued TLS certs — DO NOT delete (LE rate limits)
+      - caddy_data:/data
       - caddy_config:/config
+    depends_on:
+      - backend
 
-  # ----------------------------------------------------------------------------
-  # Stage 1+ services are added here (kept out now to respect Stage 0 scope):
-  #
-  #   db:        image postgres:16   + volume pgdata + .env credentials
-  #   redis:     image redis:7
-  #   backend:   build: ./backend    (Django + daphne / ASGI)
-  #   frontend:  build: ./frontend   (Next.js, `next start`)
-  #
-  # Caddy then reverse-proxies /api and /ws -> backend, everything else -> frontend
-  # (see the commented handle blocks in Caddyfile).
-  # ----------------------------------------------------------------------------
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-hacklet.settings.dev}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DATABASE_URL: ${DATABASE_URL:-postgres://hacklet:hacklet@db:5432/hacklet}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+    depends_on:
+      db:
+        condition: service_healthy
+    # No host port published; Caddy reaches it on the internal network as backend:8000.
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hacklet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hacklet}
+      POSTGRES_DB: ${POSTGRES_DB:-hacklet}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hacklet}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   caddy_data:
   caddy_config:
+  pgdata:

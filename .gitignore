@@ -11,6 +11,10 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+staticfiles/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
 
 # Node (Stage 1+)
 node_modules/
