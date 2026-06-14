@@ -10,7 +10,6 @@
   />
   <meta name="theme-color" content="#0a0c0b" />
 
-  <!-- Open Graph / social -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://hackletleague.com/" />
   <meta property="og:title" content="HackLet League" />
@@ -31,33 +30,61 @@
 <body>
   <a class="skip-link" href="#signup">skip to signup</a>
 
-  <header class="bar">
-    <div class="container bar-inner">
+  <header class="nav">
+    <div class="container nav-inner">
       <span class="logo">hacklet<span class="accent">_league</span></span>
-      <a class="bar-link" href="#signup">[ get updates ]</a>
+      <nav class="nav-links">
+        <a href="#format">format</a>
+        <a href="#round">round</a>
+        <a href="#tiers">tiers</a>
+        <a href="#events">events</a>
+        <a href="#standings">rankings</a>
+        <a class="nav-cta" href="#signup">[ get updates ]</a>
+      </nav>
     </div>
   </header>
 
   <main>
-    <!-- Hero -->
+    <!-- Hero: headline + Codeforces-style "next event" panel -->
     <section class="container hero">
-      <p class="prompt">hacklet@league:~$ ./about --season-1<span class="cursor">█</span></p>
-      <h1 class="headline">The fuzz is what separates hacklets from slop.</h1>
-      <p class="readout">build 24:00 &middot; one AI &middot; ship it &middot; then defend it</p>
-      <p class="sub">
-        24 minutes. One AI. Build something that survives adversarial testing.
-        If you can direct AI well — and prove it — you&rsquo;ll feel at home here.
-      </p>
-      <div class="actions">
-        <a class="btn" href="#signup">[ get updates ]</a>
-        <a class="textlink" href="#how">see how a round works &rarr;</a>
+      <div class="hero-main">
+        <p class="status"><span class="dot"></span> season 01 &middot; status: pre-launch</p>
+        <h1 class="headline">The fuzz is what separates hacklets from slop.</h1>
+        <p class="sub">
+          24 minutes. One AI. Build something that survives adversarial testing.
+          If you can direct AI well — and prove it — you&rsquo;ll feel at home here.
+        </p>
+        <div class="actions">
+          <a class="btn" href="#signup">[ get updates ]</a>
+          <a class="textlink" href="#round">see how a round works &rarr;</a>
+        </div>
+      </div>
+      <aside class="next-event">
+        <p class="ne-label">// next event</p>
+        <p class="ne-name">Season 1 &middot; Pilot</p>
+        <dl class="ne-meta">
+          <div><dt>tier</dt><dd>collegiate</dd></div>
+          <div><dt>when</dt><dd>Fall 2026</dd></div>
+          <div><dt>where</dt><dd>UPE &middot; BU</dd></div>
+        </dl>
+        <a class="ne-status" href="#signup">[ registration soon ]</a>
+      </aside>
+    </section>
+
+    <!-- Stats strip: real format constants -->
+    <section class="stats">
+      <div class="container stats-inner">
+        <div class="stat"><span class="stat-n">24:00</span><span class="stat-l">build phase</span></div>
+        <div class="stat"><span class="stat-n">100K</span><span class="stat-l">token budget</span></div>
+        <div class="stat"><span class="stat-n">50</span><span class="stat-l">fuzz budget</span></div>
+        <div class="stat"><span class="stat-n">12</span><span class="stat-l">players / round</span></div>
+        <div class="stat"><span class="stat-n">3</span><span class="stat-l">tiers</span></div>
+        <div class="stat"><span class="stat-n">7</span><span class="stat-l">awards</span></div>
       </div>
     </section>
 
-    <hr class="rule" />
-
-    <!-- The format -->
-    <section class="container block">
+    <!-- Format -->
+    <section class="container block" id="format">
       <h2 class="h2"># the format</h2>
       <p class="body">
         <strong class="hl">Hackathon, but minutes instead of hours — with a cheering audience.</strong>
@@ -72,45 +99,67 @@
       </p>
     </section>
 
-    <hr class="rule" />
+    <!-- Round timeline as a contest timetable -->
+    <section class="container block" id="round">
+      <h2 class="h2"># anatomy of a round <span class="h2-aside">~120 min &middot; 12 players</span></h2>
+      <table class="sched">
+        <tbody>
+          <tr><td class="t">T-5:00</td><td>opening — host frames the round, introduces players</td></tr>
+          <tr><td class="t">T+0:00</td><td>build phase begins — direct the AI, write code, probe your defenses</td></tr>
+          <tr><td class="t">T+24:00</td><td>code freeze — network cuts; central fuzz runs public + hidden pools</td></tr>
+          <tr><td class="t">T+36:00</td><td>pitch + cross-examination — 60s pitch, 60s under judge fire</td></tr>
+          <tr><td class="t">T+66:00</td><td>deliberation + people&rsquo;s hacklet vote</td></tr>
+          <tr><td class="t">T+81:00</td><td>awards reveal — categorical, then best overall</td></tr>
+        </tbody>
+      </table>
+    </section>
 
-    <!-- How a round works -->
-    <section class="container block" id="how">
-      <h2 class="h2"># how a round works</h2>
-      <div class="panels">
-        <article class="panel">
-          <header class="panel-head">[01] build &middot; 24:00</header>
-          <p class="panel-body">
-            Direct the AI. Write code in your own IDE. Probe your own defenses
-            with live fuzz, and spend a finite token budget. The room watches
-            your score climb in real time.
-          </p>
-          <p class="meter"><span class="dim">tokens</span> <span class="fill">████████</span><span class="empty">░░</span>  <span class="dim">fuzz</span> <span class="fill">██</span><span class="empty">░░░</span></p>
-        </article>
-        <article class="panel">
-          <header class="panel-head">[02] fuzz &middot; the gauntlet</header>
-          <p class="panel-body">
-            At freeze, your app faces the full catalog: SQL injection, XSS, auth
-            bypass, malformed input, encoding tricks. Defended scores. Broken
-            loses. Hidden tests stay hidden until the reveal.
-          </p>
-          <p class="meter"><span class="dim">catalog</span> <span class="fill">defended</span> / <span class="empty">broken</span> / n/a</p>
-        </article>
-        <article class="panel">
-          <header class="panel-head">[03] defend &middot; pitch + cross-ex</header>
-          <p class="panel-body">
-            60 seconds to pitch what you built. 60 seconds under judge
-            questioning. Then the awards: Most Resilient, Best Pitch, Best
-            Overall, and the audience&rsquo;s People&rsquo;s Hacklet.
-          </p>
-          <p class="meter"><span class="dim">verdict</span> <span class="fill">&gt; awards reveal</span></p>
-        </article>
+    <!-- Events table (CTFtime-style) -->
+    <section class="container block" id="events">
+      <h2 class="h2"># events</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>event</th><th>tier</th><th>when</th><th>status</th></tr></thead>
+          <tbody>
+            <tr><td>Season 1 &middot; Pilot</td><td>collegiate</td><td>Fall 2026</td><td class="ok">registration soon</td></tr>
+            <tr><td>Chapter events</td><td>all</td><td>2026–27</td><td class="dim">scheduling</td></tr>
+            <tr><td>Regional / Championship</td><td>open</td><td>TBA</td><td class="dim">planned</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">// schedule fills in as chapters come online. <a href="#signup">get notified &rarr;</a></p>
+    </section>
+
+    <!-- Standings table (leaderboard teaser, honest empty state) -->
+    <section class="container block" id="standings">
+      <h2 class="h2"># standings</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>#</th><th>player</th><th>fuzz</th><th>comm</th><th>Σ rank</th></tr></thead>
+          <tbody>
+            <tr class="empty"><td colspan="5">— standings populate when Season 1 runs —</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">awards &gt; most resilient &middot; best ux &middot; best pitch &middot; most novel &middot; most efficient &middot; people&rsquo;s hacklet &middot; best overall</p>
+    </section>
+
+    <!-- Tiers / divisions -->
+    <section class="container block" id="tiers">
+      <h2 class="h2"># tiers</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>tier</th><th>who</th><th>scoring</th></tr></thead>
+          <tbody>
+            <tr><td class="hl">collegiate</td><td>current undergraduates</td><td>core categories; advanced = positive-only bonus</td></tr>
+            <tr><td class="hl">under-25</td><td>age ≤25, recent grads</td><td>+ intermediate categories, moderate penalties</td></tr>
+            <tr><td class="hl">open</td><td>anyone</td><td>full professional gauntlet, symmetric scoring</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
-    <hr class="rule" />
-
-    <!-- The thesis -->
+    <!-- Thesis band -->
     <section class="container band">
       <p class="band-line"><span class="dim">//</span> the models do the typing. the judgment is yours.</p>
       <p class="band-sub">
@@ -121,8 +170,6 @@
       </p>
     </section>
 
-    <hr class="rule" />
-
     <!-- Signup -->
     <section class="container block" id="signup">
       <h2 class="h2"># season one is coming</h2>
@@ -131,9 +178,7 @@
         early events, and a heads-up when the first chapter opens.
       </p>
 
-      <!-- Buttondown embed.
-           Replace YOUR_BUTTONDOWN_USERNAME (both spots) before deploying.
-           See landing/README.md. -->
+      <!-- Buttondown embed. Replace YOUR_BUTTONDOWN_USERNAME (both spots). See landing/README.md. -->
       <form
         class="signup-form"
         action="https://buttondown.email/api/emails/embed-subscribe/YOUR_BUTTONDOWN_USERNAME"
@@ -144,21 +189,16 @@
         <label class="sr-only" for="bd-email">email address</label>
         <span class="form-prompt">subscribe:~$</span>
         <input
-          id="bd-email"
-          type="email"
-          name="email"
-          inputmode="email"
-          autocomplete="email"
-          placeholder="you@example.com"
-          required
+          id="bd-email" type="email" name="email" inputmode="email"
+          autocomplete="email" placeholder="you@example.com" required
         />
         <button type="submit" class="btn">[ notify me ]</button>
       </form>
     </section>
   </main>
 
-  <footer class="bar foot">
-    <div class="container bar-inner">
+  <footer class="foot">
+    <div class="container nav-inner">
       <span class="logo">hacklet<span class="accent">_league</span></span>
       <span class="muted">in development &middot; 2026</span>
     </div>
