@@ -487,17 +487,7 @@ Credentialing is the aspiration, not the pitch. The League's job is to run the f
 
 The League is honest about what AI actually delivers: a meaningful but modest productivity multiplier, useful when directed well, sloppy when directed poorly. The format demonstrates this empirically in every event. Submissions that pass the fuzz gauntlet are evidence of what skilled AI-assisted work can produce. Submissions that fail are evidence of what unskilled AI-assisted work cannot.
 
-HackLet does not legislate AI usage style. Players may use the sanctioned 
-AI substrate via any interface the workstation supports — chat, agentic 
-IDE integration, command-line, automated tool chains — provided all calls 
-flow through the league's API and stay within budget.
-
-The format rests on two principles — substrate equality and submission resilience (§10).
-
-These two principles are sufficient. The format does not evaluate process, 
-review quality, prompting style, or "amount of human authorship." What 
-matters is what survives the fuzz at code freeze. Code that doesn't defend 
-against the catalog scores accordingly, regardless of who or what produced it.
+HackLet does not legislate AI usage style — any interface is fine (chat, agentic, command-line) so long as calls flow through the league's API and stay within budget. What matters is what survives the fuzz at code freeze, regardless of who or what produced it. The two principles (§10) are sufficient; the format evaluates nothing else.
 
 The fuzz is what separates hacklets from slop.
 
