@@ -15,7 +15,8 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (e.g. hackletleague.com, or :80 for local)}
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (e.g. hackletleague.com for HTTPS, or http://localhost)}
+      LAN_ADDRESS: ${LAN_ADDRESS:-http://localhost}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (for Let's Encrypt)}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

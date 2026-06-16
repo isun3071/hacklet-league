@@ -1,12 +1,16 @@
 # HackLet League — Caddy config.
-# SITE_ADDRESS and ACME_EMAIL come from .env via docker-compose. A real domain in
-# SITE_ADDRESS gets automatic Let's Encrypt TLS; ":80" serves plain HTTP (local).
+# Serves the app on TWO addresses at once (both from .env):
+#   SITE_ADDRESS — your public domain -> automatic HTTPS (cert issues once DNS
+#                  resolves to this box and 80/443 are reachable).
+#   LAN_ADDRESS  — an explicit http:// host (e.g. a LAN IP) -> plain HTTP, and
+#                  because the scheme is http:// Caddy does NOT redirect it to HTTPS.
 
 {
 	email {$ACME_EMAIL}
 }
 
-{$SITE_ADDRESS} {
+# Shared routing for every site below.
+(app) {
 	encode zstd gzip
 
 	# Django backend
@@ -34,4 +38,14 @@
 		Referrer-Policy strict-origin-when-cross-origin
 		-Server
 	}
+}
+
+# Public domain: automatic HTTPS.
+{$SITE_ADDRESS} {
+	import app
+}
+
+# Direct LAN / IP access over plain HTTP (no HTTPS redirect).
+{$LAN_ADDRESS} {
+	import app
 }
