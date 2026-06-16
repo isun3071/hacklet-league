@@ -304,10 +304,34 @@ The proxy exposes an **OpenAI-compatible chat completions endpoint** (`/api/v1/c
 
 Mid-tier model choice is deliberate. Frontier models would mask the verification skill that distinguishes thoughtful AI direction from lazy AI direction. Mid-tier models hallucinate at rates that exercise verification skill meaningfully. Players who instinctively prompt for resilience and verify model output succeed; players who do not, fail.
 
-### 5.4 Package Mirror
+## 5.4 Substrate Languages and Package Mirror
 
-A curated package mirror provides access to common dependencies without requiring external network access. The full available package list is published in advance with the season's substrate documentation. Players are responsible for knowing what is available and prompting the AI accordingly. Submissions that depend on packages outside the mirror will fail to deploy.
+The substrate supports a tiered set of languages calibrated to the
+target population — junior software engineers. The Union-Of-Resumes
+heuristic governs inclusion: a language is in the substrate if it
+appears commonly on junior SWE resumes in the league's target market.
 
+**Tier 1 — Full substrate parity**:
+Python, JavaScript, TypeScript, Go
+Mirrored starter kits cover web frameworks, ORMs, validation,
+testing, and common utilities. Quality of substrate is equal across
+these languages.
+
+**Tier 2 — Maintained substrate parity**:
+Java, C#, Rust, Ruby
+Mirrored starter kits cover web frameworks and core utilities.
+Substrate is maintained but with smaller catalogs than Tier 1.
+
+**Tier 3 — Compiler-only**:
+C, C++
+Toolchain available. No mirrored framework ecosystem. Players using
+Tier 3 languages bring their own infrastructure within the round time.
+
+The mirror is operated by the league at packages.hackletleague.com,
+firewall-allowed alongside the main domain. Mirror updates between
+seasons; package availability is published with season documentation.
+Submissions requiring packages outside the mirror will fail to deploy
+and score accordingly.
 ### 5.5 Resource Budgets
 
 Each player receives per round:

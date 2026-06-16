@@ -25,6 +25,35 @@ For each entry, note **what** the idea is, **why** it's deferred (which stage it
 - **Fuzz-runner sandbox hardening doc.** Before Stage 5, update [FUZZ_RUNNER_SPEC.md](FUZZ_RUNNER_SPEC.md) to explicitly treat the runner as a sandbox executing untrusted contestant code, not just a test executor. Must address: container escape, resource exhaustion, network-egress prevention from submissions, and the hidden-pool-must-never-reach-workstations boundary. *Why deferred:* runner is Stage 5; flagged now so it isn't forgotten. *Context:* identified during the foundational design review.
 - **Broadcast architecture (deferred details).** Capture via **VNC pull** from each workstation (league pulls the display rather than the workstation pushing). League stats overlay built as a **Next.js dashboard consumable by OBS as a browser source**. Production complexity scales with event tier (chapter → regional → championship). *Belongs to Stage 6.*
 
+## Workstation Fleet Management (Stage 7+)
+
+HackLet workstations are managed via MeshCentral + HackLet-specific
+scripts, not a full RMM (Tactical RMM, NetLock, NinjaOne, etc.).
+
+MeshCentral provides:
+- Cross-platform agent (signed by league)
+- Remote desktop, terminal, file transfer
+- Script execution on individual workstations or fleet-wide
+- Heartbeat / online status / basic health metrics
+- Multi-tenancy (chapters scoped to their workstation groups)
+
+Full RMMs add patch management, software inventory, compliance
+reporting, and alerting workflows — none of which HackLet needs.
+HackLet workstations are stateless homogeneous appliances managed
+via master images (updated between events), not heterogeneous
+endpoints requiring per-machine patching.
+
+HackLet-specific logic lives in shell + Python scripts installed
+at /opt/hacklet/ as part of the master image. The Django round
+state machine pushes commands to MeshCentral via API when round
+transitions occur; MeshCentral fans the command out to relevant
+workstations; scripts execute and report to the league API directly.
+
+First-party credentialing evidence comes from the HackLet scripts
+reporting to the league's audit tables, not from the agent
+transport. MeshCentral is implementation detail; the scripts and
+their reports are the first-party data.
+
 ---
 
 *When an idea here becomes in-scope for the active stage, move it out of this file and into the work.*
