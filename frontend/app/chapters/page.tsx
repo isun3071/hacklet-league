@@ -27,28 +27,33 @@ export default async function ChaptersPage() {
           // no chapters listed yet. <Link href="/#signup">get notified &rarr;</Link>
         </p>
       ) : (
-        <div className="table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>chapter</th>
-                <th>tier</th>
-                <th>where</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chapters.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link href={`/chapters/${c.slug}`}>{c.name}</Link>
-                  </td>
-                  <td>{c.tier}</td>
-                  <td>{c.location_text || "—"}</td>
+        <>
+          <p className="subtitle">
+            // {chapters.length} chapter{chapters.length === 1 ? "" : "s"} running HackLet Classical
+          </p>
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>chapter</th>
+                  <th>tier</th>
+                  <th>where</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {chapters.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link href={`/chapters/${c.slug}`}>{c.name}</Link>
+                    </td>
+                    <td>{c.tier}</td>
+                    <td>{c.location_text || c.institutional_affiliation || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </main>
   );

@@ -25,7 +25,13 @@ body {
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
+
+/* Sticky footer: main grows so the footer pins to the bottom on short pages. */
+main { flex: 1 0 auto; }
 
 /* Subtle CRT scanlines */
 body::after {
@@ -148,3 +154,16 @@ a { color: var(--accent); text-decoration: none; }
 }
 .data td { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); color: var(--text); }
 .data tr:last-child td { border-bottom: 0; }
+.data tbody tr:hover { background: rgba(182, 244, 0, 0.05); }
+.data a:hover { text-decoration: underline; }
+
+.subtitle { color: var(--muted); font-size: 0.9rem; margin: -0.4rem 0 1.6rem; }
+
+/* Chapter detail panel */
+.panel { border: 1px solid var(--line); background: var(--panel); padding: 1.4rem; max-width: 640px; margin: 0 0 1.2rem; }
+.kv { margin: 0 0 1.2rem; display: grid; gap: 0.55rem; }
+.kv div { display: flex; gap: 1rem; font-size: 0.92rem; }
+.kv dt { color: var(--muted); min-width: 7rem; }
+.kv dd { margin: 0; color: var(--text); }
+.kv dd a { color: var(--accent); }
+.chapter-desc { color: var(--text); margin: 0; white-space: pre-wrap; }

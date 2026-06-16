@@ -17,19 +17,43 @@ export default async function ChapterPage({
     <main className="container block">
       <p className="prompt">/chapters/{chapter.slug}</p>
       <h1 className="page-title">{chapter.name}</h1>
-      <p className="readout">
-        tier {chapter.tier} &middot; {chapter.mode}
-        {chapter.institutional_affiliation ? ` · ${chapter.institutional_affiliation}` : ""}
-      </p>
-      {chapter.location_text && <p className="body">{chapter.location_text}</p>}
-      <p className="body">{chapter.description || "No description yet."}</p>
-      {chapter.website_url && (
-        <p className="body">
-          <a href={chapter.website_url} rel="noopener noreferrer">
-            {chapter.website_url}
-          </a>
-        </p>
-      )}
+
+      <div className="panel">
+        <dl className="kv">
+          <div>
+            <dt>tier</dt>
+            <dd>{chapter.tier}</dd>
+          </div>
+          <div>
+            <dt>mode</dt>
+            <dd>{chapter.mode}</dd>
+          </div>
+          {chapter.location_text && (
+            <div>
+              <dt>where</dt>
+              <dd>{chapter.location_text}</dd>
+            </div>
+          )}
+          {chapter.institutional_affiliation && (
+            <div>
+              <dt>affiliation</dt>
+              <dd>{chapter.institutional_affiliation}</dd>
+            </div>
+          )}
+          {chapter.website_url && (
+            <div>
+              <dt>site</dt>
+              <dd>
+                <a href={chapter.website_url} rel="noopener noreferrer">
+                  {chapter.website_url}
+                </a>
+              </dd>
+            </div>
+          )}
+        </dl>
+        <p className="chapter-desc">{chapter.description || "No description yet."}</p>
+      </div>
+
       <p className="note">
         <Link href="/chapters">&larr; all chapters</Link>
       </p>
