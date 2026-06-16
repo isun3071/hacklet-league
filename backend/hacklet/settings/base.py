@@ -17,7 +17,11 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
     "rest_framework",
+    "allauth",
+    "allauth.account",
+    "allauth.headless",
     "users",
     "chapters",
 ]
@@ -31,6 +35,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "hacklet.urls"
@@ -57,6 +62,31 @@ DATABASES = {
 }
 
 AUTH_USER_MODEL = "users.User"
+SITE_ID = 1
+
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# django-allauth — email-based login, session auth, no usernames (claude.md: sessions, not JWTs)
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_UNIQUE_EMAIL = True
+
+# Headless API for the Next.js SPA (browser/session client). Frontend routes are
+# placeholders until the frontend increment wires them.
+HEADLESS_ONLY = True
+HEADLESS_FRONTEND_URLS = {
+    "account_confirm_email": "/auth/verify-email/{key}",
+    "account_reset_password": "/auth/password/reset",
+    "account_reset_password_from_key": "/auth/password/reset/key/{key}",
+    "account_signup": "/auth/signup",
+}
+
+DEFAULT_FROM_EMAIL = "HackLet League <no-reply@hackletleague.com>"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
