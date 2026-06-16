@@ -27,10 +27,9 @@
 		reverse_proxy backend:8000
 	}
 
-	# Static landing page (everything else)
+	# Next.js frontend (everything else)
 	handle {
-		root * /srv
-		file_server
+		reverse_proxy frontend:3000
 	}
 
 	header {

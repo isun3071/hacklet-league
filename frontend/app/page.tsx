@@ -1,65 +1,100 @@
-import Image from "next/image";
-
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <>
+      <header className="bar">
+        <div className="container bar-inner">
+          <span className="logo">
+            hacklet<span className="accent">_league</span>
+          </span>
+          <a className="bar-link" href="#signup">[ get updates ]</a>
+        </div>
+      </header>
+
+      <main>
+        <section className="container hero">
+          <p className="prompt">
+            hacklet@league:~$ ./about --season-1<span className="cursor">█</span>
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <h1 className="headline">The fuzz is what separates hacklets from slop.</h1>
+          <p className="readout">build 24:00 &middot; one AI &middot; ship it &middot; then defend it</p>
+          <p className="sub">
+            24 minutes. One AI. Build a web app, then watch attackers try to break it.
+            The people who win can steer a model and catch its mistakes before they ship.
+          </p>
+          <div className="actions">
+            <a className="btn" href="#signup">[ get updates ]</a>
+          </div>
+        </section>
+
+        <hr className="rule" />
+
+        <section className="container block">
+          <h2 className="h2"># the format</h2>
+          <p className="body">
+            <strong className="hl">
+              Hackathon, but minutes instead of hours. With a crowd watching.
+            </strong>{" "}
+            You get 24 minutes and one mid-tier AI to build a working web app and write it
+            up. No web search, no second AI, no pasting from Stack Overflow. What&rsquo;s left
+            is how well you drive the model, and whether you catch it when it&rsquo;s wrong.
+          </p>
+          <p className="body">
+            At zero, the network drops and your code freezes. A commit grabs exactly what was
+            there at the buzzer, and that&rsquo;s your submission. Then it gets attacked.
+          </p>
+        </section>
+
+        <hr className="rule" />
+
+        <section className="container band">
+          <p className="band-line">
+            <span className="dim">//</span> the models do the typing. the judgment is yours.
+          </p>
+          <p className="band-sub">
+            A model will write you a demo in a minute. Whether it survives a real attacker is
+            the harder question, and the more interesting one. That doesn&rsquo;t get easier as
+            the models improve. It&rsquo;s the part we score.
+          </p>
+        </section>
+
+        <hr className="rule" />
+
+        <section className="container block" id="signup">
+          <h2 className="h2"># season one is coming</h2>
+          <p className="body">
+            I&rsquo;m still building this. Leave your email and I&rsquo;ll let you know when there&rsquo;s a
+            season to sign up for.
+          </p>
+          <form
+            className="signup-form"
+            action="https://buttondown.com/api/emails/embed-subscribe/iansun20"
+            method="post"
+            target="popupwindow"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            <label className="sr-only" htmlFor="bd-email">email address</label>
+            <span className="form-prompt">subscribe:~$</span>
+            <input
+              id="bd-email"
+              type="email"
+              name="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              required
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+            <input type="hidden" name="embed" defaultValue="1" />
+            <button type="submit" className="btn">[ notify me ]</button>
+          </form>
+        </section>
       </main>
-    </div>
+
+      <footer className="foot">
+        <div className="container bar-inner">
+          <span className="logo">
+            hacklet<span className="accent">_league</span>
+          </span>
+          <span className="muted">in development &middot; 2026</span>
+        </div>
+      </footer>
+    </>
   );
 }

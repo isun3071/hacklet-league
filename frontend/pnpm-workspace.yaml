@@ -1,6 +1,6 @@
-allowBuilds:
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-ignoredBuiltDependencies:
+# Allow these dependencies' install scripts to run (sharp = image optimization,
+# unrs-resolver = eslint import resolver). Without this, pnpm 10 blocks them and
+# the install aborts with ERR_PNPM_IGNORED_BUILDS.
+onlyBuiltDependencies:
   - sharp
   - unrs-resolver
