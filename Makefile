@@ -1,6 +1,6 @@
 # HackLet League — convenience targets. Run from the repo root.
 
-.PHONY: up down restart logs pull ps config
+.PHONY: up down restart logs pull ps config dev migrations
 
 up:        ## Start the stack (detached)
 	docker compose up -d
@@ -22,3 +22,9 @@ ps:        ## Show running services
 
 config:    ## Validate compose + show resolved config
 	docker compose config
+
+dev:       ## Run with the dev override (bind-mounted source, autoreload)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+migrations: ## Generate Django migrations (persisted to host via the dev override)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend uv run python manage.py makemigrations

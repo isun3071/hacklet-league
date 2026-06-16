@@ -1,0 +1,21 @@
+# Dev override. Bind-mounts the backend source so edits and generated migrations
+# persist to the host, and runs Django's autoreloading dev server.
+#
+#   Run with autoreload:   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   Generate migrations:   docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend \
+#                            uv run python manage.py makemigrations
+#   (or just `make dev` / `make migrations`)
+#
+# Why the named volume: the ./backend bind mount would otherwise hide the image's
+# virtualenv at /app/.venv. The named volume re-exposes it (populated from the image
+# on first run), so `uv run` finds the installed deps instead of re-syncing.
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+    command: sh -c "uv run python manage.py migrate --noinput && uv run python manage.py runserver 0.0.0.0:8000"
+
+volumes:
+  backend_venv:
