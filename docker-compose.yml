@@ -43,6 +43,9 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    environment:
+      # Server-side (SSR) fetches reach the backend over the internal docker network.
+      INTERNAL_API_URL: http://backend:8000
     # No host port published; Caddy reaches it at frontend:3000.
 
   db:
