@@ -8,7 +8,7 @@ For each entry, note **what** the idea is, **why** it's deferred (which stage it
 
 ## Format & Scoring
 
-*(none yet)*
+- **HackLet Agentic (second format).** HackLet is a league that runs formats, not a single format; Agentic is the anticipated second one, built when the agentic-coding paradigm warrants it and Classical is operating well. Round sketch: 5-min opening + 15-min spec phase + 60-min supervised agent execution + 15-min hardening + 15-min eval/prep + 30-min pitches + 30-min deliberation/awards ≈ **165 min (~3 hr)**. Budgets: **500k tokens**, **60-min agent runtime cap**, **200 accepted-change cap**, **50 fuzz budget**. New categorical award **Best Direction**. **Shares the fuzz catalog with Classical** (the runner is format-agnostic — see FUZZ_RUNNER_SPEC.md). Substrate differs from Classical: VSCodium with one league-built, signed, locked extension (chat sidebar + accept/reject UI for agent-proposed changes), not the portal chat window — the accept/reject step is the format's deliberate-action friction. *Why deferred:* big standalone build (see the Agentic stage in BUILD_ROADMAP). *Context:* the agentic paradigm shift threatens a single-format competition but not a multi-format league.
 
 ## Platform & Features
 
@@ -16,11 +16,14 @@ For each entry, note **what** the idea is, **why** it's deferred (which stage it
 
 ## Operations & Community
 
-*(none yet)*
+- **FMWC positioning.** The Financial Modeling World Cup (founded 2020 by Andrew Grigolyunovich, Latvia, after ModelOff was discontinued) is HackLet's structural precedent: a niche measurable skill → collegiate feeder tiers + persistent rankings + broadcast → a real institution. Deploy in pitches to chapter operators / sponsors / employers to answer "*is this real?*" — HackLet applies a pattern that already worked, to a larger domain (AI coding > financial modeling in participant pool and cultural pull). Frame as **template, not parity** — HackLet hasn't earned FMWC's reach. *Verify the specific facts before any public use.*
+- **Competitive landscape — Microsoft "Agents League" (June 2026).** Week-long async hackathon, esports framing, ~$55k prize pool, GitHub Copilot + Microsoft Foundry, part of AI Skills Fest. Structurally different from HackLet: week-long async vs 24-min live, subjective judging vs adversarial fuzz, ambiguous teams vs solo, marketing activation vs institution-building. Honest read: a hyperscaler entering **validates the category** but is also a **distribution threat HackLet can't match** (Copilot's install base). HackLet's defense is not reach — it's the credential + the fuzz moat. Practical effect: **drop "first / pioneering" language** from positioning. *Verify details before relying on them.*
+- **Testing-center framing.** HackLet workstations parallel certification testing-center rigor (CCIE lab, CISSP proctoring): controlled substrate, identical conditions, audited integrity. Useful for making the credentialing claim legible — the conditions are *why* the score means something.
 
 ## Infrastructure & Security
 
-- **Fuzz-runner sandbox hardening doc.** Before Stage 5, update [FUZZ_RUNNER_SPEC.md](FUZZ_RUNNER_SPEC.md) to explicitly treat the runner as a sandbox executing untrusted contestant code, not just a test executor. Must address: container escape, resource exhaustion, network-egress prevention from submissions, and the hidden-pool-must-never-reach-workstations boundary. *Why deferred:* runner is Stage 5; but flagged now so it isn't forgotten. *Context:* identified during the foundational design review.
+- **Fuzz-runner sandbox hardening doc.** Before Stage 5, update [FUZZ_RUNNER_SPEC.md](FUZZ_RUNNER_SPEC.md) to explicitly treat the runner as a sandbox executing untrusted contestant code, not just a test executor. Must address: container escape, resource exhaustion, network-egress prevention from submissions, and the hidden-pool-must-never-reach-workstations boundary. *Why deferred:* runner is Stage 5; flagged now so it isn't forgotten. *Context:* identified during the foundational design review.
+- **Broadcast architecture (deferred details).** Capture via **VNC pull** from each workstation (league pulls the display rather than the workstation pushing). League stats overlay built as a **Next.js dashboard consumable by OBS as a browser source**. Production complexity scales with event tier (chapter → regional → championship). *Belongs to Stage 6.*
 
 ---
 

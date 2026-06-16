@@ -27,6 +27,7 @@ All foreign keys cascade carefully — chapter deletion does not cascade to user
 - **Ranking** — Aggregated performance per user per scope per period
 - **AuditLog** — Append-only record of significant operations
 - **AudienceVote** — People's Hacklet votes from spectators
+- **WorkstationSession** — Per-round, per-workstation ephemeral-account lifecycle (audit; Stage 7+)
 
 ## Core Entities
 
@@ -126,6 +127,7 @@ slug                    : varchar (chapter-scoped unique)
 name                    : varchar
 description             : text
 event_tier              : enum (chapter, regional, championship)
+format_type             : enum (classical) — only 'classical' valid today; structural slot for future formats (e.g. agentic)
 status                  : enum (scheduled, registration_open, in_progress, completed, cancelled)
 scheduled_start         : timestamp
 scheduled_end           : timestamp
@@ -186,6 +188,25 @@ unique constraint: (round_id, player_user_id)
 ```
 
 One submission per player per round. Status tracks whether it deployed successfully. Surface coverage is computed from fuzz test applicability after evaluation.
+
+### WorkstationSession
+
+Per-round, per-workstation account lifecycle record — auditable evidence of substrate integrity for credentialing (which player occupied which workstation under which ephemeral account, and that it was torn down). Per-round reset is account-only (`userdel -r`); full image restoration is exceptional and recorded here. Not implemented until workstation hardening (Stage 7); modeled now so the audit trail is designed in.
+
+```
+id                  : UUID primary key
+round_id            : FK Round
+player_user_id      : FK User
+workstation_id      : varchar (chapter-local workstation identifier)
+account_name        : varchar (ephemeral Unix account created for this session)
+account_created_at  : timestamp
+account_deleted_at  : timestamp, nullable
+image_restored      : boolean (true if a full image restore ran for this session, vs account-only reset)
+tamper_flag         : boolean (set if tamper detection fired)
+notes               : text, nullable
+```
+
+A set `tamper_flag` forces image restoration before the workstation is reused. Local fuzz runner state lives in the player's home directory and is wiped with the account at round end.
 
 ## Fuzz Catalog Entities
 

@@ -63,6 +63,8 @@ Public pages are SEO-friendly through SSR. Cache-control headers allow CDN cachi
 
 The OpenRouter API key is stored encrypted server-side (environment variable or secret manager). It is added by Django when constructing the upstream request, never exposed to the frontend.
 
+The proxy is also exposed as an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`), alongside the simple `/api/ai/chat` the portal uses. Any OpenAI-protocol client — the Classical chat window today, an Agentic IDE extension later, CLI tools — targets it with the same session auth, budget enforcement, and audit logging. Compatibility is surface-only: Django pins the season's model, enforces token/fuzz budgets and rate limits server-side, and logs every call; clients cannot choose the model or exceed budget. This decouples the substrate from any specific client choice without changing the API contract.
+
 ### Fuzz Trigger Flow (during build phase, local runner)
 
 1. Player clicks a fuzz category trigger button in the league portal
@@ -130,6 +132,12 @@ Transitions are triggered by:
 - Action-based (all judges submitted, all pitches completed, etc.)
 
 State changes emit signals that update relevant clients via WebSocket.
+
+### Workstation Session Lifecycle (per round)
+
+Workstations are not re-imaged every round. At round start the chapter's RMM provisions an ephemeral, non-sudo Unix account from `/etc/skel`; at round end it terminates the player's session and processes and runs `userdel -r`, wiping the home directory and session state in seconds. System state persists untouched between rounds. Full image restoration is exceptional — between events, on a tamper-detection signal, or scheduled maintenance. Each session is recorded as a `WorkstationSession` (see DATA_MODEL.md) for credentialing audit.
+
+The platform does not perform this directly — chapters operate their own RMM (the workstation-autonomy principle in claude.md). The platform records sessions and consumes tamper signals. This is a Stage 7 concern, documented here so the integrity and audit model stays coherent.
 
 ## External Integrations
 

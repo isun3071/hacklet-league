@@ -8,7 +8,9 @@
 
 **In one sentence: hackathon, but minutes instead of hours, with a cheering audience.**
 
-HackLet League is a competitive format for AI-assisted technical building under extreme time compression. Players have 24 minutes to construct, document, and defend a web application, working alone on a locked-down workstation with a single sanctioned AI substrate. Submissions are evaluated through automated adversarial testing, judge inspection, and live questioning. Multi-axis scoring produces categorical awards alongside an overall composite ranking.
+**This document specifies HackLet Classical** — the league's first and, today, only operational format. HackLet is an institution that runs competitive formats, not a single immutable format. Future formats (notably an Agentic format) may be added as engineering practice evolves; see LEAGUE_OPERATIONS.md. Except where noted, "the format" below means HackLet Classical.
+
+HackLet Classical is a competitive format for AI-assisted technical building under extreme time compression. Players have 24 minutes to construct, document, and defend a web application, working alone on a locked-down workstation with a single sanctioned AI substrate. Submissions are evaluated through automated adversarial testing, judge inspection, and live questioning. Multi-axis scoring produces categorical awards alongside an overall composite ranking.
 
 The format borrows time-compression from bullet chess, multi-axis scoring from gymnastics and decathlon, regional feeder structure from CTWC, and tier organization from FMWC. What it adds is novel: systematic adversarial testing of AI-assisted submissions under tournament conditions. The 24-minute build duration deliberately parallels the 24-hour hackathon, positioning hacklet as a compressed-format descendant of hackathon culture rather than a replacement for it.
 
@@ -108,7 +110,7 @@ Award reveal includes brief commentary on the winner's submission, allowing the 
 
 Between rounds, a 25-30 minute Zamboni Period runs operational transition:
 
-- All workstations are factory-reset to a known-good state via RMM
+- Per-player accounts are torn down and recreated: the outgoing player's ephemeral, non-sudo Unix account is deleted (`userdel -r`, wiping the home directory and session state) and a fresh one is provisioned from `/etc/skel` for the incoming player — seconds per workstation, system state untouched. Full image restoration is the *exceptional* operation (between events, on tamper detection, scheduled maintenance), not the per-round reset
 - Outgoing players depart and incoming players are seated
 - Judges file final scores from the completed round and refresh their tools
 - Broadcast commentary covers recap and preview
@@ -259,7 +261,7 @@ All players in an event work on identically-configured workstations supplied by 
 
 **The development environment is local to the workstation.** The IDE, code editor, file manager, terminal, and local deployment all run natively on the workstation. The league competition website supplies only the chat interface to the AI substrate plus event coordination (timer, fuzz triggers, budget displays, submission state). Players write code in their local IDE, deploy locally for testing, and interact with the league platform only through a browser tab pointed at the chat interface. There is no hosted IDE, no remote code editor, no cloud development environment. The platform is event coordination infrastructure, not a development environment.
 
-**Default IDE: Visual Studio Code** (or VSCodium for telemetry-free deployment), preinstalled with language support for common stacks (Python, JavaScript/TypeScript, Go, Rust, Ruby), standard formatters, and basic git tooling. Vim/Neovim are also installed for players who prefer them. AI coding assistants (Copilot, Cursor, Codeium, etc.) are *explicitly not installed* — external AI access is forbidden by the substrate model. The IDE is for code editing only; all AI access flows through the league's chat interface.
+**Classical substrate — IDE: VSCodium** (telemetry-free), preinstalled with language support for common stacks (Python, JavaScript/TypeScript, Go, Rust, Ruby), standard formatters, and basic git tooling. Vim/Neovim are also installed for players who prefer them. All AI coding extensions (Copilot, Cline, Continue, Codeium, etc.) are disabled at the policy level and cannot be installed — external AI access is forbidden by the substrate model. In Classical, the IDE is for code editing only; AI access flows through the chat window in the league portal (a browser tab pointed at hackletleague.com). The player codes in the IDE and switches to the browser to direct the AI, moving snippets across by hand. That copy-paste step is friction by design: every adoption of AI output requires deliberate human action. (Other formats configure the substrate differently — the future Agentic format replaces the chat window with a locked, league-built extension. See LEAGUE_OPERATIONS.md.)
 
 **Local fuzz capability for intelligence gathering and broadcast suspense.** Workstations include a locally-installed fuzz runner containing the public test pool. During build phase, players trigger this local runner via the league portal; the runner executes against their local deployment and returns intelligence about their defensive coverage in seconds. The local runner does *not* contain the hidden test pool — hidden tests live only on league central infrastructure. Local fuzz results are informational only; they do not contribute to scoring.
 
@@ -269,7 +271,7 @@ Workstations are restricted to non-administrative user accounts. Players cannot 
 
 USB ports are physically disabled or removed. No external storage, no Bluetooth, no Wi-Fi. Ethernet only. Virtual console access is disabled to prevent dropping out of the desktop session.
 
-Workstations are centrally managed through the league's RMM platform. Configuration consistency is enforced through automated policy. Per-event factory reset ensures each round starts from a known-good state. OS and application updates are pushed through controlled maintenance windows between events, not during competition.
+Workstations are centrally managed through the league's RMM platform. Configuration consistency is enforced through automated policy. Per-round reset is handled by per-player account lifecycle, not image restoration: an ephemeral, non-sudo Unix account is created from `/etc/skel` at round start and deleted with `userdel -r` at round end (after the player's session and processes are terminated), removing the home directory and all session state in seconds. System state persists between rounds untouched. Full image restoration is reserved for the exceptional cases — between events, on any tamper-detection signal, and scheduled maintenance. Because the system is no longer wiped every round, between-round tamper detection is load-bearing: any integrity signal forces an image restore before the workstation is reused. OS and application updates are pushed through controlled maintenance windows between events, not during competition.
 
 The linux choice serves the league's operational needs — open-source tooling, zero licensing cost, mature deployment automation, hardware flexibility, and vendor independence. Players whose daily environment is Windows or macOS receive brief orientation before their first competition to familiarize with the desktop and development tools. The substrate choice is not designed to teach linux skills; it is designed to enable the league to operate transparently and affordably at scale.
 
@@ -297,6 +299,8 @@ The league hosts the competition website that proxies all AI calls. This provide
 - Complete audit trail of all interactions
 - Single firewall endpoint for workstations
 - Centralized cost management
+
+The proxy exposes an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`). This is deliberate: the OpenAI protocol is the de facto standard that chat clients, IDE extensions, and CLI tools all speak, so the substrate stays agnostic to client tooling — the Classical chat window today, an Agentic IDE extension later — without changing the API contract. Compatibility is surface-only: the league pins the season's model, enforces token and fuzz budgets and rate limits server-side, and audits every call. Clients cannot select the model, exceed budget, or bypass logging. Substrate equality holds regardless of which client a player uses.
 
 Mid-tier model choice is deliberate. Frontier models would mask the verification skill that distinguishes thoughtful AI direction from lazy AI direction. Mid-tier models hallucinate at rates that exercise verification skill meaningfully. Players who instinctively prompt for resilience and verify model output succeed; players who do not, fail.
 
@@ -389,7 +393,7 @@ Every individual round caps at **25 players absolute maximum**, with **12 as the
 
 Multi-round events host multiple rounds with different player groups across the day, using the same physical workstations. The Zamboni Period between rounds serves several functions:
 
-- All workstations are factory-reset to a known-good state via RMM
+- Per-player accounts are torn down and recreated: the outgoing player's ephemeral, non-sudo Unix account is deleted (`userdel -r`, wiping the home directory and session state) and a fresh one is provisioned from `/etc/skel` for the incoming player — seconds per workstation, system state untouched. Full image restoration is the *exceptional* operation (between events, on tamper detection, scheduled maintenance), not the per-round reset
 - Outgoing players depart and incoming players are seated
 - Judges file scores from the completed round and refresh their tools
 - Broadcast commentary covers recap and preview, with next-round introduction beginning in the final 5 minutes
@@ -445,7 +449,14 @@ The format's core mechanics — 24-minute build, single-player solo competition,
 
 ## 10. What the Format Measures
 
-HackLet League is designed to measure a specific cluster of capabilities:
+The format rests on two principles:
+
+1. **Substrate equality** — every player has the same tools, model, and resources.
+2. **Submission resilience** — the fuzz catalog is the authority on how well the work holds up.
+
+The format does not legislate *how* a player uses AI. Chat, agentic integration, command-line, tool chains — any interface is fine, provided every call flows through the league's API and stays within budget (§5.3). It cares only that the substrate is equal and that submissions are measured by objective adversarial testing. Resilience is what the fuzz catalog measures; communication (pitch and cross-examination) is scored separately and combined for Best Overall (§4). Slop loses to fuzz regardless of who or what produced it.
+
+In practice, succeeding under those principles exercises a specific cluster of AI-complementary capabilities:
 
 - **Engineering judgment**: knowing what needs defensive attention without being told
 - **AI direction**: effectively prompting an AI substrate to produce robust work
@@ -454,7 +465,7 @@ HackLet League is designed to measure a specific cluster of capabilities:
 - **Technical communication**: explaining decisions clearly under time pressure
 - **Defense under questioning**: responding substantively to judge cross-examination
 
-These are AI-complementary skills — what humans contribute when AI does the typing. They do not become easier as AI models improve, because the bottleneck is human judgment about how to direct AI rather than AI capability itself.
+These are what humans contribute when AI does the typing. They do not become easier as AI models improve, because the bottleneck is human judgment about how to direct AI rather than AI capability itself.
 
 The format does not measure:
 
@@ -470,9 +481,23 @@ The published methodology is comprehensive about what the format claims to measu
 
 HackLet League exists to provide structured competitive infrastructure for a community that already cares about AI-assisted technical building. The format treats players as engineering adults responsible for their own decisions. It evaluates submissions through narrow precise measurement rather than broad subjective assessment. It publishes its methodology in full, including its limitations.
 
-The format aspires to be credentialing infrastructure for the specific skill profile it measures. Persistent rankings accumulate career-spanning evidence of capability. Employers may eventually reference HackLet League standings as signal in technical hiring, particularly for roles involving AI-assisted engineering or defensive coding. This aspiration shapes the format's commitment to measurement rigor, transparency, and substrate equality — the credential's value depends entirely on whether the measurements it represents are trustworthy.
+The structural precedent is the **Financial Modeling World Cup**. FMWC took spreadsheet modeling — a niche, measurable skill — to ESPN-broadcast competition through collegiate feeder tiers and persistent rankings, built into a durable institution by one founder after the discontinuation of ModelOff. HackLet applies the same playbook to AI-assisted defensive coding, a domain with a deeper participant pool and more cultural pull. The precedent matters because it answers the first question every chapter operator, sponsor, and player asks — *is this real?* — with a pattern that has already worked once. HackLet borrows the template, not a claim of equivalent reach.
+
+Credentialing is the aspiration, not the pitch. The League's job is to run the format well: equal substrate, honest measurement, methodology published in full. Done consistently, the credential emerges as a side effect — persistent rankings accumulate career-spanning evidence, and employers may over time reference HackLet standings as signal for AI-assisted engineering and defensive-coding roles. That value depends entirely on whether the measurements are trustworthy, which is why rigor comes first and the credential follows.
 
 The League is honest about what AI actually delivers: a meaningful but modest productivity multiplier, useful when directed well, sloppy when directed poorly. The format demonstrates this empirically in every event. Submissions that pass the fuzz gauntlet are evidence of what skilled AI-assisted work can produce. Submissions that fail are evidence of what unskilled AI-assisted work cannot.
+
+HackLet does not legislate AI usage style. Players may use the sanctioned 
+AI substrate via any interface the workstation supports — chat, agentic 
+IDE integration, command-line, automated tool chains — provided all calls 
+flow through the league's API and stay within budget.
+
+The format rests on two principles — substrate equality and submission resilience (§10).
+
+These two principles are sufficient. The format does not evaluate process, 
+review quality, prompting style, or "amount of human authorship." What 
+matters is what survives the fuzz at code freeze. Code that doesn't defend 
+against the catalog scores accordingly, regardless of who or what produced it.
 
 The fuzz is what separates hacklets from slop.
 

@@ -10,6 +10,10 @@ HackLet League is structured as a federated platform that aggregates competitive
 
 This model parallels how FIDE coordinates national chess federations and how PVSA verifies organizations to issue volunteer service hours. The league sets standards and verifies compliance; chapters operate within those standards.
 
+FIDE is the cleaner model in a second way: it runs *multiple formats* under one institution — classical, rapid, blitz, bullet — and outlives any single one. HackLet is built the same way. It is a league that runs competitive formats, not a single format that a paradigm shift could obsolete. HackLet Classical (format_spec.md) is the first and currently only operational format; an Agentic format is anticipated as agentic coding matures. The institution, its fuzz catalog, its rankings, and its chapters are the durable assets; individual formats come and go beneath them.
+
+The structural precedent for the whole enterprise is the **Financial Modeling World Cup** (FMWC). Founded in 2020 by Andrew Grigolyunovich after the discontinuation of ModelOff, FMWC took spreadsheet modeling — a niche, measurable skill — to ESPN-broadcast competitive sport via collegiate feeder tiers and persistent rankings. HackLet applies the same playbook to AI-assisted defensive coding, a domain with a larger participant pool and more cultural relevance. The precedent matters because it answers the first question every chapter operator, sponsor, and player asks — *is this real?* — with a pattern that has already worked: a single measurable skill made into a credentialed competitive institution. HackLet borrows the template, not a claim of equivalent reach.
+
 The league is built as a platform from day one, even though early operations may involve only one or two chapters. The federated architecture is foundation for expansion — chapters as first-class entities exist in the data model and platform UI from the start, ready to accommodate growth without architectural refactoring.
 
 ## 2. What the League Provides vs. What Chapters Provide
@@ -26,6 +30,8 @@ The league (operated by superadmins) maintains:
 - Verification standards for chapters
 - Cross-chapter coordination (rankings, qualification flows)
 - League-wide events (regional and championship aggregations)
+
+Among these, the **fuzz catalog is the league's strategic asset**. A years-deep, continuously-calibrated adversarial test suite — with a hidden pool that grows each season — is the one thing competitors cannot quickly copy. Formats, time limits, and spectator framing are all replicable; a trustworthy catalog is not. Its depth and calibration are what make a HackLet result a credential rather than a curiosity, which is why the catalog is maintained as a durable, continuously-deepened league asset rather than a build-once artifact.
 
 ### Chapter Responsibilities
 
@@ -254,7 +260,7 @@ Early stage: superadmin (league founder) makes all platform decisions, approves 
 
 Growth stage: superadmin team (small group) shares platform operations. Chapter advisory board may form to provide input on methodology and standards.
 
-Mature stage: formal governance structure with elected representation from verified chapters, clear separation between platform operations and league rulemaking, dispute resolution processes with appeal paths.
+Mature stage: formal governance structure with elected representation from verified chapters, clear separation between platform operations and league rulemaking, dispute resolution processes with appeal paths. As additional formats are introduced, rulemaking separates into per-format concerns (each format has its own spec, catalog configuration, and parameters) and league-wide concerns (chapters, verification, rankings infrastructure) shared across all formats.
 
 The governance evolution is intentional but unhurried. Premature formalization adds bureaucracy without value. Governance matures as the league grows and as decisions affecting many chapters become more frequent.
 

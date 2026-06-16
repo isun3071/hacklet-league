@@ -295,6 +295,8 @@ AI integration is core to what HackLet League is, but it depends on round mechan
 
 **Goal: Automated fuzz testing at code freeze with initial test catalog.**
 
+*Strategic weight: the catalog this stage begins is HackLet's durable moat. A 24-minute format, solo play, even spectator framing can all be copied; a years-deep adversarial catalog calibrated for AI-assisted defensive coding — with a hidden pool that deepens each season — cannot be copied quickly. The catalog's quality is what decides whether HackLet results carry weight as a credential. This stage starts that asset; it never finishes it (the catalog deepens for the life of the league). The scope below is the technical starting set, not the moat itself.*
+
 ### In Scope
 
 - Fuzz runner implementation per FUZZ_RUNNER_SPEC.md
@@ -361,6 +363,9 @@ Formal A/B/C tier verification process, documentation upload and review workflow
 
 ### Stage 10: Governance
 Dispute resolution interfaces, appeals processes, advisory board features, multi-team superadmin support.
+
+### Stage 11: Agentic Format
+The second competitive format under the HackLet institution (HackLet runs formats, not one format). Requires a league-built, signed VSCodium extension locked to hackletleague.com — chat sidebar plus accept/reject UI for agent-proposed file changes, modeled on Cline/Roo Code. That extension is a substantial standalone project on its own (TypeScript, ~4–6+ weeks for v1). The format adds a longer round (~3 hr: spec phase + supervised agent execution + hardening), larger budgets, and a *Best Direction* award, and shares the fuzz catalog with Classical (the runner is format-agnostic). Built only when the agentic-coding paradigm warrants it and Classical is operating well. Full sketch in IDEAS_FOR_LATER.md.
 
 ---
 
