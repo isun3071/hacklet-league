@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthNav } from "@/components/AuthNav";
 
 export function SiteHeader() {
   return (
@@ -7,10 +8,7 @@ export function SiteHeader() {
         <Link className="logo" href="/">
           hacklet<span className="accent">_league</span>
         </Link>
-        <nav className="nav-links">
-          <Link href="/chapters">chapters</Link>
-          <Link className="bar-link" href="/#signup">[ get updates ]</Link>
-        </nav>
+        <AuthNav />
       </div>
     </header>
   );

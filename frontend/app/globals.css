@@ -167,3 +167,26 @@ a { color: var(--accent); text-decoration: none; }
 .kv dd { margin: 0; color: var(--text); }
 .kv dd a { color: var(--accent); }
 .chapter-desc { color: var(--text); margin: 0; white-space: pre-wrap; }
+
+/* Forms (auth, profile, new chapter) */
+.form { display: flex; flex-direction: column; gap: 1rem; max-width: 460px; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; }
+.field span { color: var(--muted); font-size: 0.85rem; }
+.field input, .field textarea, .field select {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  font-family: var(--mono); font-size: 1rem; padding: 0.6rem 0.7rem;
+}
+.field input:focus-visible,
+.field textarea:focus-visible,
+.field select:focus-visible { outline: none; border-color: var(--accent); }
+.field textarea { resize: vertical; }
+.form .btn { align-self: flex-start; cursor: pointer; }
+.form-error { color: #ff7a7a; font-size: 0.9rem; margin: 0; }
+.ok-msg { color: var(--accent); font-size: 0.9rem; margin: 0; }
+
+/* Nav button (log out) styled like a nav link */
+.navbtn {
+  background: none; border: 0; color: var(--muted); font-family: var(--mono);
+  font-size: 0.9rem; cursor: pointer; padding: 0;
+}
+.navbtn:hover { color: var(--accent); }
