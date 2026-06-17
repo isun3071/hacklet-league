@@ -275,6 +275,8 @@ Workstations are centrally managed through the league's RMM platform. Configurat
 
 The linux choice serves the league's operational needs — open-source tooling, zero licensing cost, mature deployment automation, hardware flexibility, and vendor independence. Players whose daily environment is Windows or macOS receive brief orientation before their first competition to familiarize with the desktop and development tools. The substrate choice is not designed to teach linux skills; it is designed to enable the league to operate transparently and affordably at scale.
 
+On the 24-minute clock. The build duration is a deliberate steal from "the 24-hour hackathon" — only the unit of time changed. Pre-AI, 24 minutes of solo programming produced almost nothing of substance; that's why hackathons settled on 24-72 hours historically. With AI substrate, a skilled engineer produces in 24 minutes what an unassisted engineer needed 24 hours for. The unit shrinks; the competitive surface doesn't. The format isn't anachronistic for using a short clock — it's enabled by the substrate. HackLet is not adapting to AI; the format is constituted by AI.
+
 ### 5.2 Network Configuration
 
 Workstations are firewall-restricted to a minimal allowlist:
@@ -479,6 +481,8 @@ The format rests on two principles:
 2. **Submission resilience** — the fuzz catalog is the authority on how well the work holds up.
 
 The format does not legislate *how* a player uses AI. Chat, agentic integration, command-line, tool chains — any interface is fine, provided every call flows through the league's API and stays within budget (§5.3). It cares only that the substrate is equal and that submissions are measured by objective adversarial testing. Resilience is what the fuzz catalog measures; communication (pitch and cross-examination) is scored separately and combined for Best Overall (§4). Slop loses to fuzz regardless of who or what produced it.
+
+The Classical substrate's chat-window-and-copy-paste workflow is not an arbitrary choice — it matches the economically-dominant practice among the format's target population. Agentic IDE tooling (Cursor, Claude Code, Cline) requires either paid subscriptions or student-verification with friction that filters most undergraduate users; the chat-window workflow remains the only fully-free option for most CS students. Classical meets its audience where they already work. The Agentic format, when introduced, measures a more specialized skill that a smaller but growing subset of engineers practices.
 
 In practice, succeeding under those principles exercises a specific cluster of AI-complementary capabilities:
 
