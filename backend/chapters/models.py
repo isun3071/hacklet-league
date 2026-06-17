@@ -34,7 +34,7 @@ class Chapter(models.Model):
     )
     tier = models.CharField(max_length=1, choices=Tier.choices, default=Tier.C)
     verification_status = models.CharField(
-        max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.UNVERIFIED
+        max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.PENDING
     )
     mode = models.CharField(max_length=20, choices=Mode.choices, default=Mode.SIGNUP)
     institutional_affiliation = models.CharField(max_length=200, blank=True)

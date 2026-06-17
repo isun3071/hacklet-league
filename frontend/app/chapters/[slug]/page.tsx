@@ -4,6 +4,26 @@ import { getChapter } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
+// Owner-only banner per non-public lifecycle state (see chapters/models.py).
+// A verified chapter has no entry here -> no banner.
+const STATUS_BANNER: Record<string, { icon: string; label: string; text: string }> = {
+  pending: {
+    icon: "⏳",
+    label: "Pending approval",
+    text: "this chapter is awaiting review by a league admin and isn't public yet.",
+  },
+  suspended: {
+    icon: "⛔",
+    label: "Suspended",
+    text: "this chapter's verification was revoked, so it isn't public — contact the league to restore it.",
+  },
+  unverified: {
+    icon: "✗",
+    label: "Not approved",
+    text: "this chapter was reviewed and not approved; you can revise it and resubmit.",
+  },
+};
+
 export default async function ChapterPage({
   params,
 }: {
@@ -13,15 +33,17 @@ export default async function ChapterPage({
   const chapter = await getChapter(slug);
   if (!chapter) notFound();
 
+  const banner = STATUS_BANNER[chapter.verification_status];
+
   return (
     <main className="container block">
       <p className="prompt">/chapters/{chapter.slug}</p>
       <h1 className="page-title">{chapter.name}</h1>
 
-      {chapter.verification_status !== "verified" && (
+      {banner && (
         <p className="status-banner">
-          ⏳ <strong>Pending approval</strong> — this chapter is awaiting review by a
-          league admin and isn&apos;t public yet. Only you (its creator) can see this page.
+          {banner.icon} <strong>{banner.label}</strong> — {banner.text} You (its creator)
+          can see this page; the public can&apos;t until it&apos;s verified.
         </p>
       )}
 

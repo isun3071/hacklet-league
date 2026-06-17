@@ -28,6 +28,7 @@ export function AuthNav() {
       <Link href="/chapters">chapters</Link>
       {authed === true && (
         <>
+          <Link href="/dashboard">dashboard</Link>
           <Link href="/chapters/new">new chapter</Link>
           <Link href="/profile">profile</Link>
           <button type="button" className="navbtn" onClick={onLogout}>
