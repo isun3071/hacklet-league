@@ -1,4 +1,4 @@
-name: ci
+name: ci/cd
 
 on:
   pull_request:
@@ -48,3 +48,19 @@ jobs:
       - run: npm install -g pnpm@10
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+
+  deploy:
+    # Gate: only after both test jobs pass, and only on a push to main (never PRs).
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, hacklet-vm]
+    concurrency:
+      group: deploy-vm
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/deploy.sh
+        env:
+          # Absolute path to the deployment clone on the VM (repo Variable).
+          # Falls back to $HOME/hacklet-league if unset.
+          HACKLET_DIR: ${{ vars.DEPLOY_DIR }}

@@ -132,8 +132,9 @@ and volumes (`git reset --hard origin/main && docker compose up -d --build`). Th
 
 1. **Manual**: on the VM, `./scripts/deploy.sh` after a merge.
 2. **Cron**: schedule it for pull-based deploys.
-3. **Auto on merge (recommended)** via `.github/workflows/deploy.yml`, which runs on a
-   **self-hosted runner** on the VM. Register one once:
+3. **Auto on merge (recommended)** via the `deploy` job in `.github/workflows/ci.yml`,
+   which runs on a **self-hosted runner** on the VM — and **only after the `backend` +
+   `frontend` jobs pass** (a red build never deploys). Register the runner once:
    GitHub repo → **Settings → Actions → Runners → New self-hosted runner** → follow the
    Linux steps **on the VM**, give it the label **`hacklet-vm`**, and install it as a
    service (`./svc.sh install && ./svc.sh start`). The runner polls GitHub outbound, so
