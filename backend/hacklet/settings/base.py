@@ -86,7 +86,7 @@ HEADLESS_FRONTEND_URLS = {
     "account_signup": "/auth/signup",
 }
 
-DEFAULT_FROM_EMAIL = "HackLet League <no-reply@hackletleague.com>"
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="HackLet League <no-reply@hackletleague.com>")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
