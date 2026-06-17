@@ -8,9 +8,18 @@ on:
   push:
     branches: [main]
 
+# Don't let two deploys overlap; newest commit wins.
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: [self-hosted, hacklet-vm]
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/deploy.sh
+        env:
+          # Absolute path to the deployment clone on the VM (repo Variable).
+          # Falls back to $HOME/hacklet-league if unset.
+          HACKLET_DIR: ${{ vars.DEPLOY_DIR }}
