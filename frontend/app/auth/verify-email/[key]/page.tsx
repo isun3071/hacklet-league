@@ -10,10 +10,19 @@ export default function VerifyEmailPage() {
   const [state, setState] = useState<"verifying" | "ok" | "error">("verifying");
 
   useEffect(() => {
-    const key = params?.key;
-    if (!key) {
+    const raw = params?.key;
+    if (!raw) {
       setState("error");
       return;
+    }
+    // allauth percent-encodes the key's colons in the email link (Mw%3A...%3A...),
+    // and useParams() hands it back still-encoded. Decode before sending, or the
+    // backend sees a key it never signed -> invalid_or_expired_key.
+    let key = raw;
+    try {
+      key = decodeURIComponent(raw);
+    } catch {
+      /* not encoded; use as-is */
     }
     verifyEmail(key).then((res) => setState(res.ok ? "ok" : "error"));
   }, [params?.key]);
