@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login } from "@/lib/auth";
+import { getSession, login } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,13 +12,21 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Already logged in? Don't show the form (and don't let a re-login 409).
+  useEffect(() => {
+    getSession().then((status) => {
+      if (status === 200) router.replace("/");
+    });
+  }, [router]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     const res = await login(email, password);
     setBusy(false);
-    if (res.ok) {
+    // 200 = logged in; 409 = already authenticated. Either way, you're in.
+    if (res.ok || res.status === 409) {
       router.push("/");
       router.refresh();
       return;
