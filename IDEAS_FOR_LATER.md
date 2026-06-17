@@ -12,7 +12,7 @@ For each entry, note **what** the idea is, **why** it's deferred (which stage it
 
 ## Platform & Features
 
-*(none yet)*
+- **Social SSO (GitHub / Google) via allauth.** allauth is already installed and supports OAuth providers — add `allauth.socialaccount` + the provider app(s), create OAuth credentials, register a `SocialApp`; the headless API has provider redirect/token flows for the SPA ("Continue with GitHub"). *Why deferred:* OAuth redirect URIs require a public HTTPS domain (Google rejects bare IPs / non-localhost http), so it can't function on the stealth LAN IP — it's a launch-time add, done when `SITE_ADDRESS` flips to the real domain. *Note:* GitHub likely fits the dev/security audience better than (or alongside) Google. Stage 1 is email-auth only per BUILD_ROADMAP; claude.md lists OAuth providers as optional.
 
 ## Operations & Community
 
