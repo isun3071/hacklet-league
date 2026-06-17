@@ -113,6 +113,39 @@ docker compose build && docker compose up -d
 
 ---
 
+## CI/CD + monitoring (Stage 1)
+
+### CI — automatic, on GitHub's runners
+
+`.github/workflows/ci.yml` runs on every PR and push to `main`:
+
+- **backend**: `pytest` against a throwaway Postgres service
+- **frontend**: `pnpm build` (TypeScript type-check + compile)
+
+No setup needed — it runs on GitHub-hosted runners. This is the regression guard
+(e.g. a missing migration or a bad `next.config` fails CI instead of crash-looping prod).
+
+### CD — deploy to the VM
+
+`scripts/deploy.sh` syncs the VM to `origin/main` and rebuilds, preserving `.env`
+and volumes (`git reset --hard origin/main && docker compose up -d --build`). Three ways to use it:
+
+1. **Manual**: on the VM, `./scripts/deploy.sh` after a merge.
+2. **Cron**: schedule it for pull-based deploys.
+3. **Auto on merge (recommended)** via `.github/workflows/deploy.yml`, which runs on a
+   **self-hosted runner** on the VM. Register one once:
+   GitHub repo → **Settings → Actions → Runners → New self-hosted runner** → follow the
+   Linux steps **on the VM**, give it the label **`hacklet-vm`**, and install it as a
+   service (`./svc.sh install && ./svc.sh start`). The runner polls GitHub outbound, so
+   no inbound SSH is exposed. After that, merges to `main` auto-deploy.
+
+### Monitoring — uptime
+
+The backend exposes `/api/healthz` → `{"status":"ok"}`. Point a free external monitor
+at it: e.g. **UptimeRobot** → HTTP(s) monitor on `https://hackletleague.com/api/healthz`,
+5-minute interval, keyword `ok`, email alert. That satisfies the Stage 1 "uptime check
+at minimum."
+
 ## Moving to Hetzner later (the "seamless transfer")
 
 Because everything is Docker + 12-factor, the move is:

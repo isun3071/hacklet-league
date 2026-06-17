@@ -36,10 +36,10 @@ This is a deliberate sequencing choice — production rigor from day one, in the
 
 ---
 
-## Status & Deviations (as of 2026-06-13)
+## Status & Deviations (as of 2026-06-16)
 
-- **Stage 0** is built and deployed **privately** on the home Proxmox VM (Docker Compose + Caddy). Public launch at hackletleague.com is **deliberately deferred** — stealth until the platform is genuinely ready, *not* a teaser page. The Buttondown signup form is wired (`iansun20`) but dormant until launch.
-- **Hosting:** stages run on the home VM for now; Hetzner is the planned production host later (clean x86→x86 move). Public DNS + HTTPS happen at launch.
+- **Stage 1 in progress** — the platform (Django + DRF + Postgres + Next.js behind Caddy) runs on the home Proxmox VM and is **live on the public domain**, https://hackletleague.com, over HTTPS with production settings (DEBUG off, secure cookies, HSTS). It is **public (reachable) but not publicized** — no announcement or marketing; the domain simply resolves and serves while the platform is built and tested. (This supersedes the earlier "stealth / LAN-only until launch" plan — *public* and *publicized* are treated as separate steps.)
+- **Hosting:** still the home VM; Hetzner remains the planned production host later (clean x86→x86 move via the portable Docker Compose repo).
 - **Timeline:** the 4–6 week/stage estimates below assume ~10–15 h/week part-time *without* AI. With AI-assisted development at 30–40 h/week they compress to days — treat the week figures as loose upper bounds, not targets. Caveat: not everything compresses (Stage 5 fuzz-runner complexity, real-world testing, the one-week-stable gate, and all *non-code* operational work — venues, judges, hardware — run on their own clocks).
 
 ---

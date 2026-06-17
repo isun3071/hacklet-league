@@ -1,0 +1,16 @@
+name: deploy
+
+# Deploys main to the VM. Runs on a self-hosted runner registered on the VM with
+# the label `hacklet-vm` (see DEPLOY.md). The runner polls GitHub outbound, so no
+# inbound SSH needs to be exposed.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, hacklet-vm]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/deploy.sh
