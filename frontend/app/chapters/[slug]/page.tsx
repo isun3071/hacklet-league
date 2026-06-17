@@ -18,6 +18,13 @@ export default async function ChapterPage({
       <p className="prompt">/chapters/{chapter.slug}</p>
       <h1 className="page-title">{chapter.name}</h1>
 
+      {chapter.verification_status !== "verified" && (
+        <p className="status-banner">
+          ⏳ <strong>Pending approval</strong> — this chapter is awaiting review by a
+          league admin and isn&apos;t public yet. Only you (its creator) can see this page.
+        </p>
+      )}
+
       <div className="panel">
         <dl className="kv">
           <div>

@@ -3,7 +3,10 @@ from .base import *  # noqa: F401,F403
 from .base import env
 
 DEBUG = False
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["hackletleague.com"])
+# The Next.js SSR layer fetches the API over the docker network as http://backend:8000,
+# so Django sees "Host: backend". That name isn't externally routable, so allowing it is
+# safe — without it, every server-rendered page that calls the API 400s (DisallowedHost).
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["hackletleague.com"]) + ["backend", "localhost"]
 
 # Behind Caddy, which terminates TLS and forwards X-Forwarded-Proto.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
