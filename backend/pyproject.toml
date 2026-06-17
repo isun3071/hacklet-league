@@ -11,6 +11,7 @@ dependencies = [
     "whitenoise>=6.7",
     "gunicorn>=23",
     "django-allauth>=65.3",
+    "django-anymail[resend]>=11",
 ]
 
 [dependency-groups]

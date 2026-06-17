@@ -15,10 +15,18 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["https://hackle
 SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
-# Transactional email. With a provider's SMTP creds in .env mail is actually sent;
-# without them it falls back to printing in the container logs (so it's never silent).
+# Transactional email — three paths, in priority order:
+#   1. RESEND_API_KEY set  -> Resend HTTP API over 443 (recommended). Survives ISPs
+#      that block SMTP ports, and uses Resend's sending reputation (good for a box on
+#      a residential IP, where direct SMTP deliverability is poor).
+#   2. EMAIL_HOST set       -> generic SMTP (any provider).
+#   3. neither              -> printed to the container logs, so it's never silent.
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
 EMAIL_HOST = env("EMAIL_HOST", default="")
-if EMAIL_HOST:
+if RESEND_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+    ANYMAIL = {"RESEND_API_KEY": RESEND_API_KEY}
+elif EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_PORT = env.int("EMAIL_PORT", default=587)
     EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
