@@ -8,7 +8,7 @@ This is a human-readable summary; the authoritative record is the git history.
 ## In progress — Stage 1 close-out (as of 2026-06-17)
 
 - [ ] End-to-end acceptance: signup → verify email → login → submit chapter → admin approve → appears in directory, on the live site.
-- [ ] Real transactional email (SMTP provider + domain SPF/DKIM) so verification links deliver to inboxes.
+- [x] Real transactional email — Resend SMTP, domain verified (SPF/DKIM), confirmed delivering to inboxes. (`docker-compose.yml` now forwards `EMAIL_*`/`RESEND_API_KEY` to the backend; Sites record renamed from `example.com` to HackLet League so emails read correctly.)
 - [ ] ~1 week of stable uptime → Stage 1 officially ships.
 - Queued next: **Google SSO** (now unblocked by public HTTPS), then **Stage 2 — events**.
 
