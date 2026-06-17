@@ -6,6 +6,9 @@
 # Runtime
 *.log
 
+# Database dumps (contain user data; never commit)
+backups/
+
 # Python (Stage 1+)
 __pycache__/
 *.py[cod]

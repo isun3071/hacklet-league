@@ -149,16 +149,37 @@ at minimum."
 
 ## Moving to Hetzner later (the "seamless transfer")
 
-Because everything is Docker + 12-factor, the move is:
+Everything is Docker + 12-factor, so the host is a commodity. What moves: **code** (git),
+**config** (`.env`), and the **database** (a `pg_dump`). TLS certs are *not* migrated —
+Caddy re-issues them once DNS points at the new host.
 
-1. Provision the Hetzner VPS (x86 → same arch as the home box) and install Docker (step 1).
-2. Copy the repo over (`rsync` or `git clone`).
-3. Copy `.env` and adjust if needed.
-4. *(Once a database exists, Stage 1+)* restore the latest `pg_dump` — backup/restore
-   scripts will be added with Postgres.
-5. Repoint the Porkbun A record to the Hetzner IP. `docker compose up -d`. Done.
+On the **new VPS** (x86, e.g. Hetzner CX22):
+1. Install Docker (see Prerequisites above).
+2. `git clone https://github.com/isun3071/hacklet-league.git && cd hacklet-league`
+3. `scp` your `.env` over from the old host. Keep the same `SECRET_KEY` (so existing
+   logins survive); tidy host-specific bits (e.g. `LAN_ADDRESS=http://localhost`).
+4. Bring up **only** the database and wait for it to be healthy:
+   `docker compose up -d db`
 
-No app changes. The host is a commodity.
+On the **old host**, take a fresh dump and copy it over:
+```bash
+./scripts/db-backup.sh                                    # writes backups/hacklet-<ts>.sql.gz
+scp backups/hacklet-<ts>.sql.gz <user>@<new-host>:~/hacklet-league/backups/
+```
+
+Back on the **new VPS**:
+5. Restore into the empty DB **before** starting the backend:
+   `./scripts/db-restore.sh backups/hacklet-<ts>.sql.gz`
+6. `docker compose up -d` — the backend's auto-migrate is a no-op (the dump already
+   carries the schema + `django_migrations`).
+7. **Cut over DNS**: point the Porkbun A record `hackletleague.com` → the new VPS IP.
+   Within a minute or two Caddy obtains a fresh Let's Encrypt cert and the site is live.
+8. **Re-point CI/CD**: register a self-hosted runner on the new host (label `hacklet-vm`),
+   update the `DEPLOY_DIR` repo variable if the path differs, and remove the old runner.
+
+Downtime is just the DNS-propagation window. To avoid losing data written between the dump
+and the cutover, do it in a quiet window (or take the final dump right before cutover), and
+keep the old host running until you've verified the new one. No application code changes.
 
 ---
 
