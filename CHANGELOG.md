@@ -5,12 +5,18 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
-## In progress — Stage 1 close-out (as of 2026-06-17)
+## In progress — Stage 1 close-out (as of 2026-06-18)
 
-- [ ] End-to-end acceptance: signup → verify email → login → submit chapter → admin approve → appears in directory, on the live site.
+- [x] End-to-end acceptance **verified on the live site**: signup → verify email → login → create chapter (pending) → admin approve (verified) → appears in directory → suspend (leaves directory). Full lifecycle walked.
 - [x] Real transactional email — Resend SMTP, domain verified (SPF/DKIM), confirmed delivering to inboxes. (`docker-compose.yml` now forwards `EMAIL_*`/`RESEND_API_KEY` to the backend; Sites record renamed from `example.com` to HackLet League so emails read correctly.)
 - [ ] ~1 week of stable uptime → Stage 1 officially ships.
 - Queued next: **Google SSO** (now unblocked by public HTTPS), then **Stage 2 — events**.
+
+### Close-out fixes (the bugs squashed to get acceptance green)
+- **Email verification link 400'd** — allauth percent-encodes the key's colons (`%3A`) in the email URL; `useParams()` returned it still-encoded, so the backend rejected a key it never signed. Decode before POSTing.
+- **Login didn't update the UI** (then 409 on retry) — the header's auth nav only checked the session on mount and never remounted across client navigation; now re-checks on route change, and login treats `409 (already authenticated)` as success.
+- **Pending chapter detail 500'd** — SSR fetches the API as `Host: backend:8000`, which hardened `ALLOWED_HOSTS` rejected (`DisallowedHost` 400 → frontend 500). Allow the internal host; also forward the request's session cookies to SSR so a creator can see their own pending chapter.
+- **Status lifecycle** — default is now `pending` (was `unverified`); detail-page banner is state-aware (pending / suspended / not-approved); new owner **`/dashboard`** lists your chapters with status badges (via `/api/chapters/mine/`).
 
 ---
 
