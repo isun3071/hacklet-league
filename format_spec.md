@@ -355,7 +355,6 @@ Token budget is a hard cap enforced server-side. Once reached:
 
 - The current model response is truncated at the cap point
 - Any code changes from the truncated response are rolled back
-- The chat window is disabled — no further prompts may be sent
 - The player may continue working in the IDE without AI assistance
 
 Edited or regenerated prompts do not refund tokens. Each prompt submission costs against the budget regardless of subsequent edits.
