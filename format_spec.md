@@ -8,13 +8,21 @@
 
 **In one sentence: hackathon, but minutes instead of hours, with a cheering audience.**
 
-**This document specifies HackLet Classical** — the league's first and, today, only operational format. HackLet is an institution that runs competitive formats, not a single immutable format. Future formats (notably an Agentic format) may be added as engineering practice evolves; see LEAGUE_OPERATIONS.md. Except where noted, "the format" below means HackLet Classical.
+HackLet is an institution that runs competitive formats, not a single immutable format. Format names follow a three-axis structure: **HackLet {Format}: {Relationship} {Timer}**.
 
-HackLet Classical is a competitive format for AI-assisted technical building under extreme time compression. Players have 24 minutes to construct, document, and defend a web application, working alone on a locked-down workstation with a single sanctioned AI substrate. Submissions are evaluated through automated adversarial testing, judge inspection, and live questioning. Multi-axis scoring produces categorical awards alongside an overall composite ranking.
+- **Format axis** — what the player does. **Vibe** (build an application from scratch under AI assistance) or **Unslop** (remediate a deliberately-broken application generated live during the round).
+- **Relationship axis** — how the player works with AI. **Classical** (chat interface, copy/paste workflow, every line that lands is one the player put there) or **Agentic** (AI lives in the IDE with edit permissions, player accepts or rejects proposed changes).
+- **Timer axis** — how long the round runs. **XP** (12 min), **Sprint** (24 min), **Scrum** (36 min), **Agile** (48 min), **Waterfall** (72-96 min). Token budgets scale with the timer.
+
+The foundational format is **HackLet Vibe: Classical Sprint** — 24 minutes, chat-window AI relationship, build from scratch. It is the format described in detail by this document and the one the BU pilot operates. **HackLet Unslop: Classical Sprint** is documented as the canonical second format and is introduced once Vibe is operationally stable. Agentic variants and longer timer controls follow as the league matures. Future format introductions follow the same naming convention without renaming what came before.
+
+HackLet Vibe: Classical Sprint is a competitive format for AI-assisted technical building under extreme time compression. Players have 24 minutes to construct, document, and defend a web application, working alone on a locked-down workstation with a single sanctioned AI substrate. Submissions are evaluated through automated adversarial testing, judge inspection, and live questioning. Multi-axis scoring produces categorical awards alongside an overall composite ranking.
 
 The format borrows time-compression from bullet chess, multi-axis scoring from gymnastics and decathlon, regional feeder structure from CTWC, and tier organization from FMWC. What it adds is novel: systematic adversarial testing of AI-assisted submissions under tournament conditions. The 24-minute build duration deliberately parallels the 24-hour hackathon, positioning hacklet as a compressed-format descendant of hackathon culture rather than a replacement for it.
 
-A complete round cycle runs approximately 2 hours from opening to next-round-introduction, with the 24-minute build forming the competitive core. This structure makes multi-round day events practical for regional and championship competition while preserving broadcast quality through proper time allocation for evaluation, pitches, deliberation, and award reveals. Rounds are bounded at 25 players maximum with 12 as the practical broadcast-quality cap. Events host one or more rounds; regional and championship events typically run multi-round days.
+The name **Vibe** is deliberate. "Vibe coding" entered industry vocabulary in 2025 as a complaint — engineers directing AI rapidly without verification, producing slop at scale. HackLet reclaims the term. Vibe coding done by skilled engineers under proper conditions is real professional capability. HackLet Vibe champions demonstrate vibe coding *with* verification reflex, *with* defensive depth, *without* producing slop. The format name stakes territory in the industry's vocabulary dispute: vibe coding is a skill, and the league credentials those who practice it well.
+
+A complete round cycle runs approximately 2 hours from opening to next-round-introduction, with the 24-minute build forming the competitive core. This structure makes multi-round day events practical for regional and championship competition while preserving broadcast quality through proper time allocation for evaluation, pitches, deliberation, and award reveals. Rounds are bounded at 8 players standard, with 6-12 as the acceptable operational range and 12 as the structural maximum. Events host one or more rounds; regional and championship events typically run multi-round days.
 
 HackLet League is built for engineers who want to develop and demonstrate the cluster of skills AI-assisted defensive coding requires: prompting fluency, verification reflex, resource calibration, and defensive depth. It is not a beginner-friendly format. It assumes participants have working knowledge of web development and at least introductory familiarity with security concepts. Players who do not yet have those foundations are welcome to attend events as spectators and participate when their preparation matches the format's expectations.
 
@@ -22,7 +30,7 @@ HackLet League is built for engineers who want to develop and demonstrate the cl
 
 **Player**: An individual competitor registered in the appropriate tier.
 
-**Round**: A complete competitive cycle including opening (5 min), 24-minute build phase, concurrent evaluation and pitch preparation (12 min), pitch and cross-examination phase, deliberation and voting (12-15 min), award reveal, and zamboni period (25-30 min). The atomic unit of competition, running approximately 2 hours per cycle.
+**Round**: A complete competitive cycle including opening (5 min), 24-minute build phase, concurrent evaluation and pitch preparation (18 min), pitch and cross-examination phase (28 min for 8 players), concurrent deliberation and audience voting (18 min), award reveal and closing (~14 min), and zamboni period (25-30 min before the next round). The atomic unit of competition, running approximately 2-2.5 hours per cycle.
 
 **Event**: A complete competitive gathering containing one or more rounds. Chapter events are typically single-round (approximately 2 hours total). Regional and championship events are multi-round days, typically 4-5 rounds with appropriate breaks (8-10 hour days).
 
@@ -36,25 +44,25 @@ HackLet League is built for engineers who want to develop and demonstrate the cl
 
 A round is the atomic unit of hacklet competition. From opening to next-round-introduction, a complete round cycle runs approximately 2 hours. The structure is designed to produce broadcast-quality competition while making efficient use of time through concurrent activities.
 
-### 3.1 Round Opening (T-5:00 to T+0:00)
+### 3.1 Round Opening (T+0:00 to T+5:00)
 
-Five minutes before build start, the round opens. The host welcomes the audience, frames the round (which tier, what's at stake, where this fits in the season), introduces contestants individually, and confirms readiness. Players are seated at their workstations but workstations remain locked. This is *transition time* — not idle, but oriented preparation. The opening creates production rhythm and lets the audience invest in the round before competition begins.
+The round begins with five minutes of opening. The host welcomes the audience, frames the round (which tier, what's at stake, where this fits in the season), introduces contestants individually, and confirms readiness. Players are seated at their workstations but workstations remain locked. This is *transition time* — not idle, but oriented preparation. The opening creates production rhythm and lets the audience invest in the round before competition begins.
 
-### 3.2 Build Phase (T+0:00 to T+24:00)
+### 3.2 Build Phase (T+5:00 to T+29:00)
 
-At T+0:00, the central system simultaneously unlocks all workstations and reveals the round prompt. Players have 24 minutes to construct a web application of their choice.
+At T+5:00, the central system simultaneously unlocks all workstations and reveals the round prompt. Players have 24 minutes to construct a web application of their choice.
 
 There are no required features. There are no mandated architectures. Players build what they choose to build. The scoring system, not the rules, shapes player decisions about what to build.
 
 Players direct the AI substrate through the league competition website. They write code in the provided IDE. They invoke fuzz tests against their own work to gather intelligence about defensive coverage. They allocate their token budget and fuzz budget as they see fit.
 
-At T+24:00, code freeze takes effect simultaneously across all workstations. The network cuts. All player activity ceases — no further coding, no AI prompts, no fuzz invocations. AI responses mid-generation are truncated at the freeze point and any code changes from those partial responses roll back to the pre-prompt state. An automatic commit captures the final code state. The submission is what existed at freeze; nothing later contributes.
+At T+29:00, code freeze takes effect simultaneously across all workstations. The network cuts for code changes. All build activity ceases — no further coding, no agentic edits, no fuzz invocations against the workstation. AI responses mid-generation are truncated at the freeze point and any code changes from those partial responses roll back to the pre-prompt state. The submission is what existed at freeze; nothing later contributes to the code. The AI chat interface itself remains available for pitch preparation (see §3.3).
 
-### 3.3 Concurrent Evaluation and Pitch Preparation (T+24:00 to T+36:00)
+### 3.3 Concurrent Evaluation and Pitch Preparation (T+29:00 to T+47:00)
 
-For 12 minutes after code freeze, *judges and players work in parallel*:
+For 18 minutes after code freeze, *judges and players work in parallel*:
 
-**Code submission and central fuzzing.** At freeze, each workstation pushes its final code state to a league-managed git repository via automatic commit and push. League infrastructure pulls each submission, deploys it in an ephemeral container, and executes the full authoritative fuzz catalog — both public and hidden pools — against the deployed submission. This central testing is what counts for scoring; local fuzz during build was intelligence-gathering only.
+**Code submission and central fuzzing.** At freeze, each workstation copies its final code state to league infrastructure via SCP to a service-account path (`/opt/hacklet/submissions/$EVENT_ID/$USER/`). League infrastructure receives each submission, deploys it in an ephemeral container with an assigned port, and executes the full authoritative fuzz catalog — both public and hidden pools — against the deployed submission. This central testing is what counts for scoring; local fuzz during build was intelligence-gathering only. Post-competition, completed submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
 
 **Judges evaluate submissions.** Judges interact with each submission live in their portals while the fuzz runner completes its work. The panel includes specialized roles:
 
@@ -62,27 +70,27 @@ For 12 minutes after code freeze, *judges and players work in parallel*:
 - One judge serves as **UX designer** — assessing user experience, interaction quality, visual hierarchy, and intuitive navigation. Brings professional design expertise to evaluation.
 - Remaining judges conduct **general engineering evaluation** — assessing creative coherence, derived feature correctness, technical execution, and documentation quality.
 
-With 12 minutes for 12 submissions, judges have approximately 1 minute per submission for substantive evaluation. The fuzz runner output gives them a quick technical baseline; clickaround surfaces what automation can't measure.
+With 18 minutes for 8 submissions across 4 judges, each judge has approximately 9 minutes per submission for substantive evaluation. The fuzz runner output gives them a quick technical baseline; clickaround surfaces what automation can't measure.
 
-**Players prepare their pitches.** Workstations remain locked from coding but players have access to their submitted code and README for reference. They digest what they built, plan their 60-second pitch, anticipate likely cross-examination questions. This is recovery time from build intensity and strategic preparation for what comes next.
+**Players prepare their pitches.** Code files become read-only at freeze (no further edits possible) but players retain access to their submitted code, README, and the AI chat interface for pitch preparation. Agentic edit capabilities are disabled at freeze; chat-only AI assistance remains available. Players who tokenmaxxed during the build phase have no AI assistance for prep — that strategic tradeoff is part of the format's resource calibration test. Players digest what they built, plan their pitch, anticipate likely cross-examination questions. This is recovery time from build intensity and strategic preparation for what comes next.
 
-Both activities consume the same 12-minute window. Neither party waits on the other.
+Both activities consume the same 18-minute window. Neither party waits on the other.
 
-### 3.4 Pitch and Cross-Examination (T+36:00 to T+66:00 for 12 players)
+### 3.4 Pitch and Cross-Examination (T+47:00 to T+75:00 for 8 players)
 
 Each player presents in sequence:
 
 - **60 seconds** of pitch — what they built, key choices, what makes their submission distinctive
-- **60 seconds** of cross-examination — judges ask questions in turn, each judge limited to one question per player, verbose answers cost remaining question slots
+- **120 seconds** of cross-examination — judges ask questions in turn, each judge limited to one substantive question per player (four judges, four questions, roughly 30 seconds per question including the answer). Verbose answers cost remaining question slots.
 - **30 seconds** of transition — next player gets situated, audience and judges briefly reset
 
-At 2.5 minutes per player, this phase runs 30 minutes for the 12-player optimal round size.
+At 3.5 minutes per player, this phase runs 28 minutes for the 8-player standard round size. The expanded 120-second cross-examination (up from 60 seconds in earlier format drafts) reflects that four judges produce substantively more questions than three, and that the Stakeholder Judge role (when introduced) operates differently from technical questioning and benefits from the additional time.
 
 Same-archetype submissions (multiple players who built similar applications) pitch back-to-back to enable direct comparison and require explicit differentiation arguments.
 
-### 3.5 Deliberation and Voting (T+66:00 to T+78:00 to T+81:00)
+### 3.5 Deliberation and Voting (T+75:00 to T+93:00)
 
-After all pitches and cross-examinations conclude, judges enter explicit deliberation for 12-15 minutes:
+After all pitches and cross-examinations conclude, judges enter explicit deliberation for 18 minutes:
 
 - Compare what they witnessed during pitches against what they observed during clickaround
 - Re-visit submissions for additional non-fuzz clickthrough now informed by player framing
@@ -92,7 +100,7 @@ After all pitches and cross-examinations conclude, judges enter explicit deliber
 
 During this same window, the audience votes for **People's Hacklet** through the league app. The audience has now seen all pitches and can make an informed choice rather than voting blindly during competition.
 
-### 3.6 Award Reveal and Closing (T+78:00 to T+95:00)
+### 3.6 Award Reveal and Closing (T+93:00 to T+107:00)
 
 Categorical awards are revealed in ascending order of prestige, culminating in the Best Overall (composite champion) reveal. Standard award sequence:
 
@@ -106,7 +114,7 @@ Categorical awards are revealed in ascending order of prestige, culminating in t
 
 Award reveal includes brief commentary on the winner's submission, allowing the audience to understand why each award was earned. Closing announcements wrap the round — thanks to judges and venue, recognition of all participants, preview of what comes next.
 
-### 3.7 Zamboni Period (T+95:00 to T+120:00)
+### 3.7 Zamboni Period (T+107:00 to T+135:00)
 
 Between rounds, a 25-30 minute Zamboni Period runs operational transition:
 
@@ -117,23 +125,25 @@ Between rounds, a 25-30 minute Zamboni Period runs operational transition:
 - Audience takes needed breaks
 - Production team resets any equipment
 
-Approximately 5 minutes before the next round's opening (i.e., at T+115:00 of the current cycle), the next round's pre-introduction begins, bridging smoothly into the next round's opening. This produces a *continuous narrative flow* across multi-round events rather than discrete events with dead time between.
+Approximately 5 minutes before the next round's opening (i.e., at T+130:00 of the current cycle), the next round's pre-introduction begins, bridging smoothly into the next round's opening. This produces a *continuous narrative flow* across multi-round events rather than discrete events with dead time between.
 
 ### 3.8 Round Sizing Notes
 
-The 2-hour round cycle assumes 12 players — the *operational maximum* for broadcast quality. Smaller rounds run faster:
+The 2-hour round cycle assumes 8 players — the standard target for broadcast quality and credentialing distribution. Round size varies within an acceptable operational range of 6-12 players:
 
-- 8 players: ~110 minutes round cycle (saves 10 minutes in the pitch/cross-ex phase)
-- 6 players: ~100 minutes round cycle
-- 4 players: ~90 minutes round cycle
+- **8 players (standard)**: Full 2-hour round cycle. Best balance of broadcast tractability, judge evaluation depth (9 minutes per submission), categorical award distribution across varied competitors, and field variety for narrative threads. The format's foundational design point.
+- **6-7 players (smaller events, pilot circumstances)**: ~105-115 minute round cycle (saves time in the pitch/cross-ex phase at 3.5 min per player). Appropriate for early chapter events, pilot rounds, or recruitment-constrained operations.
+- **9-12 players (larger events with operational capacity)**: ~125-145 minute round cycle. Acceptable when needed but operates with reduced narrative depth per player.
 
-While the absolute structural maximum remains 25 players per round, hacklet treats 12 as the practical cap. Beyond 12 players, audience tracking degrades sharply, commentary becomes superficial, and broadcast quality suffers. Events with more than 12 players-worth of demand should add additional rounds rather than enlarge individual rounds.
+The 8-player standard follows the FMWC precedent: their "888 Battle" (June 2021, 8 players) was the format that catalyzed Excel esports as a viable broadcast category and led to ESPN2 broadcast presence by 2022. FMWC's All-Star Battle 2022 on ESPN2 was also 8 players. Empirically, 8 is the broadcast-tractable cap for live single-event credentialing competition. 8 also leans into the cultural resonance of the number across the international competitive engineering audience HackLet operates within.
+
+While the structural maximum remains 12 players per round, beyond 8 the per-player narrative depth degrades and judge evaluation time per submission tightens uncomfortably. Events with more than 8-12 players-worth of demand should add additional rounds rather than enlarge individual rounds.
 
 ### 3.9 Broadcast Architecture
 
 Hacklet is designed as a watchable competitive format. Broadcast infrastructure is integral to the design, not an afterthought.
 
-**Workstation screen capture.** Each player's workstation streams its display to league infrastructure during build and pitch phases. Broadcast directors select which workstation feed serves as the primary view at any moment, with picture-in-picture composites possible for showing multiple players simultaneously. Twelve simultaneous feeds give directors abundant material to work with.
+**Workstation screen capture.** Each player's workstation streams its display to league infrastructure during build and pitch phases. Broadcast directors select which workstation feed serves as the primary view at any moment, with picture-in-picture composites possible for showing multiple players simultaneously. Eight simultaneous feeds give directors abundant material to work with while staying tractable for director attention and audience cognitive load.
 
 **Per-player stats overlays.** League-supplied stats overlays display in real-time alongside workstation views:
 
@@ -395,27 +405,27 @@ Players may compete in tiers above their expected eligibility (a collegiate play
 
 Events occur throughout the season at multiple scales:
 
-- **Chapter events**: Local events run by individual chapters, typically 8-12 players, monthly cadence. May be single-round (approximately 2 hours) or multi-round day events depending on chapter capacity.
+- **Chapter events**: Local events run by individual chapters, typically 6-8 players, monthly cadence. May be single-round (approximately 2 hours) or multi-round day events depending on chapter capacity.
 - **Regional events**: Cross-chapter events with broader participation, quarterly cadence, typically multi-round day events (3-5 rounds across 8-10 hours) to justify travel for visiting players.
 - **Championship events**: Season-culminating events with the strongest field, typically multi-day with multiple rounds per day.
 
-Every individual round caps at **25 players absolute maximum**, with **12 as the practical broadcast-quality cap**. Beyond 12 players, audience tracking degrades sharply and commentary becomes superficial. Events with more than 12 players-worth of demand should add additional rounds rather than enlarge individual rounds.
+Every individual round operates at **8 players as the standard**, with **6-12 as the acceptable range** and **12 as the structural maximum**. Beyond 8, per-player narrative depth degrades and judge evaluation time tightens. Beyond 12, broadcast quality breaks. Events with more than 8-12 players-worth of demand should add additional rounds rather than enlarge individual rounds.
 
 **Round size targets**:
 
-- *Optimal (8-12 players)*: Best for broadcast quality, audience tracking, and commentary depth. Full 2-hour round cycle.
-- *Small (4-6 players)*: Intimate events with faster pacing, suitable for early chapter events and pilot rounds. Approximately 90-100 minute round cycle.
-- *Maximum (up to 25 players)*: Used only when round-splitting isn't feasible. Sacrifices broadcast quality for accommodating larger fields.
+- *Standard (8 players)*: The format's foundational design point. Full 2-2.5 hour round cycle. Best broadcast quality, judge evaluation depth, and categorical award distribution. Validated by FMWC precedent (888 Battle, ESPN2 All-Star Battle).
+- *Smaller (6-7 players)*: ~105-115 minute round cycle. Acceptable for early chapter events, pilot rounds, recruitment-constrained operations. Tighter per-player narrative.
+- *Larger (9-12 players)*: ~125-145 minute round cycle. Acceptable when needed but operates with reduced narrative depth per player and tighter judge evaluation time.
 
-**Typical 12-player round cycle (~2 hours)**:
+**Standard 8-player round cycle (~2-2.5 hours)**:
 
-- T-5:00 to T+0:00: Round opening (5 min)
-- T+0:00 to T+24:00: Build phase (24 min)
-- T+24:00 to T+36:00: Concurrent evaluation and pitch preparation (12 min)
-- T+36:00 to T+66:00: Pitch and cross-examination (30 min, scales with player count)
-- T+66:00 to T+81:00: Deliberation and audience voting (15 min)
-- T+81:00 to T+95:00: Award reveal and closing (14 min)
-- T+95:00 to T+120:00: Zamboni period with next round pre-introduction beginning at T+115:00 (25-30 min)
+- T+0:00 to T+5:00: Round opening (5 min)
+- T+5:00 to T+29:00: Build phase (24 min)
+- T+29:00 to T+47:00: Concurrent evaluation and pitch preparation (18 min)
+- T+47:00 to T+75:00: Pitch and cross-examination (28 min, 3.5 min per player including 60s pitch + 120s cross-ex + 30s transition)
+- T+75:00 to T+93:00: Concurrent deliberation and audience voting (18 min)
+- T+93:00 to T+107:00: Award reveal and closing (14 min)
+- T+107:00 to T+135:00: Zamboni period with next round pre-introduction beginning at T+130:00 (25-30 min)
 
 Multi-round events host multiple rounds with different player groups across the day, using the same physical workstations. The Zamboni Period between rounds serves several functions:
 
@@ -514,6 +524,10 @@ The structural precedent is the **Financial Modeling World Cup**. Founded in 202
 Credentialing is the aspiration, not the pitch. The League's job is to run the format well: equal substrate, honest measurement, methodology published in full. Done consistently, the credential emerges as a side effect — persistent rankings accumulate career-spanning evidence, and employers may over time reference HackLet standings as signal for AI-assisted engineering and defensive-coding roles. That value depends entirely on whether the measurements are trustworthy, which is why rigor comes first and the credential follows.
 
 The League is honest about what AI actually delivers: a meaningful but modest productivity multiplier, useful when directed well, sloppy when directed poorly. The format demonstrates this empirically in every event. Submissions that pass the fuzz gauntlet are evidence of what skilled AI-assisted work can produce. Submissions that fail are evidence of what unskilled AI-assisted work cannot.
+
+The industry is grumbling about slop in 2026, and the grumble is documented. The Harness 2026 State of Engineering Excellence report finds 31% of a developer's day consumed by AI verification overhead. 81% of engineering leaders report increased code review burden since AI deployment. The Harvard Business Review estimates work-SLOP costs roughly $9 million per year per 10,000 employees. The MIT Media Lab finds 95% of organizations see no measurable return on AI investment. Engineering communities have organized vocabulary around the failure mode — "vibe coding," "tokenmaxxing," "slop register," "death loops" — and developed countermeasures (intent-driven verification, slop registers, AI Code Assurance). HackLet enters this moment with credentialing infrastructure that answers a specific market need: engineers who can operate effectively in AI-augmented environments without producing slop, and engineers who can remediate the slop others produce.
+
+The two-format structure covers both halves of the anti-slop engineering profession. **HackLet Vibe** credentials producing code that isn't slop. **HackLet Unslop** credentials identifying and remediating slop in existing code. Together they map to the full surface of AI-augmented engineering work. The strategic articulation is simple: people grumble about slop, so HackLet makes anti-slop a sport, televises it, and credentials those who excel at it. The grumble is the market; the format is the product.
 
 HackLet does not legislate AI usage style — any interface is fine (chat, agentic, command-line) so long as calls flow through the league's API and stay within budget. What matters is what survives the fuzz at code freeze, regardless of who or what produced it. The two principles (§10) are sufficient; the format evaluates nothing else.
 
