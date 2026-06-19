@@ -26,6 +26,7 @@ export type Chapter = {
   verification_status: string;
   institutional_affiliation: string;
   website_url: string;
+  contact_email: string; // owner-only; blank for non-owners
   created_at: string;
 };
 

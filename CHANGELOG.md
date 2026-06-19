@@ -10,13 +10,26 @@ This is a human-readable summary; the authoritative record is the git history.
 - [x] End-to-end acceptance **verified on the live site**: signup → verify email → login → create chapter (pending) → admin approve (verified) → appears in directory → suspend (leaves directory). Full lifecycle walked.
 - [x] Real transactional email — Resend SMTP, domain verified (SPF/DKIM), confirmed delivering to inboxes. (`docker-compose.yml` now forwards `EMAIL_*`/`RESEND_API_KEY` to the backend; Sites record renamed from `example.com` to HackLet League so emails read correctly.)
 - [ ] ~1 week of stable uptime → Stage 1 officially ships.
-- Queued next: **Google SSO** (now unblocked by public HTTPS), then **Stage 2 — events**.
+- Next: **Stage 2 — events** (Google SSO landed — see below).
 
 ### Close-out fixes (the bugs squashed to get acceptance green)
 - **Email verification link 400'd** — allauth percent-encodes the key's colons (`%3A`) in the email URL; `useParams()` returned it still-encoded, so the backend rejected a key it never signed. Decode before POSTing.
 - **Login didn't update the UI** (then 409 on retry) — the header's auth nav only checked the session on mount and never remounted across client navigation; now re-checks on route change, and login treats `409 (already authenticated)` as success.
 - **Pending chapter detail 500'd** — SSR fetches the API as `Host: backend:8000`, which hardened `ALLOWED_HOSTS` rejected (`DisallowedHost` 400 → frontend 500). Allow the internal host; also forward the request's session cookies to SSR so a creator can see their own pending chapter.
 - **Status lifecycle** — default is now `pending` (was `unverified`); detail-page banner is state-aware (pending / suspended / not-approved); new owner **`/dashboard`** lists your chapters with status badges (via `/api/chapters/mine/`).
+
+---
+
+## Google SSO (June 2026, post-Stage-1)
+
+Added **"Continue with Google"** on login + signup via **django-allauth socialaccount** (headless redirect flow). The OAuth client is configured from env vars (no DB `SocialApp`); a successful sign-in lands the user straight on `/dashboard`. Getting the headless OAuth flow working surfaced four non-obvious requirements, each worth remembering:
+
+- **`django-allauth[socialaccount]`, not base** — the base package omits the OAuth HTTP/JWT libraries; adding a provider without the extra crash-loops the backend on `ModuleNotFoundError: No module named 'jwt'`.
+- **`SameSite=Lax`, not `Strict`** — Google's callback is a cross-site top-level redirect, and a Strict session cookie is dropped on it, losing the OAuth state.
+- **Absolute `callback_url`** — allauth doesn't honor a relative return path after the provider round-trip; the button sends `window.location.origin + /dashboard` (matching allauth's reference SPA).
+- **Caddy must proxy `/accounts/*` and be reloaded on Caddyfile changes** — the bind-mounted config isn't picked up by `up -d`, so `deploy.sh` now reloads Caddy every deploy.
+
+Also: mounted `accounts/` (under `HEADLESS_ONLY`, allauth.urls serves only the provider OAuth callback), and added a `socialaccount_login_error` frontend fallback so a failed social login lands on a real page.
 
 ---
 

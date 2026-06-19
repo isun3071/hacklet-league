@@ -6,20 +6,24 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import Chapter, ChapterMembership
-from .serializers import ChapterCreateSerializer, ChapterSerializer
+from .serializers import ChapterSerializer, ChapterWriteSerializer
 
 
 class ChapterViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Public chapter directory + authenticated chapter creation.
+    """Public chapter directory + authenticated chapter CRUD.
 
-    Listing shows only approved (verified) chapters. A creator can also retrieve
-    their own chapter while it's still pending. Approval happens in Django admin
-    (superadmin sets verification_status -> verified); see BUILD_ROADMAP Stage 1.
+    Listing shows only approved (verified) chapters. A creator can retrieve, edit,
+    and delete their own chapters (any status); non-owners can't — write actions are
+    scoped to the owner's chapters, so others get 404 (not 403) and can't probe
+    existence. Approval/suspension happen in Django admin (superadmin sets
+    verification_status); see BUILD_ROADMAP Stage 1.
     """
 
     lookup_field = "slug"
@@ -34,18 +38,24 @@ class ChapterViewSet(
             if self.request.user.is_authenticated:
                 visible |= Q(created_by=self.request.user)
             return qs.filter(visible)
+        if self.action in ("update", "partial_update", "destroy"):
+            # Only the creator may edit/delete. Scoping the queryset (rather than
+            # raising 403) means a non-owner gets a 404 and can't probe existence.
+            if not self.request.user.is_authenticated:
+                return qs.none()
+            return qs.filter(created_by=self.request.user)
         return qs
 
     def get_serializer_class(self):
-        if self.action == "create":
-            return ChapterCreateSerializer
+        if self.action in ("create", "update", "partial_update"):
+            return ChapterWriteSerializer
         return ChapterSerializer
 
     def create(self, request, *args, **kwargs):
         write = self.get_serializer(data=request.data)
         write.is_valid(raise_exception=True)
         self.perform_create(write)
-        read = ChapterSerializer(write.instance)
+        read = ChapterSerializer(write.instance, context=self.get_serializer_context())
         return Response(read.data, status=status.HTTP_201_CREATED)
 
     @transaction.atomic
@@ -75,4 +85,4 @@ class ChapterViewSet(
     def mine(self, request):
         """Chapters the current user created, any status (for their dashboard)."""
         qs = Chapter.objects.filter(created_by=request.user)
-        return Response(ChapterSerializer(qs, many=True).data)
+        return Response(self.get_serializer(qs, many=True).data)

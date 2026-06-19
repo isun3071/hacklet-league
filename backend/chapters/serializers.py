@@ -4,20 +4,30 @@ from .models import Chapter
 
 
 class ChapterSerializer(serializers.ModelSerializer):
-    """Public, read-only view of a chapter (directory + detail pages)."""
+    """Read view of a chapter (directory + detail pages). `contact_email` is exposed
+    only to the chapter's creator — so they can edit it — and blank for everyone else."""
+
+    contact_email = serializers.SerializerMethodField()
 
     class Meta:
         model = Chapter
         fields = [
             "id", "slug", "name", "description", "location_text", "tier", "mode",
-            "verification_status", "institutional_affiliation", "website_url", "created_at",
+            "verification_status", "institutional_affiliation", "website_url",
+            "contact_email", "created_at",
         ]
-        read_only_fields = fields
+
+    def get_contact_email(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated and obj.created_by_id == user.id:
+            return obj.contact_email
+        return ""
 
 
-class ChapterCreateSerializer(serializers.ModelSerializer):
-    """Fields a user supplies when applying to create a chapter. Server sets the
-    rest (slug, created_by, verification_status, mode) in the view."""
+class ChapterWriteSerializer(serializers.ModelSerializer):
+    """Fields a user may set when creating or editing a chapter. The server owns the
+    rest (slug, created_by, verification_status, mode) — never client-writable."""
 
     class Meta:
         model = Chapter

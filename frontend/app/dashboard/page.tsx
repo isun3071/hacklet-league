@@ -44,6 +44,22 @@ export default function DashboardPage() {
     });
   }, []);
 
+  async function onDelete(c: Chapter) {
+    if (
+      !window.confirm(
+        `Delete "${c.name}"? This permanently removes the chapter and can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    const res = await request(`/api/chapters/${c.slug}/`, "DELETE");
+    if (res.ok) {
+      setChapters((prev) => (prev ? prev.filter((x) => x.id !== c.id) : prev));
+    } else {
+      window.alert("Could not delete that chapter. Please try again.");
+    }
+  }
+
   if (state === "loading") {
     return (
       <main className="container block">
@@ -84,6 +100,7 @@ export default function DashboardPage() {
                   <th>chapter</th>
                   <th>tier</th>
                   <th>status</th>
+                  <th>actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,6 +119,18 @@ export default function DashboardPage() {
                       <td>
                         <span className={`badge ${s.cls}`}>{s.label}</span>
                         {s.blurb && <span className="badge-blurb"> — {s.blurb}</span>}
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <Link href={`/chapters/${c.slug}/edit`}>edit</Link>
+                          <button
+                            type="button"
+                            className="linkbtn-danger"
+                            onClick={() => onDelete(c)}
+                          >
+                            delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
