@@ -28,6 +28,9 @@ urlpatterns = [
     path("api/csrf/", csrf),
     path("api/me/", MeView.as_view()),
     path("api/", include(router.urls)),
-    # django-allauth headless API (browser/session client): /_allauth/browser/v1/...
+    # django-allauth. The headless API drives the SPA; the regular allauth URLs are
+    # mounted because (even with HEADLESS_ONLY) they serve the social provider OAuth
+    # callbacks — e.g. /accounts/google/login/callback/, the URI registered with Google.
+    path("accounts/", include("allauth.urls")),
     path("_allauth/", include("allauth.headless.urls")),
 ]

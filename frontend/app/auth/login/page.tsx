@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSession, login } from "@/lib/auth";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,6 +68,8 @@ export default function LoginPage() {
           {busy ? "..." : "[ log in ]"}
         </button>
       </form>
+      <div className="oauth-divider"><span>or</span></div>
+      <GoogleSignInButton callbackUrl="/dashboard" />
       <p className="note">
         no account? <Link href="/auth/signup">sign up &rarr;</Link>
       </p>

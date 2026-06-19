@@ -26,6 +26,9 @@
 	handle /_allauth/* {
 		reverse_proxy backend:8000
 	}
+	handle /accounts/* {
+		reverse_proxy backend:8000
+	}
 
 	# Next.js frontend (everything else)
 	handle {

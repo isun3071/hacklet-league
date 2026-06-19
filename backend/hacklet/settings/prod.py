@@ -12,8 +12,11 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["hackletleague.com"]) + ["bac
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SAMESITE = "Strict"
-CSRF_COOKIE_SAMESITE = "Strict"
+# Lax, not Strict: the Google OAuth callback is a cross-site top-level redirect, and a
+# Strict session cookie would not be sent on it — breaking the social-login state check.
+# Lax still withholds the cookie from cross-site POSTs, and writes carry X-CSRFToken.
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["https://hackletleague.com"])
 SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True

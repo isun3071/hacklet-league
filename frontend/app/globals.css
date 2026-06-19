@@ -191,6 +191,11 @@ a { color: var(--accent); text-decoration: none; }
 .form .btn { align-self: flex-start; cursor: pointer; }
 .form-error { color: #ff7a7a; font-size: 0.9rem; margin: 0; }
 .ok-msg { color: var(--accent); font-size: 0.9rem; margin: 0; }
+.oauth-divider { display: flex; align-items: center; gap: 0.75rem; max-width: 460px; margin: 1.4rem 0; color: var(--muted); font-size: 0.8rem; }
+.oauth-divider::before, .oauth-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.oauth-form { max-width: 460px; margin: 0; }
+.btn-oauth { width: 100%; text-align: center; }
+.btn-oauth:disabled { opacity: 0.5; cursor: default; }
 
 /* Nav button (log out) styled like a nav link */
 .navbtn {

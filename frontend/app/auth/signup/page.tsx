@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { signup } from "@/lib/auth";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -70,6 +71,8 @@ export default function SignupPage() {
           {busy ? "..." : "[ create account ]"}
         </button>
       </form>
+      <div className="oauth-divider"><span>or</span></div>
+      <GoogleSignInButton callbackUrl="/dashboard" />
       <p className="note">
         have an account? <Link href="/auth/login">log in &rarr;</Link>
       </p>

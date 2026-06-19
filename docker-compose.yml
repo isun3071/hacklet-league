@@ -44,6 +44,9 @@ services:
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-HackLet League <no-reply@hackletleague.com>}
+      # Google OAuth (social login); read by settings.SOCIALACCOUNT_PROVIDERS.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_SECRET: ${GOOGLE_OAUTH_SECRET:-}
     depends_on:
       db:
         condition: service_healthy

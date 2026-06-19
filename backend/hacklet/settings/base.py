@@ -21,6 +21,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "allauth",
     "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
     "allauth.headless",
     "users",
     "chapters",
@@ -75,6 +77,25 @@ ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
+
+# Social login (Google). The OAuth app is configured here from env vars — no SocialApp
+# DB row needed. The OAuth2 callback is served by allauth.urls at
+# /accounts/google/login/callback/ (mounted in urls.py); register that exact URL in
+# the Google Cloud console. Leaving the env vars blank disables the provider gracefully.
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APP": {
+            "client_id": env("GOOGLE_OAUTH_CLIENT_ID", default=""),
+            "secret": env("GOOGLE_OAUTH_SECRET", default=""),
+            "key": "",
+        },
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    }
+}
+# Google verifies email ownership, so a Google login whose email matches an existing
+# verified account logs into it (no duplicate account, no extra verification step).
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 
 # Headless API for the Next.js SPA (browser/session client). Frontend routes are
 # placeholders until the frontend increment wires them.
