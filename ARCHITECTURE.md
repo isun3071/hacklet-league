@@ -300,7 +300,7 @@ Explicitly deferred from MVP, documented for awareness:
 - **Internationalization** — English-only for MVP; i18n added when international chapters appear
 - **Multi-region deployment** — Single VPS sufficient until latency becomes issue for global users
 - **HackLet Unslop format support** — Pilot operates HackLet Vibe: Classical Sprint; Unslop variants add a slop-generation pipeline (league substrate generates broken application live during round opening, distributed identically to all workstations) and slightly different submission semantics (still SCP-based, same fuzz catalog). Same infrastructure substrate, additional generation/distribution step. Documented in format_spec.md §1 and IDEAS_FOR_LATER.md for Season 2-3 introduction.
-- **Agentic format support** — Pilot operates Classical relationship (chat-window AI); Agentic variants add a league-built signed VSCodium extension with accept/reject UI, agent freeze semantics (revert to last accepted edit), and extended timer infrastructure (Agile-foundational at 48 min, Waterfall at 72-96 min). Stage 11+.
+- **Agentic format support** — Pilot operates Classical relationship (chat-window AI); Agentic variants add a league-built signed VSCodium extension with accept/reject UI, agent freeze semantics (revert to last accepted edit), and extended timer infrastructure (Agile-foundational at 48 min, Waterfall at 72-96 min). Stage 12+.
 - **Post-event public submission archive** — Mirror completed submissions to github.com/hacklet-league/ with player attribution. Becomes part of the credentialing artifact surface — anyone can review what HackLet champions actually built. Lands as operational policy when chapter operations mature.
 
 ---
