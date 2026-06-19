@@ -105,6 +105,9 @@ HEADLESS_FRONTEND_URLS = {
     "account_reset_password": "/auth/password/reset",
     "account_reset_password_from_key": "/auth/password/reset/key/{key}",
     "account_signup": "/auth/signup",
+    # Where allauth sends the browser if a social login fails (state lost, user
+    # cancels, provider error) — without this it strands them on the backend callback.
+    "socialaccount_login_error": "/auth/login?error=social",
 }
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="HackLet League <no-reply@hackletleague.com>")
