@@ -6,7 +6,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.routers import DefaultRouter
 
 from chapters.views import ChapterViewSet
-from events.views import EventViewSet
+from events.views import EventParticipantViewSet, EventViewSet
 from users.views import MeView
 
 
@@ -24,6 +24,7 @@ def csrf(_request):
 router = DefaultRouter()
 router.register(r"chapters", ChapterViewSet, basename="chapter")
 router.register(r"events", EventViewSet, basename="event")
+router.register(r"event-participants", EventParticipantViewSet, basename="event-participant")
 
 urlpatterns = [
     # Mounted at a secret, env-set slug in prod; Caddy gates that path to the tailnet.

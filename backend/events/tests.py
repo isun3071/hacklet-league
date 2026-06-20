@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from chapters.models import Chapter, ChapterStaff
-from events.models import Event
+from events.models import Event, EventParticipant
 
 User = get_user_model()
 
@@ -201,3 +201,305 @@ def test_event_cannot_be_moved_between_chapters(manager, chapter):
     c.force_authenticate(manager)
     r = c.patch(f"/api/events/{ev.id}/", {"chapter": "other"}, format="json")
     assert r.status_code == 400
+
+
+# ===========================================================================
+# 2b — participant flows (apply / invite / corps-judge / respond / decide)
+# ===========================================================================
+
+@pytest.fixture
+def player(db):
+    return User.objects.create_user(email="player@example.com", password="pw")
+
+
+@pytest.fixture
+def app_event(db, manager, chapter):
+    return _mk_event(
+        chapter, "Open Event", "open-event", manager,
+        access_mode=Event.AccessMode.APPLICATION,
+    )
+
+
+@pytest.fixture
+def invite_event(db, manager, chapter):
+    return _mk_event(
+        chapter, "Closed Event", "closed-event", manager,
+        access_mode=Event.AccessMode.INVITE_ONLY,
+    )
+
+
+# ---- apply -----------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_apply_as_player_is_pending(player, app_event):
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/events/{app_event.id}/apply/", {"role": "player"}, format="json")
+    assert r.status_code == 201
+    assert r.data["status"] == "pending"
+    assert r.data["source"] == "applied"
+    assert r.data["role"] == "player"
+
+
+@pytest.mark.django_db
+def test_apply_as_audience_auto_registers(player, app_event):
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/events/{app_event.id}/apply/", {"role": "audience"}, format="json")
+    assert r.status_code == 201
+    assert r.data["status"] == "registered"
+
+
+@pytest.mark.django_db
+def test_cannot_apply_to_invite_only_event(player, invite_event):
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/events/{invite_event.id}/apply/", {"role": "player"}, format="json")
+    assert r.status_code == 403
+
+
+@pytest.mark.django_db
+def test_cannot_apply_twice(player, app_event):
+    c = APIClient()
+    c.force_authenticate(player)
+    c.post(f"/api/events/{app_event.id}/apply/", {"role": "player"}, format="json")
+    r = c.post(f"/api/events/{app_event.id}/apply/", {"role": "judge"}, format="json")
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_apply_requires_auth(app_event):
+    r = APIClient().post(f"/api/events/{app_event.id}/apply/", {"role": "player"}, format="json")
+    assert r.status_code in (401, 403)
+
+
+# ---- invite ----------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_manager_invites_by_email_unregistered(manager, app_event):
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(
+        f"/api/events/{app_event.id}/invite/",
+        {"email": "newjudge@example.com", "role": "judge", "judge_specialization": "tester"},
+        format="json",
+    )
+    assert r.status_code == 201
+    assert r.data["status"] == "pending"
+    assert r.data["source"] == "invited"
+    p = EventParticipant.objects.get(id=r.data["id"])
+    assert p.user is None
+    assert p.email == "newjudge@example.com"
+    assert p.token
+    assert p.judge_specialization == "tester"
+
+
+@pytest.mark.django_db
+def test_invite_by_user_id_links_account(manager, app_event, player):
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(
+        f"/api/events/{app_event.id}/invite/",
+        {"user_id": str(player.id), "role": "player"}, format="json",
+    )
+    assert r.status_code == 201
+    p = EventParticipant.objects.get(id=r.data["id"])
+    assert p.user_id == player.id
+
+
+@pytest.mark.django_db
+def test_invite_existing_email_links_account(manager, app_event, player):
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(
+        f"/api/events/{app_event.id}/invite/",
+        {"email": "player@example.com", "role": "player"}, format="json",
+    )
+    assert r.status_code == 201
+    p = EventParticipant.objects.get(id=r.data["id"])
+    assert p.user_id == player.id
+    assert p.email == ""
+
+
+@pytest.mark.django_db
+def test_invite_requires_exactly_one_of_email_or_user_id(manager, app_event):
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(f"/api/events/{app_event.id}/invite/", {"role": "player"}, format="json")
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_non_manager_cannot_invite(player, app_event):
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(
+        f"/api/events/{app_event.id}/invite/",
+        {"email": "x@example.com", "role": "player"}, format="json",
+    )
+    assert r.status_code == 403
+
+
+# ---- corps judge -----------------------------------------------------------
+
+@pytest.mark.django_db
+def test_add_corps_judge(manager, chapter, app_event):
+    judge_user = User.objects.create_user(email="corps@example.com", password="pw")
+    staff = ChapterStaff.objects.create(
+        user=judge_user, chapter=chapter,
+        roles=[ChapterStaff.Role.JUDGE], status=ChapterStaff.Status.ACTIVE,
+    )
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(
+        f"/api/events/{app_event.id}/add-corps-judge/",
+        {"chapter_staff_id": str(staff.id), "judge_specialization": "ux_designer"},
+        format="json",
+    )
+    assert r.status_code == 201
+    assert r.data["role"] == "judge"
+    assert r.data["source"] == "corps"
+    assert r.data["status"] == "registered"
+    p = EventParticipant.objects.get(id=r.data["id"])
+    assert p.user_id == judge_user.id
+    assert p.chapter_staff_id == staff.id
+
+
+@pytest.mark.django_db
+def test_add_corps_judge_rejects_non_judge_staff(manager, chapter, app_event):
+    org = User.objects.create_user(email="org@example.com", password="pw")
+    staff = ChapterStaff.objects.create(
+        user=org, chapter=chapter,
+        roles=[ChapterStaff.Role.ORGANIZER], status=ChapterStaff.Status.ACTIVE,
+    )
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(
+        f"/api/events/{app_event.id}/add-corps-judge/",
+        {"chapter_staff_id": str(staff.id)}, format="json",
+    )
+    assert r.status_code == 400
+
+
+# ---- participant listing visibility ---------------------------------------
+
+@pytest.mark.django_db
+def test_participants_visibility(manager, app_event, player):
+    EventParticipant.objects.create(
+        event=app_event, user=player, role="player",
+        source="applied", status=EventParticipant.Status.REGISTERED,
+    )
+    pending_user = User.objects.create_user(email="pend@example.com", password="pw")
+    EventParticipant.objects.create(
+        event=app_event, user=pending_user, role="player",
+        source="applied", status=EventParticipant.Status.PENDING,
+    )
+    # public: only the registered one, and no email
+    pub = APIClient().get(f"/api/events/{app_event.id}/participants/")
+    assert pub.status_code == 200
+    assert len(pub.data) == 1
+    assert pub.data[0]["email"] == ""
+    # manager: both, with email
+    c = APIClient()
+    c.force_authenticate(manager)
+    mgr = c.get(f"/api/events/{app_event.id}/participants/")
+    assert len(mgr.data) == 2
+    assert {row["email"] for row in mgr.data} == {"player@example.com", "pend@example.com"}
+
+
+# ---- mine / respond / decide / withdraw -----------------------------------
+
+@pytest.mark.django_db
+def test_mine_includes_account_and_email_invites(player, manager, app_event):
+    EventParticipant.objects.create(
+        event=app_event, user=player, role="player", source="applied", status="pending",
+    )
+    other_ch = _chapter_with_owner(manager, "C2", "c2", Chapter.VerificationStatus.VERIFIED)
+    other_event = _mk_event(other_ch, "E2", "e2", manager)
+    EventParticipant.objects.create(
+        event=other_event, email="player@example.com", role="judge",
+        source="invited", status="pending", token="t",
+    )
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.get("/api/event-participants/mine/")
+    assert r.status_code == 200
+    assert len(r.data) == 2
+
+
+@pytest.mark.django_db
+def test_respond_accept_claims_email_invite(player, app_event):
+    p = EventParticipant.objects.create(
+        event=app_event, email="player@example.com", role="judge",
+        source="invited", status="pending", token="t",
+    )
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/event-participants/{p.id}/respond/", {"action": "accept"}, format="json")
+    assert r.status_code == 200
+    p.refresh_from_db()
+    assert p.status == "registered"
+    assert p.user_id == player.id
+    assert p.email == ""
+
+
+@pytest.mark.django_db
+def test_respond_decline(player, app_event):
+    p = EventParticipant.objects.create(
+        event=app_event, user=player, role="player", source="invited", status="pending",
+    )
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/event-participants/{p.id}/respond/", {"action": "decline"}, format="json")
+    assert r.status_code == 200
+    p.refresh_from_db()
+    assert p.status == "declined"
+
+
+@pytest.mark.django_db
+def test_only_invitee_can_respond(player, app_event):
+    p = EventParticipant.objects.create(
+        event=app_event, user=player, role="player", source="invited", status="pending",
+    )
+    other = APIClient()
+    other.force_authenticate(User.objects.create_user(email="z@example.com", password="pw"))
+    r = other.post(f"/api/event-participants/{p.id}/respond/", {"action": "accept"}, format="json")
+    assert r.status_code == 404
+
+
+@pytest.mark.django_db
+def test_manager_decides_application(player, manager, app_event):
+    p = EventParticipant.objects.create(
+        event=app_event, user=player, role="player", source="applied", status="pending",
+    )
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(f"/api/event-participants/{p.id}/decide/", {"action": "approve"}, format="json")
+    assert r.status_code == 200
+    p.refresh_from_db()
+    assert p.status == "registered"
+    assert p.decided_by_id == manager.id
+
+
+@pytest.mark.django_db
+def test_non_manager_cannot_decide(player, app_event):
+    p = EventParticipant.objects.create(
+        event=app_event, user=player, role="player", source="applied", status="pending",
+    )
+    c = APIClient()
+    c.force_authenticate(player)  # the applicant is not a manager
+    r = c.post(f"/api/event-participants/{p.id}/decide/", {"action": "approve"}, format="json")
+    assert r.status_code == 404
+
+
+@pytest.mark.django_db
+def test_withdraw(player, app_event):
+    p = EventParticipant.objects.create(
+        event=app_event, user=player, role="player", source="applied", status="pending",
+    )
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/event-participants/{p.id}/withdraw/", {}, format="json")
+    assert r.status_code == 200
+    p.refresh_from_db()
+    assert p.status == "withdrawn"
