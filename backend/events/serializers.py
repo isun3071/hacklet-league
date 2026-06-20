@@ -7,11 +7,13 @@ from .models import Event, EventParticipant
 
 class EventChapterSerializer(serializers.Serializer):
     """Minimal chapter reference embedded in event reads (the full chapter lives at
-    /api/chapters/<slug>/)."""
+    /api/chapters/<slug>/). `tier` is the host chapter's operational tier (A/B/C) — one of
+    the three distinct "tier" axes the UI disambiguates."""
 
     id = serializers.UUIDField()
     slug = serializers.SlugField()
     name = serializers.CharField()
+    tier = serializers.CharField()
 
 
 class EventSerializer(serializers.ModelSerializer):

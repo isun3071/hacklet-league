@@ -48,3 +48,101 @@ export async function getChapter(slug: string): Promise<Chapter | null> {
   if (!res.ok) throw new Error(`GET /api/chapters/${slug}/ -> ${res.status}`);
   return res.json();
 }
+
+// ---- events ----------------------------------------------------------------
+// Named LeagueEvent (not Event) to avoid shadowing the DOM Event type in client code.
+
+export type EventTier = "chapter" | "regional" | "championship";
+export type EventFormat = "vibe" | "unslop";
+export type EventTimer = "xp" | "sprint" | "scrum" | "agile" | "waterfall";
+export type AccessMode = "invite_only" | "application";
+export type EventStatus =
+  | "scheduled"
+  | "registration_open"
+  | "registration_closed"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+export type PlayerTierRestriction = "collegiate" | "under_25" | "open" | "any";
+
+export type EventChapterRef = {
+  id: string;
+  slug: string;
+  name: string;
+  tier: "A" | "B" | "C";
+};
+
+export type LeagueEvent = {
+  id: string;
+  chapter: EventChapterRef;
+  slug: string;
+  name: string;
+  description: string;
+  event_tier: EventTier;
+  format: EventFormat;
+  timer: EventTimer;
+  access_mode: AccessMode;
+  status: EventStatus;
+  scheduled_start: string;
+  scheduled_end: string;
+  actual_start: string | null;
+  actual_end: string | null;
+  player_tier_restriction: PlayerTierRestriction;
+  created_at: string;
+};
+
+export type ParticipantRole = "player" | "judge" | "audience";
+export type JudgeSpecialization = "tester" | "ux_designer" | "general" | "";
+export type ParticipantSource = "invited" | "applied" | "corps";
+export type ParticipantStatus =
+  | "pending"
+  | "registered"
+  | "declined"
+  | "rejected"
+  | "withdrawn";
+
+export type Participant = {
+  id: string;
+  event: { id: string; slug: string; name: string };
+  role: ParticipantRole;
+  judge_specialization: JudgeSpecialization;
+  source: ParticipantSource;
+  status: ParticipantStatus;
+  display_name: string;
+  email: string; // managers + self only; "" otherwise
+  created_at: string;
+  responded_at: string | null;
+};
+
+export async function getEvents(chapterSlug?: string): Promise<LeagueEvent[]> {
+  const qs = chapterSlug ? `?chapter=${encodeURIComponent(chapterSlug)}` : "";
+  const res = await fetch(`${API_BASE}/api/events/${qs}`, {
+    cache: "no-store",
+    headers: await ssrHeaders(),
+  });
+  if (!res.ok) throw new Error(`GET /api/events/ -> ${res.status}`);
+  return res.json();
+}
+
+export async function getEvent(
+  chapterSlug: string,
+  eventSlug: string,
+): Promise<LeagueEvent | null> {
+  // Event slugs are unique only per chapter, so resolve via the filtered list.
+  const res = await fetch(
+    `${API_BASE}/api/events/?chapter=${encodeURIComponent(chapterSlug)}&slug=${encodeURIComponent(eventSlug)}`,
+    { cache: "no-store", headers: await ssrHeaders() },
+  );
+  if (!res.ok) throw new Error(`GET /api/events/ -> ${res.status}`);
+  const rows: LeagueEvent[] = await res.json();
+  return rows[0] ?? null;
+}
+
+export async function getEventParticipants(eventId: string): Promise<Participant[]> {
+  const res = await fetch(`${API_BASE}/api/events/${eventId}/participants/`, {
+    cache: "no-store",
+    headers: await ssrHeaders(),
+  });
+  if (!res.ok) throw new Error(`GET /api/events/${eventId}/participants/ -> ${res.status}`);
+  return res.json();
+}

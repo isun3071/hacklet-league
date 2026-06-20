@@ -26,6 +26,7 @@ export function AuthNav() {
   return (
     <nav className="nav-links">
       <Link href="/chapters">chapters</Link>
+      <Link href="/events">events</Link>
       {authed === true && (
         <>
           <Link href="/dashboard">dashboard</Link>
