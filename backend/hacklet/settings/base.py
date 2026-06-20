@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "allauth.headless",
     "users",
     "chapters",
+    "events",
 ]
 
 MIDDLEWARE = [

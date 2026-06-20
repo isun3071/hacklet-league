@@ -59,14 +59,16 @@ class Chapter(models.Model):
         return self.name
 
 
-class ChapterMembership(models.Model):
-    """A user's roles within a chapter. One row per (user, chapter)."""
+class ChapterStaff(models.Model):
+    """A person on a chapter's organizing team or judge corps — owner, organizer, or
+    (corps) judge. The chapter's run-team, modeled on hackathon organizers; NOT players
+    (players relate to events via events.EventParticipant). One row per (user, chapter).
+    See DATA_MODEL.md."""
 
     class Role(models.TextChoices):
         OWNER = "owner", "Owner"
-        ADMIN = "admin", "Admin"
+        ORGANIZER = "organizer", "Organizer"
         JUDGE = "judge", "Judge"
-        PLAYER = "player", "Player"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -75,10 +77,10 @@ class ChapterMembership(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chapter_staff"
     )
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name="memberships")
-    # List of Role values; a user can hold several (e.g. judge + player). See DATA_MODEL.md.
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name="staff")
+    # List of Role values; a person can hold several (e.g. organizer + judge). See DATA_MODEL.md.
     roles = models.JSONField(default=list)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     joined_at = models.DateTimeField(default=timezone.now)
@@ -87,12 +89,12 @@ class ChapterMembership(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="memberships_approved",
+        related_name="chapter_staff_approved",
     )
     notes = models.TextField(blank=True)
 
     class Meta:
-        db_table = "chapters_membership"
+        db_table = "chapters_staff"
         constraints = [
             models.UniqueConstraint(fields=["user", "chapter"], name="unique_user_chapter"),
         ]

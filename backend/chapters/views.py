@@ -5,7 +5,7 @@ from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Chapter, ChapterMembership
+from .models import Chapter, ChapterStaff
 from .serializers import ChapterSerializer, ChapterWriteSerializer
 
 
@@ -66,11 +66,11 @@ class ChapterViewSet(
             verification_status=Chapter.VerificationStatus.PENDING,
             mode=Chapter.Mode.SIGNUP,
         )
-        ChapterMembership.objects.create(
+        ChapterStaff.objects.create(
             user=self.request.user,
             chapter=chapter,
-            roles=[ChapterMembership.Role.OWNER],
-            status=ChapterMembership.Status.ACTIVE,
+            roles=[ChapterStaff.Role.OWNER],
+            status=ChapterStaff.Status.ACTIVE,
         )
 
     @staticmethod

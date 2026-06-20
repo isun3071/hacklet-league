@@ -14,7 +14,7 @@ All foreign keys cascade carefully — chapter deletion does not cascade to user
 
 - **User** — Global account on the platform
 - **Chapter** — Local operational unit of the league
-- **ChapterMembership** — Junction: user roles within a chapter
+- **ChapterStaff** — Chapter org team + judge corps (organizers and judges; not players)
 - **VerificationApplication** — Chapter tier upgrade requests
 - **Event** — Competitive gathering operated by a chapter
 - **Round** — Atomic competitive unit within an event
@@ -22,7 +22,7 @@ All foreign keys cascade carefully — chapter deletion does not cascade to user
 - **FuzzTest** — Catalog entry for an automated test
 - **FuzzResult** — Authoritative outcome of one fuzz test against one submission (at code freeze)
 - **PlayerFuzzInvocation** — Player-triggered fuzz invocation during build (broadcast visibility)
-- **JudgeAssignment** — Junction: judges assigned to events with role specialization
+- **EventParticipant** — Everyone at an event (players, judges, audience) via invite / application / RSVP / corps
 - **Score** — Judge-issued scores for submissions
 - **Ranking** — Aggregated performance per user per scope per period
 - **AuditLog** — Append-only record of significant operations
@@ -49,7 +49,7 @@ verified_email      : boolean
 verification_token  : varchar, nullable
 ```
 
-The `is_superadmin` flag is the platform-level role for the league operator team. Regular roles are stored per chapter via ChapterMembership.
+The `is_superadmin` flag is the platform-level role for the league operator team. Regular roles are stored per chapter via ChapterStaff.
 
 ### Chapter
 
@@ -76,15 +76,15 @@ suspended_reason    : text, nullable
 
 Chapters at tier C are unverified by default. Tier B chapters require basic approval. Tier A requires full verification documented in VerificationApplication.
 
-### ChapterMembership
+### ChapterStaff
 
-The junction table tracking which users have which roles in which chapters.
+A chapter's organizing team and judge corps — the people who plan, run, and judge its events, modeled on hackathon organizers under an MLH-style umbrella. **A chapter is a host/organizer, not a membership society; players are NOT staff** — players relate to *events* via `EventParticipant`, never to chapters. (Replaces the earlier `ChapterMembership` entity, which conflated organizers, judges, and players.)
 
 ```
 id                  : UUID primary key
 user_id             : FK User
 chapter_id          : FK Chapter
-roles               : array of enum (owner, admin, judge, player)
+roles               : array of enum (owner, organizer, judge)
 status              : enum (pending, active, suspended)
 joined_at           : timestamp
 approved_by_user_id : FK User, nullable
@@ -93,7 +93,7 @@ notes               : text, nullable
 unique constraint: (user_id, chapter_id)
 ```
 
-Multiple roles per membership — a user can be both a judge and a player at the same chapter (subject to event-level conflict checks). Owner role is unique per chapter (enforced by application logic).
+A person can hold several roles (e.g. organizer + judge). `judge` here is the chapter's **standing judge corps** (judges who travel/recur); a one-off judge for a single event instead applies via `EventParticipant` (role=judge) and is never ChapterStaff. "Chapter admin" (BUILD_ROADMAP's term) = staff with `owner` or `organizer` role. Owner is unique per chapter (enforced by application logic).
 
 ### VerificationApplication
 
@@ -129,7 +129,8 @@ description             : text
 event_tier              : enum (chapter, regional, championship)
 format                  : enum (vibe, unslop) — what the player does; foundational format is 'vibe'; 'unslop' added Stage 11
 timer                   : enum (xp, sprint, scrum, agile, waterfall) — build-phase duration; foundational timer is 'sprint' (24 min)
-status                  : enum (scheduled, registration_open, in_progress, completed, cancelled)
+access_mode             : enum (invite_only, application) — invite-only vs open application form, set per event
+status                  : enum (scheduled, registration_open, registration_closed, in_progress, completed, cancelled)
 scheduled_start         : timestamp
 scheduled_end           : timestamp
 actual_start            : timestamp, nullable
@@ -250,7 +251,7 @@ submission_id       : FK Submission
 fuzz_test_id        : FK FuzzTest
 outcome             : enum (defended, gracefully_handled, not_applicable, broken)
 points_contributed  : int (can be positive, zero, or negative)
-override_by_judge   : FK ChapterMembership, nullable (if tester judge overrode)
+override_by_judge   : FK EventParticipant, nullable (if the tester judge overrode)
 override_reason     : text, nullable
 ran_at              : timestamp
 
@@ -279,21 +280,38 @@ This table is the data source for broadcast overlays and live leaderboards durin
 
 ## Scoring Entities
 
-### JudgeAssignment
+### EventParticipant
 
-Junction tracking which judges are assigned to which events with which specialization.
+Everyone associated with an event as a person — **players, judges, and non-competing audience** — regardless of how they joined (invited, applied/RSVP'd, or drawn from the chapter judge corps). This single entity also replaces the old `JudgeAssignment` (a judge is just a participant with `role=judge`). It is the join point for access modes and all person-roles at an event.
 
 ```
-id                  : UUID primary key
-event_id            : FK Event
-membership_id       : FK ChapterMembership (the judge's chapter membership)
-role                : enum (tester, ux_designer, general)
-assigned_at         : timestamp
+id                   : UUID primary key
+event_id             : FK Event
+user_id              : FK User, nullable (null until an emailed invite is claimed)
+email                : varchar, nullable (carries an invite to a not-yet-registered person)
+role                 : enum (player, judge, audience)
+judge_specialization : enum (tester, ux_designer, general), nullable (judge role only)
+source               : enum (invited, applied, corps)  # corps = drawn from the chapter's ChapterStaff judge corps
+status               : enum (pending, registered, declined, rejected, withdrawn)
+chapter_staff_id     : FK ChapterStaff, nullable (set for corps judges → their standing corps record)
+token                : varchar, nullable (single-use claim token for emailed invites)
+invited_by_user_id   : FK User, nullable
+decided_by_user_id   : FK User, nullable (organizer who approved/rejected an application)
+created_at           : timestamp
+responded_at         : timestamp, nullable
 
-unique constraint: (event_id, membership_id)
+unique constraint: (event_id, user_id)   -- where user_id is not null
+unique constraint: (event_id, email)     -- where email is not null
 ```
 
-A judge can hold one role per event. Role determines which scoring interfaces they see and how their expertise weights certain categorical awards.
+The `status` lifecycle covers both access modes and both join paths:
+- **invite_only**: an organizer creates the row (`source=invited`, `status=pending`, by email or known user) → invitee claims/accepts → `registered`.
+- **application / RSVP**: a logged-in user self-creates the row (`source=applied`, `status=pending`) via the "I want to compete" / "I want to judge" / "I want to attend" buttons → organizer approves (`registered`) or rejects (`rejected`); audience RSVPs may auto-register where a chapter allows open attendance.
+- **corps judge**: an organizer pulls a standing judge from `ChapterStaff` (`source=corps`, `chapter_staff_id` set), typically straight to `registered`.
+
+`role`+`judge_specialization` determine which scoring interfaces a judge sees and how their expertise weights categorical awards.
+
+**Audience** participants (`role=audience`) are non-competing spectators — RSVP'd attendees tracked for headcount and in-person People's Hacklet eligibility. They carry no `judge_specialization`, no `chapter_staff`, and never the `corps` source; they don't count toward the player cap, and may optionally link to an `AudienceVote`. (Anonymous walk-in audience and anonymous voting still work through `AudienceVote` with no EventParticipant row.)
 
 ### Score
 
@@ -302,13 +320,13 @@ Judge-issued scores for submissions.
 ```
 id                  : UUID primary key
 submission_id       : FK Submission
-judge_assignment_id : FK JudgeAssignment
+judge_participant_id: FK EventParticipant (a participant with role=judge)
 score_type          : enum (pitch_quality, cross_examination, creative_coherence, ux_quality, technical_execution, documentation)
 value               : decimal (typically 0-100 or 0-25 depending on type)
 comments            : text, nullable
 submitted_at        : timestamp
 
-unique constraint: (submission_id, judge_assignment_id, score_type)
+unique constraint: (submission_id, judge_participant_id, score_type)
 ```
 
 Multiple score types per judge per submission. Scoring math aggregates these into composite scores per submission.
@@ -375,16 +393,17 @@ Anonymous voting is allowed (low integrity requirements for audience awards). Ra
 ## Key Relationships
 
 ```
-User ──┬─< ChapterMembership >── Chapter
+User ──┬─< ChapterStaff >── Chapter
+       ├─< EventParticipant >── Event
        ├─< Submission           
        └─< Ranking              
 
 Chapter ──┬─< Event ──< Round ──< Submission ──< FuzzResult >── FuzzTest
           ├─< VerificationApplication
-          └─< ChapterMembership
+          └─< ChapterStaff
 
-JudgeAssignment links ChapterMembership to Event with role specialization
-Score links JudgeAssignment to Submission with score type
+EventParticipant links a User (player or judge) to an Event; corps judges also link to ChapterStaff
+Score links EventParticipant (role=judge) to Submission with score type
 
 AuditLog references any entity via resource_type + resource_id
 AudienceVote references Round and Submission
@@ -405,16 +424,20 @@ Beyond standard primary key and foreign key indexes:
 
 ## Data Constraints and Notes
 
+### Who the platform models
+
+`ChapterStaff` and `EventParticipant` model only people **directly and HackLet-specifically** involved: organizers, judges, players, audience — and, later, HackLet-trained **commentators / broadcast crew** (deferred to Tier A / Stage 6; the role enums are intentionally extensible). Generic event services that aren't HackLet-specific — catering, security, janitorial, room setup/teardown — are **not modeled**; a chapter arranges those as one-off services outside the platform. The test: if a role does the same job for non-HackLet events, it isn't a HackLet entity. Commentators/crew are the exception because Tier A needs commentary grounded in the format's technical vocabulary (race conditions, SQLi, insecure upload, DoS, TTFB).
+
 ### Cascade Behavior
 
 - User deletion: anonymize rather than delete (preserve ranking history)
 - Chapter deletion: only allowed for chapter owner; cascades to events, submissions, scores within that chapter; preserves user accounts
-- Event deletion: cascades to rounds, submissions, scores
+- Event deletion: cascades to rounds, submissions, scores, and event participants
 - Submission deletion: not allowed after round completes (preserves scoring history)
 
 ### Uniqueness Enforcement
 
-Chapter owner uniqueness (one owner per chapter) is enforced via application logic since ChapterMembership.roles is an array. A pre-save check ensures only one membership per chapter has 'owner' in roles.
+Chapter owner uniqueness (one owner per chapter) is enforced via application logic since ChapterStaff.roles is an array. A pre-save check ensures only one ChapterStaff row per chapter has 'owner' in roles.
 
 ### JSON Field Schemas
 

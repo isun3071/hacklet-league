@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Chapter, ChapterMembership
+from .models import Chapter, ChapterStaff
 
 
 @admin.register(Chapter)
@@ -13,8 +13,8 @@ class ChapterAdmin(admin.ModelAdmin):
     autocomplete_fields = ("created_by", "verified_by")
 
 
-@admin.register(ChapterMembership)
-class ChapterMembershipAdmin(admin.ModelAdmin):
+@admin.register(ChapterStaff)
+class ChapterStaffAdmin(admin.ModelAdmin):
     list_display = ("user", "chapter", "status", "joined_at")
     list_filter = ("status",)
     search_fields = ("user__email", "chapter__name")

@@ -42,8 +42,9 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     """Global platform account.
 
-    Login is email-based. Competitive roles (owner/admin/judge/player) are scoped
-    per chapter via chapters.ChapterMembership, not stored here. ``is_superadmin``
+    Login is email-based. Chapter-staff roles (owner/organizer/judge) are scoped per
+    chapter via chapters.ChapterStaff; event participation (player/judge/audience) via
+    events.EventParticipant — not stored here. ``is_superadmin``
     is the league-operator flag, distinct from Django's ``is_superuser`` (which
     gates Django-admin access). See DATA_MODEL.md.
     """

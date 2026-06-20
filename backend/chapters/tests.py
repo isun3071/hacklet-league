@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from chapters.models import Chapter, ChapterMembership
+from chapters.models import Chapter, ChapterStaff
 
 User = get_user_model()
 
@@ -36,9 +36,9 @@ def test_create_sets_owner_pending_and_slug(user):
     assert chapter.verification_status == Chapter.VerificationStatus.PENDING
     assert chapter.mode == Chapter.Mode.SIGNUP
 
-    membership = ChapterMembership.objects.get(chapter=chapter, user=user)
-    assert ChapterMembership.Role.OWNER in membership.roles
-    assert membership.status == ChapterMembership.Status.ACTIVE
+    staff = ChapterStaff.objects.get(chapter=chapter, user=user)
+    assert ChapterStaff.Role.OWNER in staff.roles
+    assert staff.status == ChapterStaff.Status.ACTIVE
 
 
 @pytest.mark.django_db
