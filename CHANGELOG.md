@@ -33,6 +33,16 @@ Also: mounted `accounts/` (under `HEADLESS_ONLY`, allauth.urls serves only the p
 
 ---
 
+## Chapter CRUD completed (June 2026, post-Stage-1)
+
+Chapter owners can now **edit and delete** their chapters from the dashboard — the U + D that were missing (create/read already existed). Details:
+- Update + delete are **owner-scoped** at the queryset level, so a non-owner gets **404, not 403** (existence isn't leaked); covered by new pytest cases.
+- **Slugs stay stable** across renames (no broken links / directory churn).
+- **`contact_email` is owner-only** — returned to the creator for editing, blank in public API responses.
+- Delete is a **hard delete** (cascades the owner membership). Editing a verified chapter does **not** auto-revert it to pending — owner edits are trusted for the pilot.
+
+---
+
 ## Stage 1 — Foundation (June 2026)
 
 Deployed the platform — **Django + DRF + PostgreSQL + Next.js behind Caddy** — running on the home Proxmox VM and **live (public, not publicized) at https://hackletleague.com** over HTTPS with production settings.

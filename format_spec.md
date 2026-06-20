@@ -8,21 +8,24 @@
 
 **In one sentence: hackathon, but minutes instead of hours, with a cheering audience.**
 
-HackLet is an institution that runs competitive formats, not a single immutable format. Format names follow a three-axis structure: **HackLet {Format}: {Relationship} {Timer}**.
+HackLet is an institution that runs competitive formats, not a single immutable format. Format names follow a two-axis structure: **HackLet {Format} {Timer}**.
 
-- **Format axis** — what the player does. **Vibe** (build an application from scratch under AI assistance) or **Unslop** (remediate a deliberately-broken application generated live during the round).
-- **Relationship axis** — how the player works with AI. **Classical** (chat interface, copy/paste workflow, every line that lands is one the player put there) or **Agentic** (AI lives in the IDE with edit permissions, player accepts or rejects proposed changes).
-- **Timer axis** — how long the round runs. **XP** (12 min), **Sprint** (24 min), **Scrum** (36 min), **Agile** (48 min), **Waterfall** (72-96 min). Token budgets scale with the timer.
+- **Format axis** — what the player does. **Vibe** (build an application from scratch under AI assistance) or **Unslop** (remediate a deliberately-broken application generated server-side and distributed to all players at round opening).
+- **Timer axis** — how long the build phase runs. **XP** (12 min), **Sprint** (24 min), **Scrum** (36 min), **Agile** (48 min), **Waterfall** (72-96 min). Token budgets scale with the timer.
 
-The foundational format is **HackLet Vibe: Classical Sprint** — 24 minutes, chat-window AI relationship, build from scratch. It is the format described in detail by this document and the one the BU pilot operates. **HackLet Unslop: Classical Sprint** is documented as the canonical second format and is introduced once Vibe is operationally stable. Agentic variants and longer timer controls follow as the league matures. Future format introductions follow the same naming convention without renaming what came before.
+2 formats × 5 timers = **10 sanctioned variants** in the operational matrix.
 
-HackLet Vibe: Classical Sprint is a competitive format for AI-assisted technical building under extreme time compression. Players have 24 minutes to construct, document, and defend a web application, working alone on a locked-down workstation with a single sanctioned AI substrate. Submissions are evaluated through automated adversarial testing, judge inspection, and live questioning. Multi-axis scoring produces categorical awards alongside an overall composite ranking.
+The foundational format is **HackLet Vibe Sprint** — 24-minute build phase from scratch. It is the format described in detail by this document and the one the BU pilot operates. **HackLet Unslop Sprint** is documented as the canonical second format and is introduced once Vibe is operationally stable. Longer and shorter timer controls follow as the league matures. Future format introductions follow the same naming convention without renaming what came before.
+
+**The league does not legislate AI-interaction style.** Where the league hosts AI substrate (Tier B and Tier A), players are served *both* a chat-window interface and an in-IDE agent interface from the same league-controlled infrastructure with a *unified token budget* across all interfaces. Players choose whatever combination of chat-style brainstorming and agent-style execution fits their workflow. This matches how real engineering with AI actually happens: fluid switching between modes, with strategic discipline coming from how the player navigates the substrate rather than which mode the format forces them into. Where the league does not host AI substrate (Tier C, BYOD), players use whatever AI tools they choose. The "Relationship" axis that earlier drafts of the format spec used to distinguish Classical from Agentic has been retired in favor of the unified-substrate model, which is more honest to the format's "we don't legislate how you use AI" thesis (§10).
+
+HackLet Vibe Sprint is a competitive format for AI-assisted technical building under extreme time compression. Players have 24 minutes to construct, document, and defend a web application, working alone on a locked-down workstation (Tier A/B) or their own laptop (Tier C) with sanctioned AI substrate access. Submissions are evaluated through automated adversarial testing, judge inspection, and live questioning. Multi-axis scoring produces categorical awards alongside an overall composite ranking.
 
 The format borrows time-compression from bullet chess, multi-axis scoring from gymnastics and decathlon, regional feeder structure from CTWC, and tier organization from FMWC. What it adds is novel: systematic adversarial testing of AI-assisted submissions under tournament conditions. The 24-minute build duration deliberately parallels the 24-hour hackathon, positioning hacklet as a compressed-format descendant of hackathon culture rather than a replacement for it.
 
 The name **Vibe** is deliberate. "Vibe coding" entered industry vocabulary in 2025 as a complaint — engineers directing AI rapidly without verification, producing slop at scale. HackLet reclaims the term. Vibe coding done by skilled engineers under proper conditions is real professional capability. HackLet Vibe champions demonstrate vibe coding *with* verification reflex, *with* defensive depth, *without* producing slop. The format name stakes territory in the industry's vocabulary dispute: vibe coding is a skill, and the league credentials those who practice it well.
 
-A complete round cycle runs approximately 2 hours from opening to next-round-introduction, with the 24-minute build forming the competitive core. This structure makes multi-round day events practical for regional and championship competition while preserving broadcast quality through proper time allocation for evaluation, pitches, deliberation, and award reveals. Rounds are bounded at 8 players standard, with 6-12 as the acceptable operational range and 12 as the structural maximum. Events host one or more rounds; regional and championship events typically run multi-round days.
+A complete round cycle runs anywhere from ~60 minutes (the Tier C MVR) to ~135 minutes (the full Tier A broadcast profile), with the 24-minute build forming the competitive core. This structure makes multi-round day events practical for regional and championship competition while preserving broadcast quality through proper time allocation for evaluation, pitches, deliberation, and award reveals. Human-judged rounds are bounded at 8 players standard (6-12 range, 12 maximum); LLM-judged Tier C cohorts scale higher (§3.2). Events host one or more rounds; regional and championship events typically run multi-round days.
 
 HackLet League is built for engineers who want to develop and demonstrate the cluster of skills AI-assisted defensive coding requires: prompting fluency, verification reflex, resource calibration, and defensive depth. It is not a beginner-friendly format. It assumes participants have working knowledge of web development and at least introductory familiarity with security concepts. Players who do not yet have those foundations are welcome to attend events as spectators and participate when their preparation matches the format's expectations.
 
@@ -30,9 +33,9 @@ HackLet League is built for engineers who want to develop and demonstrate the cl
 
 **Player**: An individual competitor registered in the appropriate tier.
 
-**Round**: A complete competitive cycle including opening (5 min), 24-minute build phase, concurrent evaluation and pitch preparation (18 min), pitch and cross-examination phase (28 min for 8 players), concurrent deliberation and audience voting (18 min), award reveal and closing (~14 min), and zamboni period (25-30 min before the next round). The atomic unit of competition, running approximately 2-2.5 hours per cycle.
+**Round**: A complete competitive cycle — opening, build phase, evaluation, communication (written PITCH.md or live pitch + cross-examination), judging/deliberation, and award reveal, plus a zamboni reset where controlled workstations are used. The atomic unit of competition. The phase *sequence* is tier-agnostic (§3.1); phase *timing* varies by tier and profile — the full Tier A round runs ~135 min, the Tier C MVR ~60 min (see TIER_A_OPERATIONS.md and TIER_C_OPERATIONS.md).
 
-**Event**: A complete competitive gathering containing one or more rounds. Chapter events are typically single-round (approximately 2 hours total). Regional and championship events are multi-round days, typically 4-5 rounds with appropriate breaks (8-10 hour days).
+**Event**: A complete competitive gathering containing one or more rounds. Chapter events are typically single-round (~1 hour for an MVR, up to ~2 hours for a full Tier A round). Regional and championship events are multi-round days, typically 4-5 rounds with appropriate breaks (8-10 hour days).
 
 **Submission**: The web application a player produces during a round, including its README documentation.
 
@@ -42,125 +45,50 @@ HackLet League is built for engineers who want to develop and demonstrate the cl
 
 ## 3. The Round
 
-A round is the atomic unit of hacklet competition. From opening to next-round-introduction, a complete round cycle runs approximately 2 hours. The structure is designed to produce broadcast-quality competition while making efficient use of time through concurrent activities.
+A round is the atomic unit of hacklet competition. The round phase sequence is tier-agnostic — every tier operates the same underlying phases — but specific timing within each phase varies by tier per the operational template. See TIER_A_OPERATIONS.md, TIER_B_OPERATIONS.md, and TIER_C_OPERATIONS.md for tier-specific timing profiles.
 
-### 3.1 Round Opening (T+0:00 to T+5:00)
+### 3.1 Round Phase Sequence
 
-The round begins with five minutes of opening. The host welcomes the audience, frames the round (which tier, what's at stake, where this fits in the season), introduces contestants individually, and confirms readiness. Players are seated at their workstations but workstations remain locked. This is *transition time* — not idle, but oriented preparation. The opening creates production rhythm and lets the audience invest in the round before competition begins.
+Every HackLet round operates the following phase sequence:
 
-### 3.2 Build Phase (T+5:00 to T+29:00)
+**Opening / Round Introduction**: host welcomes the room, frames the round (which variant, what's at stake, where this fits in the season), introduces players. Workstations or laptops remain locked or unprepared. This phase establishes orientation and (at Tier A) production rhythm.
 
-At T+5:00, the central system simultaneously unlocks all workstations and reveals the round prompt. Players have 24 minutes to construct a web application of their choice.
+**Build Phase**: the central system simultaneously unlocks all workstations and reveals the round prompt. Players have the variant's timer (24 minutes for Sprint, 12 for XP, 48 for Agile, etc.) to construct a web application. No required features, no mandated architectures. Players direct AI substrate however they choose within tier constraints. At freeze (build phase end), the network cuts for code changes, all build activity ceases — no further coding, no agent-interface edits, no fuzz invocations. AI responses mid-generation are truncated; partial code changes roll back to pre-prompt state.
 
-There are no required features. There are no mandated architectures. Players build what they choose to build. The scoring system, not the rules, shapes player decisions about what to build.
+**Evaluation Phase**: at freeze, submissions move to scoring infrastructure. Submission mechanism varies by tier — SCP from controlled workstations at Tier A/B, portal upload with grace period at Tier C (see tier docs for specifics). League infrastructure receives each submission, deploys in an ephemeral container, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; any local fuzz invocations during build were intelligence-gathering only. Post-competition, submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
 
-Players direct the AI substrate through the league competition website. They write code in the provided IDE. They invoke fuzz tests against their own work to gather intelligence about defensive coverage. They allocate their token budget and fuzz budget as they see fit.
+**Pitch Preparation Phase**: code files become read-only at freeze. Players retain access to submitted code, README, and (per tier specifics) AI assistance for pitch preparation. Players digest what they built, plan their articulation, anticipate cross-examination questions. Players also author **PITCH.md** documenting defensive choices, design rationale, and strategic decisions — this artifact is the canonical written communication artifact in the Tier C MVR (LLM-judged) and serves as pitch prep material at Tier A/B and Tier C Extended (where live pitch is the primary credentialing dimension). See PITCH.md template per TIER_C_OPERATIONS.md §7.
 
-At T+29:00, code freeze takes effect simultaneously across all workstations. The network cuts for code changes. All build activity ceases — no further coding, no agentic edits, no fuzz invocations against the workstation. AI responses mid-generation are truncated at the freeze point and any code changes from those partial responses roll back to the pre-prompt state. The submission is what existed at freeze; nothing later contributes to the code. The AI chat interface itself remains available for pitch preparation (see §3.3).
+**Pitch and Cross-Examination Phase**: human judges evaluate live performance at Tier A, Tier B, and Tier C Extended. Each player presents in sequence:
+- Pitch — what they built, key choices, distinctiveness
+- Cross-examination — judges ask questions in turn, each judge limited to one substantive question per player. Verbose answers cost remaining slots.
+- Brief transition before next player
 
-### 3.3 Concurrent Evaluation and Pitch Preparation (T+29:00 to T+47:00)
+Specific timing per player (3.5 minutes at Tier A's standard 8-player rounds) and judge corps composition vary by tier. Same-archetype submissions (multiple players who built similar applications) pitch back-to-back to enable direct comparison.
 
-For 18 minutes after code freeze, *judges and players work in parallel*:
+In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-judged evaluation of PITCH.md + README + fuzz results (which also lets the MVR scale to large cohorts human judging couldn't). See TIER_C_OPERATIONS.md §8 for LLM judging architecture.
 
-**Code submission and central fuzzing.** At freeze, each workstation copies its final code state to league infrastructure via SCP to a service-account path (`/opt/hacklet/submissions/$EVENT_ID/$ROUND_ID/$USER/`). League infrastructure receives each submission, deploys it in an ephemeral container with an assigned port, and executes the full authoritative fuzz catalog — both public and hidden pools — against the deployed submission. This central testing is what counts for scoring; local fuzz during build was intelligence-gathering only. Post-competition, completed submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
+**Deliberation and Voting Phase**: judges enter explicit deliberation. They compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, score across all dimensions, finalize categorical award nominees and Best Overall composite rankings. Concurrent with judge deliberation (when audience is present), audience votes for People's Hacklet through the player portal.
 
-**Judges evaluate submissions.** Judges interact with each submission live in their portals while the fuzz runner completes its work. The panel includes specialized roles:
+**Award Reveal and Closing Phase**: ceremonial reveal of categorical awards followed by Best Overall reveal. At Tier A with broadcast production, the 14-min window allocates time for theatrical ceremony with audience reaction and broadcast cuts. At Tier B and Tier C, compressed ceremony fits the operational profile (~7 min at Tier C MVR).
 
-- One judge serves as **tester** — operating a portal that displays automated test applicability decisions, with override capability for cases where automated detection missed or misidentified features.
-- One judge serves as **UX designer** — assessing user experience, interaction quality, visual hierarchy, and intuitive navigation. Brings professional design expertise to evaluation.
-- Remaining judges conduct **general engineering evaluation** — assessing creative coherence, derived feature correctness, technical execution, and documentation quality.
+**Zamboni Period** (when controlled workstations are used): workstation reset for next round. League daemon executes `userdel -r` for each player's ephemeral account, removes home directory content. Workstations rebooted to master image. Network state reset. Per-player accounts re-provisioned for next round. Audience break period. Tier C events with BYOD substrate skip the Zamboni Period because there are no ephemeral accounts to reset.
 
-With 18 minutes for 8 submissions across 4 judges, each judge has approximately 9 minutes per submission for substantive evaluation. The fuzz runner output gives them a quick technical baseline; clickaround surfaces what automation can't measure.
+### 3.2 Round Sizing
 
-**Players prepare their pitches.** Code files become read-only at freeze (no further edits possible) but players retain access to their submitted code, README, and the AI chat interface for pitch preparation. Agentic edit capabilities are disabled at freeze; chat-only AI assistance remains available. Players who tokenmaxxed during the build phase have no AI assistance for prep — that strategic tradeoff is part of the format's resource calibration test. Players digest what they built, plan their pitch, anticipate likely cross-examination questions. This is recovery time from build intensity and strategic preparation for what comes next.
+Standard round size is **8 players** across all tiers. This is the format's foundational unit — the size most operational templates are designed around, the size that fits broadcast overlays at Tier A, the size that balances judge cognitive load with competitive variety.
 
-Both activities consume the same 18-minute window. Neither party waits on the other.
+**6-12 players** is the acceptable operational range; **12 is the structural maximum** because pitch + cross-examination timing breaks beyond 12 players (28 min for 8 players at 3.5 min each scales to 42 min for 12 players, pushing the format clock substantially).
 
-### 3.4 Pitch and Cross-Examination (T+47:00 to T+75:00 for 8 players)
+**At large-cohort scale**, the Tier C MVR relaxes the 8-player limit because LLM judging scales to dozens of submissions in parallel — large-cohort MVR rounds run 30-100+ players (see TIER_C_OPERATIONS.md §5). Tier A and Tier B preserve the 8-12 player range because they use human judging that doesn't scale beyond that range.
 
-Each player presents in sequence:
+The 8-player limit at Tier A specifically is tied to broadcast and audience purposes — 8 streams on broadcast overlay manageable, 8 player faces visible to audience, dramatic ceremony works at this scale. Lower tiers without broadcast have more flexibility on round size within operational constraints.
 
-- **60 seconds** of pitch — what they built, key choices, what makes their submission distinctive
-- **120 seconds** of cross-examination — judges ask questions in turn, each judge limited to one substantive question per player (four judges, four questions, roughly 30 seconds per question including the answer). Verbose answers cost remaining question slots.
-- **30 seconds** of transition — next player gets situated, audience and judges briefly reset
+### 3.3 Broadcast Considerations
 
-At 3.5 minutes per player, this phase runs 28 minutes for the 8-player standard round size. The expanded 120-second cross-examination (up from 60 seconds in earlier format drafts) reflects that four judges produce substantively more questions than three, and that the Stakeholder Judge role (when introduced) operates differently from technical questioning and benefits from the additional time.
+Broadcast production is **Tier A only**. The broadcast infrastructure requires controlled workstations that can be screen-shared without compromising player privacy — a constraint that BYOD substrates (Tier C) preclude entirely and that Tier B's optional workstation hosting doesn't necessarily provide. See TIER_A_OPERATIONS.md §6 for broadcast architecture details (workstation screen capture, per-player stats overlays, live player-fuzz leaderboard, suspense gap dynamics, commentary infrastructure).
 
-Same-archetype submissions (multiple players who built similar applications) pitch back-to-back to enable direct comparison and require explicit differentiation arguments.
-
-### 3.5 Deliberation and Voting (T+75:00 to T+93:00)
-
-After all pitches and cross-examinations conclude, judges enter explicit deliberation for 18 minutes:
-
-- Compare what they witnessed during pitches against what they observed during clickaround
-- Re-visit submissions for additional non-fuzz clickthrough now informed by player framing
-- Read README content more carefully with player context
-- Discuss scoring discrepancies between judges
-- Finalize scores with proper consideration
-
-During this same window, the audience votes for **People's Hacklet** through the league app. The audience has now seen all pitches and can make an informed choice rather than voting blindly during competition.
-
-### 3.6 Award Reveal and Closing (T+93:00 to T+107:00)
-
-Categorical awards are revealed in ascending order of prestige, culminating in the Best Overall (composite champion) reveal. Standard award sequence:
-
-1. Most Efficient
-2. Best UX/UI
-3. Best Pitch
-4. Most Novel
-5. Most Resilient
-6. People's Hacklet (audience favorite, revealed second-to-last for dramatic pacing)
-7. Best Overall (composite champion)
-
-Award reveal includes brief commentary on the winner's submission, allowing the audience to understand why each award was earned. Closing announcements wrap the round — thanks to judges and venue, recognition of all participants, preview of what comes next.
-
-### 3.7 Zamboni Period (T+107:00 to T+135:00)
-
-Between rounds, a 25-30 minute Zamboni Period runs operational transition:
-
-- Per-player accounts are torn down and recreated: the outgoing player's ephemeral, non-sudo Unix account is deleted (`userdel -r`, wiping the home directory and session state) and a fresh one is provisioned from `/etc/skel` for the incoming player — seconds per workstation, system state untouched. Full image restoration is the *exceptional* operation (between events, on tamper detection, scheduled maintenance), not the per-round reset
-- Outgoing players depart and incoming players are seated
-- Judges file final scores from the completed round and refresh their tools
-- Broadcast commentary covers recap and preview
-- Audience takes needed breaks
-- Production team resets any equipment
-
-Approximately 5 minutes before the next round's opening (i.e., at T+130:00 of the current cycle), the next round's pre-introduction begins, bridging smoothly into the next round's opening. This produces a *continuous narrative flow* across multi-round events rather than discrete events with dead time between.
-
-### 3.8 Round Sizing Notes
-
-The 2-hour round cycle assumes 8 players — the standard target for broadcast quality and credentialing distribution. Round size varies within an acceptable operational range of 6-12 players:
-
-- **8 players (standard)**: Full 2-hour round cycle. Best balance of broadcast tractability, judge evaluation depth (9 minutes per submission), categorical award distribution across varied competitors, and field variety for narrative threads. The format's foundational design point.
-- **6-7 players (smaller events, pilot circumstances)**: ~105-115 minute round cycle (saves time in the pitch/cross-ex phase at 3.5 min per player). Appropriate for early chapter events, pilot rounds, or recruitment-constrained operations.
-- **9-12 players (larger events with operational capacity)**: ~125-145 minute round cycle. Acceptable when needed but operates with reduced narrative depth per player.
-
-The 8-player standard follows the FMWC precedent: their "888 Battle" (June 2021, 8 players) was the format that catalyzed Excel esports as a viable broadcast category and led to ESPN2 broadcast presence by 2022. FMWC's All-Star Battle 2022 on ESPN2 was also 8 players. Empirically, 8 is the broadcast-tractable cap for live single-event credentialing competition. 8 also leans into the cultural resonance of the number across the international competitive engineering audience HackLet operates within.
-
-While the structural maximum remains 12 players per round, beyond 8 the per-player narrative depth degrades and judge evaluation time per submission tightens uncomfortably. Events with more than 8-12 players-worth of demand should add additional rounds rather than enlarge individual rounds.
-
-### 3.9 Broadcast Architecture
-
-Hacklet is designed as a watchable competitive format. Broadcast infrastructure is integral to the design, not an afterthought.
-
-**Workstation screen capture.** Each player's workstation streams its display to league infrastructure during build and pitch phases. Broadcast directors select which workstation feed serves as the primary view at any moment, with picture-in-picture composites possible for showing multiple players simultaneously. Eight simultaneous feeds give directors abundant material to work with while staying tractable for director attention and audience cognitive load.
-
-**Per-player stats overlays.** League-supplied stats overlays display in real-time alongside workstation views:
-
-- Token budget remaining (shows how much AI access the player has left)
-- Time remaining in the current phase
-- Fuzz budget remaining (shows how many more probes the player can run)
-- Accumulated fuzz score from player-triggered tests (the visible measure of build progress)
-
-These metrics make engineering decisions legible to audiences. "Alex has 2000 tokens left, no room for a refactor" is real broadcast narrative produced directly from the metrics.
-
-**Live player-fuzz leaderboard.** A sortable display of all players ranked by accumulated player-triggered fuzz score, updating in real-time as players invoke fuzz throughout the build. This generates running narrative arcs: who is ahead, who is climbing, who is falling behind, who is gambling on minimal testing.
-
-**The suspense gap.** The player-triggered fuzz score is visible throughout build. The authoritative scoring including hidden test results is revealed only at code freeze. The gap between these — sometimes wider, sometimes narrower — generates the format's central dramatic tension. Did the player's high score reflect genuine architectural defense, or did the hidden tests reveal gaps the player never probed? Was the player's low score because they avoided testing, or because they had limited coverage? Every reveal is a story beat.
-
-**Commentary infrastructure.** Commentators have access to all metrics for all players via a dedicated dashboard, enabling them to discuss any player meaningfully even when the primary broadcast feed is elsewhere. Commentary vocabulary develops naturally from the format's mechanics: "defended SQL clean," "hammered on uploads," "burning tokens fast," "saved fuzz budget for the closer."
-
-**Production responsibility.** Chapters running broadcast-quality events (tier A) provide the production infrastructure: screen capture from workstations, audio/video of the venue, stream director coordination. The league provides the stats overlays and metrics feeds that production composites into the final broadcast. The league does not operate cameras or run production directly — chapters handle production within league standards.
+At Tier B and Tier C, the format runs without broadcast production. In-person audience is optional. Asynchronous content (written results, post-event recaps, social media coverage) remains viable at all tiers for remote audience interest without requiring live broadcast.
 
 ## 4. Scoring
 
@@ -238,30 +166,39 @@ The README remains load-bearing for cross-examination and pitch context. Players
 
 ### 4.3 Best Overall (Composite Ranking)
 
-The Best Overall winner is determined through rank-based composition with differential tiebreaking:
+The Best Overall winner is determined through rank-based composition with progressive tiebreaking:
 
 1. Players are ranked independently on Fuzz Score and Communication Score (Communication = average of Pitch Quality and Cross-Examination Performance).
 2. Each player's Rank Sum equals Fuzz Rank plus Communication Rank.
-3. Lowest Rank Sum wins.
+3. **Lowest Rank Sum wins.**
 4. Ties on Rank Sum are broken by **smallest absolute differential** between Fuzz Rank and Communication Rank. This rewards balanced performance across components.
-5. Ties on both Rank Sum and differential result in co-Champions. No additional tiebreakers are applied.
+5. Ties on both Rank Sum and differential are broken by **best Fuzz Rank** (favors the engineering side if still tied).
+6. Ties on Rank Sum, differential, and Fuzz Rank are broken by **best Communication Rank** (favors the communication side if still tied).
+7. Ties on all four criteria result in co-Champions. No additional tiebreakers are applied.
 
 Standard competition ranking (1224 method) is used for component ranking, with ties shared and subsequent ranks skipping accordingly.
 
-This produces the right kind of Best Overall winner: the most balanced player among those with the strongest combined performance, rather than the player who dominated a single component.
+This produces the right kind of Best Overall winner: the most balanced player among those with the strongest combined performance, rather than the player who dominated a single component. The progressive tiebreaker hierarchy resolves nearly all real-world ties before co-Champion is declared, while leaving co-Champion as the honest outcome when players are genuinely indistinguishable.
 
 ### 4.4 Categorical Awards
 
-Categorical awards use raw scores on their respective metrics, independent of Best Overall ranking:
+Per-round categorical awards are kept deliberately small to preserve credentialing signal at 8-player round size. Per-round awards alongside Best Overall (§4.3):
 
 - **Most Resilient**: Highest raw Fuzz Score
-- **Best UX/UI**: Highest UX dimension score averaged across the judge panel (with UX designer judge's expertise particularly informative)
-- **Best Pitch**: Highest raw Pitch Quality Score
-- **Most Novel**: Judge consensus on creative direction
-- **Most Efficient**: Lowest token usage among players in the top half of Best Overall standings
+- **Best Communicator**: Highest raw Communication Score (combined Pitch Quality + Cross-Examination Performance per §4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination.
 - **People's Hacklet**: Audience vote (separate from judge evaluation entirely)
 
-Players may win multiple categorical awards. A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
+This produces **3 per-round categorical awards plus Best Overall** for each round, regardless of event tier or structure. Players may win multiple awards (e.g., a dominant performer might win Most Resilient + Best Overall in the same round). A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
+
+**Awards explicitly retired at per-round level**:
+
+- *Best UX/UI*: per-round UX evaluation is too contextual; the award is meaningful only when judges have observed multiple submissions across rounds (moves to tournament-level)
+- *Most Novel*: per-round novelty is too prompt-dependent; the award is meaningful only as "consistently novel approach across the tournament" (moves to tournament-level)
+- *Most Efficient*: requires enforced token measurement, only meaningful at Tier A with league-hosted AI substrate (drops at Tier C; available at Tier A tournament-level)
+
+**Tournament-level expanded categorical awards** are deployed at multi-day Tier A tournaments where judges observe each player across multiple rounds, making subtle categorical distinctions meaningful through aggregated evidence. See IDEAS_FOR_LATER.md "Multi-day Tier A tournament template" for the expanded set (Best UX/UI, Most Novel, Most Efficient, Iron Player, Comeback Player) and their allocation across qualifier-leaderboard vs finals-leaderboard.
+
+The design principle is anti-award-sprawl: too many per-round categoricals at 8-player events means almost every player wins something, which destroys the *non-winning* signal that makes awards meaningful. Per-round awards stay tight; tournament-level awards expand because the field and round count justify richer categorical distribution.
 
 ## 5. Substrate
 
@@ -271,7 +208,7 @@ All players in an event work on identically-configured workstations supplied by 
 
 **The development environment is local to the workstation.** The IDE, code editor, file manager, terminal, and local deployment all run natively on the workstation. The league competition website supplies only the chat interface to the AI substrate plus event coordination (timer, fuzz triggers, budget displays, submission state). Players write code in their local IDE, deploy locally for testing, and interact with the league platform only through a browser tab pointed at the chat interface. There is no hosted IDE, no remote code editor, no cloud development environment. The platform is event coordination infrastructure, not a development environment.
 
-**Classical substrate — IDE: VSCodium** (telemetry-free), preinstalled with language support for common stacks (Python, JavaScript/TypeScript, Go, Rust, Ruby), standard formatters, and basic git tooling. Vim/Neovim are also installed for players who prefer them. All AI coding extensions (Copilot, Cline, Continue, Codeium, etc.) are disabled at the policy level and cannot be installed — external AI access is forbidden by the substrate model. In Classical, the IDE is for code editing only; AI access flows through the chat window in the league portal (a browser tab pointed at hackletleague.com). The player codes in the IDE and switches to the browser to direct the AI, moving snippets across by hand. That copy-paste step is friction by design: every adoption of AI output requires deliberate human action. (Other formats configure the substrate differently — the future Agentic format replaces the chat window with a locked, league-built extension. See LEAGUE_OPERATIONS.md.)
+**Workstation environment — IDE: VSCodium** (telemetry-free), preinstalled with language support for common stacks (Python, JavaScript/TypeScript, Go, Rust, Ruby), standard formatters, and basic git tooling. Vim/Neovim are also installed for players who prefer them. Third-party AI coding extensions (Copilot, Cursor, Cline, Continue, Codeium, etc.) are disabled at the policy level and cannot be installed — external AI access is forbidden by the substrate model because the league hosts and audits the sanctioned AI substrate. Players access the league's AI substrate through two parallel interfaces, both routed through the same proxy with a shared per-player token budget: (1) the **chat-window interface** in the league portal (a browser tab pointed at hackletleague.com) for chat-style brainstorming and copy/paste workflow; (2) the **league-built signed VSCodium extension** for in-IDE agent operations (chat sidebar plus accept/reject UI). The extension ships in Stage 12 (BUILD_ROADMAP); the chat-window-only substrate is the foundational configuration. Players use whatever combination of interfaces fits their workflow — the unified token budget prevents tool-stacking advantage and the format does not legislate which interface to use.
 
 **Local fuzz capability for intelligence gathering and broadcast suspense.** Workstations include a locally-installed fuzz runner containing the public test pool. During build phase, players trigger this local runner via the league portal; the runner executes against their local deployment and returns intelligence about their defensive coverage in seconds. The local runner does *not* contain the hidden test pool — hidden tests live only on league central infrastructure. Local fuzz results are informational only; they do not contribute to scoring.
 
@@ -312,7 +249,13 @@ The league hosts the competition website that proxies all AI calls. This provide
 - Single firewall endpoint for workstations
 - Centralized cost management
 
-The proxy exposes an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`). This is deliberate: the OpenAI protocol is the de facto standard that chat clients, IDE extensions, and CLI tools all speak, so the substrate stays agnostic to client tooling — the Classical chat window today, an Agentic IDE extension later — without changing the API contract. Compatibility is surface-only: the league pins the season's model, enforces token and fuzz budgets and rate limits server-side, and audits every call. Clients cannot select the model, exceed budget, or bypass logging. Substrate equality holds regardless of which client a player uses.
+**Unified substrate model (Tier A and Tier B)**: where the league hosts AI substrate, players are served *both* a chat-window interface (browser tab to the league portal) *and* a league-built signed VSCodium extension with an in-IDE agent (chat sidebar plus accept/reject UI for agent-proposed file changes). Both interfaces talk to the same proxy, the same season-pinned model, and the same per-player token budget. Players may open multiple chat windows, work with the agent, or combine both freely. The unified budget means there is no tool-stacking advantage: a player using 5 chat windows plus the agent does not have 6× tokens; they have 1× budget split across however many interfaces they use.
+
+This matches how real engineering with AI actually happens. Engineers brainstorm in chat, have agents execute, switch fluidly. The format does not force players into one interaction mode because doing so would credential the mode rather than the skill. Strategic discipline comes from how players navigate the unified substrate (when to use chat-style thinking, when to delegate to the agent, when to spend tokens on which mode), not from which mode the format pre-selects for them.
+
+**BYOD substrate (Tier C)**: Tier C does not host AI substrate. Players bring their own laptops and use whatever AI tooling they prefer (chat clients, IDE agents, mix and match). Web search and multiple AIs are allowed because BYOD makes restriction theater. Token budgets do not apply because the league is not paying for the AI and cannot enforce the budget. See LEAGUE_OPERATIONS.md §4 for the full Tier C operational profile.
+
+The proxy exposes an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`). The OpenAI protocol is the de facto standard that chat clients and IDE extensions speak, so the substrate stays compatible with the league's chat window, the league's VSCodium extension, and future client tooling without changing the API contract. Compatibility is surface-only: the league pins the season's model, enforces token and fuzz budgets and rate limits server-side, and audits every call. Clients cannot select the model, exceed budget, or bypass logging. Substrate equality holds across all interfaces because they all share the same model, budget, and policy enforcement.
 
 Mid-tier model choice is deliberate. Frontier models would mask the verification skill that distinguishes thoughtful AI direction from lazy AI direction. Mid-tier models hallucinate at rates that exercise verification skill meaningfully. Players who instinctively prompt for resilience and verify model output succeed; players who do not, fail.
 
@@ -404,27 +347,19 @@ Players may compete in tiers above their expected eligibility (a collegiate play
 
 Events occur throughout the season at multiple scales:
 
-- **Chapter events**: Local events run by individual chapters, typically 6-8 players, monthly cadence. May be single-round (approximately 2 hours) or multi-round day events depending on chapter capacity.
+- **Chapter events**: Local events run by individual chapters, typically 6-8 players, monthly cadence. May be single-round (~1 hour for an MVR, up to ~2 hours at the full Tier A profile) or multi-round day events depending on chapter capacity.
 - **Regional events**: Cross-chapter events with broader participation, quarterly cadence, typically multi-round day events (3-5 rounds across 8-10 hours) to justify travel for visiting players.
 - **Championship events**: Season-culminating events with the strongest field, typically multi-day with multiple rounds per day.
 
-Every individual round operates at **8 players as the standard**, with **6-12 as the acceptable range** and **12 as the structural maximum**. Beyond 8, per-player narrative depth degrades and judge evaluation time tightens. Beyond 12, broadcast quality breaks. Events with more than 8-12 players-worth of demand should add additional rounds rather than enlarge individual rounds.
+At **human-judged tiers (A/B)**, every round operates at **8 players standard**, **6-12 acceptable**, **12 structural maximum** — beyond 8 per-player narrative depth degrades and judge time tightens; beyond 12 broadcast quality and human-judging throughput break. Events with more demand add rounds rather than enlarge them. **Large-cohort MVR rounds relax this cap to 30-100+**, because LLM-judged written evaluation scales where human judging can't (see §3.2 and TIER_C_OPERATIONS.md §5).
 
-**Round size targets**:
+**Round size targets** (the human-judged Tier A/B profile; the full phase-by-phase breakdown lives in TIER_A_OPERATIONS.md §3, and the Tier C MVR / large-cohort profiles in TIER_C_OPERATIONS.md §4–5):
 
-- *Standard (8 players)*: The format's foundational design point. Full 2-2.5 hour round cycle. Best broadcast quality, judge evaluation depth, and categorical award distribution. Validated by FMWC precedent (888 Battle, ESPN2 All-Star Battle).
-- *Smaller (6-7 players)*: ~105-115 minute round cycle. Acceptable for early chapter events, pilot rounds, recruitment-constrained operations. Tighter per-player narrative.
-- *Larger (9-12 players)*: ~125-145 minute round cycle. Acceptable when needed but operates with reduced narrative depth per player and tighter judge evaluation time.
+- *Standard (8 players)*: the format's foundational design point — best broadcast quality, judge evaluation depth, and categorical award distribution. Validated by FMWC precedent (888 Battle, ESPN2 All-Star Battle). Full Tier A cycle ~135 min.
+- *Smaller (6-7 players)*: ~105-115 min Tier A cycle. Acceptable for early chapter events, pilot rounds, recruitment-constrained operations.
+- *Larger (9-12 players)*: ~125-145 min Tier A cycle. Acceptable when needed, with reduced per-player narrative depth and tighter judge time.
 
-**Standard 8-player round cycle (~2-2.5 hours)**:
-
-- T+0:00 to T+5:00: Round opening (5 min)
-- T+5:00 to T+29:00: Build phase (24 min)
-- T+29:00 to T+47:00: Concurrent evaluation and pitch preparation (18 min)
-- T+47:00 to T+75:00: Pitch and cross-examination (28 min, 3.5 min per player including 60s pitch + 120s cross-ex + 30s transition)
-- T+75:00 to T+93:00: Concurrent deliberation and audience voting (18 min)
-- T+93:00 to T+107:00: Award reveal and closing (14 min)
-- T+107:00 to T+135:00: Zamboni period with next round pre-introduction beginning at T+130:00 (25-30 min)
+The round *phase sequence* is defined tier-agnostically in §3.1; each tier's phase *timing* lives in its operations file (the full Tier A round runs T+0→T+135; the Tier C MVR runs T+0→T+60).
 
 Multi-round events host multiple rounds with different player groups across the day, using the same physical workstations. The Zamboni Period between rounds serves several functions:
 
@@ -437,7 +372,13 @@ Multi-round events host multiple rounds with different player groups across the 
 
 Multi-round structure makes hacklet events economically viable for travel: a full day of competition with 4-5 rounds justifies driving or flying from distant chapters. It also produces substantial broadcast content, amortizes venue and production costs across many rounds, and creates continuous narrative flow between rounds rather than discrete events with dead time.
 
-HackLet League is **ranked competition, not bracketed elimination**. All players in a round compete simultaneously and are ranked at completion. There is no head-to-head matchup structure, no advancement through rounds within an event, no losers' brackets. The format follows the precedent of individual measurable performance sports (track and field, swimming, cycling time trials, financial modeling competitions) rather than combat sports or single-elimination tournaments.
+**One event, one format.** Each event commits to a single format variant (Format × Timer combination from the sanctioned matrix in §1). Rounds within an event may vary prompts and starting conditions but use the same format throughout — its substrate, timing, scoring scale, and judge calibration assumptions. This applies to single-round events, multi-round day events, and multi-day tournaments alike. The rule preserves scoring coherence (averaging across rounds requires comparable units), credential clarity (employers can interpret what a specific format variant credentials), and operational consistency (chapter operators don't reconfigure substrates mid-event). Cross-format championships are a deliberate exception with their own scoring rules (see IDEAS_FOR_LATER.md "Format-lane structure").
+
+**Cardinality across the institution**: each *event* runs exactly one *format* (1-to-1); each *chapter* hosts many *events* over time (1-to-many); each *chapter* runs many *formats* across its event history (many-to-many on chapter↔format, mediated through events). Chapter portfolio variety is encouraged; event format consistency is required.
+
+HackLet League is **ranked competition, not bracketed elimination, within each round**. All players in a round compete simultaneously and are ranked at completion. There is no head-to-head matchup structure inside a round, no losers' brackets, no in-round advancement. The format follows the precedent of individual measurable performance sports (track and field, swimming, cycling time trials, financial modeling competitions) rather than combat sports or single-elimination tournaments.
+
+Across rounds in a multi-day tournament, cumulative-score advancement is used to separate qualifying-stage performers from finals participants (see IDEAS_FOR_LATER.md "Multi-day Tier A tournament template"). This matches FIDE Swiss-system, Olympic qualification structures, and golf-cut conventions — individual-competition formats use cumulative-score thresholds rather than head-to-head pairings to manage field size across multi-stage events.
 
 League growth happens through event frequency and geographic spread rather than larger individual rounds. Many smaller events feeding into accumulated rankings is structurally similar to chess tournaments, golf tours, and FIDE rating-based competitive systems.
 
@@ -491,7 +432,7 @@ The format rests on two principles:
 
 The format does not legislate *how* a player uses AI. Chat, agentic integration, command-line, tool chains — any interface is fine, provided every call flows through the league's API and stays within budget (§5.3). It cares only that the substrate is equal and that submissions are measured by objective adversarial testing. Resilience is what the fuzz catalog measures; communication (pitch and cross-examination) is scored separately and combined for Best Overall (§4). Slop loses to fuzz regardless of who or what produced it.
 
-The Classical substrate's chat-window-and-copy-paste workflow is not an arbitrary choice — it matches the economically-dominant practice among the format's target population. Agentic IDE tooling (Cursor, Claude Code, Cline) requires either paid subscriptions or student-verification with friction that filters most undergraduate users; the chat-window workflow remains the only fully-free option for most CS students. Classical meets its audience where they already work. The Agentic format, when introduced, measures a more specialized skill that a smaller but growing subset of engineers practices.
+The chat-window interface matches the economically-dominant AI-coding practice among the format's target population. Third-party agentic IDE tooling (Cursor, Claude Code, Cline) requires either paid subscriptions or student-verification with friction that filters most undergraduate users; the chat-window workflow remains the only fully-free option for most CS students, which is why the chat window is the foundational substrate interface and the in-IDE agent interface ships later (Stage 12). When the agent interface lands, both interfaces are available to every Tier A/B player simultaneously with a unified token budget, so the format remains accessible to chat-first players while accommodating agent-fluent players without forcing either group into the other's mode.
 
 In practice, succeeding under those principles exercises a specific cluster of AI-complementary capabilities:
 

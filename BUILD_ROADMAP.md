@@ -36,10 +36,10 @@ This is a deliberate sequencing choice — production rigor from day one, in the
 
 ---
 
-## Status & Deviations (as of 2026-06-16)
+## Status & Deviations (as of 2026-06-19)
 
-- **Stage 1 in progress** — the platform (Django + DRF + Postgres + Next.js behind Caddy) runs on the home Proxmox VM and is **live on the public domain**, https://hackletleague.com, over HTTPS with production settings (DEBUG off, secure cookies, HSTS). It is **public (reachable) but not publicized** — no announcement or marketing; the domain simply resolves and serves while the platform is built and tested. (This supersedes the earlier "stealth / LAN-only until launch" plan — *public* and *publicized* are treated as separate steps.)
-- **Hosting:** still the home VM; Hetzner remains the planned production host later (clean x86→x86 move via the portable Docker Compose repo).
+- **Stage 1 complete** — Django + DRF + Postgres + Next.js foundation, Google SSO landed, chapter model in place. Platform runs at https://hackletleague.com over HTTPS with production settings (DEBUG off, secure cookies, HSTS). It is **public (reachable) but not publicized** — no announcement or marketing; the domain resolves and serves while the platform is built and tested. (This supersedes the earlier "stealth / LAN-only until launch" plan — *public* and *publicized* are treated as separate steps.) **Stage 2 begins.**
+- **Hosting:** the home Proxmox VM continues hosting through Tier C pilot preparation. Hetzner production host is provisioned when the first Tier C pilot is scheduled — the clean x86→x86 move via portable Docker Compose repo is well-understood and doesn't need to happen before it's actually needed. Hosting move timing is "when pilot dates lock," not "when next stage starts."
 - **Timeline:** the 4–6 week/stage estimates below assume ~10–15 h/week part-time *without* AI. With AI-assisted development at 30–40 h/week they compress to days — treat the week figures as loose upper bounds, not targets. Caveat: not everything compresses (Stage 5 fuzz-runner complexity, real-world testing, the one-week-stable gate, and all *non-code* operational work — venues, judges, hardware — run on their own clocks).
 
 ---
@@ -304,13 +304,15 @@ AI integration is core to what HackLet League is, but it depends on round mechan
   - 30-50 universal QA tests (timeout, crash resistance, HTTP semantics, encoding, deployment hygiene)
   - 20-30 security tests (basic SQL injection, XSS, auth, file upload basics)
   - All in public pool initially (hidden pool grows over time)
-- Central fuzz runner deployment in league infrastructure (ephemeral container per submission)
-- Code submission automation at code freeze (git push triggers from workstation)
+- **Player portal submission upload endpoint** (zip upload with Dockerfile + README + code, size/structure validation)
+- **Server-side deployment service** (container build, ephemeral container per submission, subdomain provisioning via Caddy reverse proxy under `submissions.hackletleague.com/{event}/{round}/{player}/`)
+- **Untrusted-code container security** (unprivileged user, no sudo, network egress restricted to fuzz runner only, CPU/RAM/disk quotas, time-bounded lifecycle)
+- Central fuzz runner deployment in league infrastructure
+- Fuzz runner targets deployed submission subdomains (reusable input mechanism — see Stage 7 note)
 - FuzzResult and PlayerFuzzInvocation entities per DATA_MODEL.md
-- Local fuzz runner deployable on workstations (Python service on local port)
 - Tester judge override interface for fuzz applicability decisions
 - Fuzz result integration with scoring engine
-- Player portal updates to show fuzz triggers, budget, accumulated score
+- Player portal updates to show fuzz triggers, budget, accumulated score, deployment success/failure feedback
 - Surface coverage metadata in result reporting
 - Basic broadcast leaderboard endpoint (data only, broadcast production not yet built)
 
@@ -320,6 +322,8 @@ AI integration is core to what HackLet League is, but it depends on round mechan
 - Hidden pool tests beyond a small starting set (mostly public initially)
 - Broadcast video infrastructure (workstation streaming, overlays — Stage 6)
 - Workstation hardening with RMM (Stage 7)
+- SCP-from-workstation submission capture (Stage 7 input mechanism for Tier A; Stage 5 ships portal-upload input mechanism for Tier C)
+- Local fuzz runner deployable on workstations (Tier A "stress test during build" feature, deferred to Stage 7)
 - Advanced production features
 - Intent-dependent QA tests (deferred per format spec)
 - LLM-assisted judge pre-analysis (deferred)
@@ -353,7 +357,7 @@ These are real future work but should not be considered until Stage 5 ships and 
 Workstation screen streaming, stats overlay APIs, commentator dashboard, live event production support.
 
 ### Stage 7: Workstation Hardening
-RMM integration patterns, master image deployment, kiosk-style enforcement, firewall configuration tooling.
+RMM integration patterns, master image deployment, kiosk-style enforcement, firewall configuration tooling, **SCP-from-workstation submission capture at code freeze** (writes to the same `/opt/hacklet/submissions/$EVENT/$ROUND/$PLAYER/` directory the Stage 5 portal upload writes to — the deployment pipeline downstream is reused without modification), local fuzz runner on workstations for "stress test during build" capability. The submission processing pipeline (unpack → container build → ephemeral deployment → subdomain routing → fuzz evaluation → scoring) ships in Stage 5 and is reused in Stage 7 unchanged; what Stage 7 adds is the workstation-side input mechanism and the workstation control infrastructure that makes Tier A's structural anti-cheating real.
 
 ### Stage 8: Federation Features
 Chapter-to-chapter coordination, regional event aggregation, cross-chapter rankings, league-wide qualifier flows.
@@ -365,27 +369,90 @@ Formal A/B/C tier verification process, documentation upload and review workflow
 Dispute resolution interfaces, appeals processes, advisory board features, multi-team superadmin support.
 
 ### Stage 11: Unslop Format
-The canonical second competitive format — **HackLet Unslop: Classical Sprint**. Reuses the entire Vibe: Classical Sprint substrate (workstation, AI substrate, SCP submission, fuzz catalog) and adds one new capability: a **slop-generation pipeline**. During the 5-minute round opening the league substrate generates a deliberately-broken web application from a seeded prompt and distributes the identical codebase to every workstation at T+5:00 — zero leakage risk, because the slop doesn't exist before the round. Players then find, diagnose, triage, fix, and verify the brokenness (security holes, QA failures, performance disasters, reliability gaps, hallucinated APIs, ugly UX) under AI assistance, and may add their own features and polish — "make it yours" is part of the credential. The same fuzz catalog scores Vibe and Unslop submissions identically at freeze, so it credentials a distinct skill cluster (reading unfamiliar code under pressure, triaging across dimensions of brokenness) on shared infrastructure. A meaningfully smaller build than the Agentic format — no new client, just the generation/distribution step plus a curated slop-prompt library — which is why it precedes Agentic. Introduced once Vibe operates successfully (targeting Season 2-3). Full sketch in IDEAS_FOR_LATER.md.
+The canonical second competitive format — **HackLet Unslop Sprint**. Reuses the entire Vibe Sprint substrate (workstation, AI substrate, submission/deployment pipeline, fuzz catalog) and adds one new capability: a **slop-generation pipeline**. The league substrate generates a deliberately-broken web application from a seeded prompt server-side; for Tier A/B events the workstation receives the codebase at T+5:00 of round opening (zero leakage risk because generation is server-controlled); for Tier C events the same broken app is distributed as a downloadable zip via the player portal at T+5:00 (also zero leakage). Players then find, diagnose, triage, fix, and verify the brokenness (security holes, QA failures, performance disasters, reliability gaps, hallucinated APIs, ugly UX) under AI assistance, and may add their own features and polish — "make it yours" is part of the credential. The same fuzz catalog scores Vibe and Unslop submissions identically at freeze, so it credentials a distinct skill cluster (reading unfamiliar code under pressure, triaging across dimensions of brokenness) on shared infrastructure. A meaningfully smaller build than the agent interface (Stage 12) — no new client, just the generation/distribution step plus a curated slop-prompt library — which is why it precedes Stage 12. Introduced once Vibe operates successfully (targeting Season 2-3). Full sketch in IDEAS_FOR_LATER.md.
 
-### Stage 12: Agentic Relationship
-Introduces the **Agentic** relationship axis — AI living in the IDE with an accept/reject UI, as opposed to Classical's chat-window copy/paste. The foundational Agentic format is **HackLet Vibe: Agentic Agile** (the Agile timer; agents need more wall-clock than copy/paste, so the XP and Sprint timers are too tight). Requires a league-built, signed VSCodium extension locked to hackletleague.com — chat sidebar plus accept/reject UI for agent-proposed file changes, modeled on Cline/Roo Code. That extension is a substantial standalone project (TypeScript, ~4–6+ weeks for v1), which is why this trails Unslop. Adds the **agent-freeze rule** (at freeze the workspace reverts to the last accepted edit; pending proposals are dropped), a longer round cycle with budgets that scale to the timer, and a *Best Direction* award; it shares the fuzz catalog with every format (the runner is format-agnostic). Built only when the agentic-coding paradigm warrants it and Vibe is operating well. Full sketch in IDEAS_FOR_LATER.md.
+### Stage 12: Agent Interface (Substrate Expansion)
+Adds an **in-IDE agent interface** to the league substrate as a parallel client alongside the chat-window interface from Stage 4. A league-built, signed VSCodium extension locked to hackletleague.com — chat sidebar plus accept/reject UI for agent-proposed file changes, modeled on Cline/Roo Code patterns. The extension talks to the same OpenAI-compatible chat completions endpoint that the chat window uses (format_spec §5.3); the season-pinned model, per-player token budget, and audit logging are shared. The unified-substrate model means there is no separate "Agentic format" — players at Tier A and Tier B receive both interfaces and use whichever combination fits their workflow, with a unified token budget that prevents tool-stacking advantage. Adds the **agent freeze rule** (at freeze the workspace reverts to the last accepted edit; pending proposals dropped). Substantial standalone TypeScript project, ~4-6+ weeks for v1. Built once Stage 4 chat-only substrate operates well; the agent interface is *substrate expansion*, not a new format. Sketch in IDEAS_FOR_LATER.md "Agent interface for unified league substrate."
+
+---
+
+## Stage-Tier Readiness Mapping
+
+The tier system (LEAGUE_OPERATIONS.md §4) and the staged build couple naturally — different tiers require different infrastructure depth, so different stages unlock different tier-readiness. This mapping is what determines the earliest point at which real events can run, which matters for resisting build-build-build syndrome.
+
+**The one-line summary**: **Stage 5 is when we can run our first event (Tier C). Stage 7 is when we can run our first Tier A event.** Everything else slots into this structure — Tier C is the entry point that ships first, Tier A is the credentialing destination that requires the full infrastructure stack.
+
+### Pre-Stage 3: Format Mechanics Validation Only
+
+Before round mechanics ship, the format can be validated through scrappy 4-person dry-runs using manual timing, manual judging, and manual fuzz catalog. This is *not* an event in the credentialing sense — no leaderboards, no rankings, no records. It's *format validation* with human play surfacing observations the spec can't anticipate. Worth doing as soon as the design is stable enough to run; doesn't require any platform infrastructure.
+
+### After Stage 5: Tier C Events Viable (Earliest Real Events)
+
+Tier C events become viable after the fuzz runner ships. Tier C requires:
+- Stage 1 (foundation), 2 (events), 3 (round mechanics) for platform event support
+- Stage 5 (fuzz runner) for automated catalog evaluation at code freeze
+
+Tier C **does not require** Stage 4 (AI substrate) because Tier C is BYOD-substrate — players bring their own AI. The Stage 4 league-hosted OpenRouter integration is for Tier B+ operations where the league hosts AI substrate. For Tier C launch, Stage 4 can be deferred or built in parallel with Stage 5 rather than sequentially.
+
+Tier C **does not require** Stage 6 (broadcast), Stage 7 (workstation hardening), Stage 8 (federation), Stage 9 (verification system), or Stage 10 (governance). Tier C operates with audience-in-room rather than broadcast, BYOD rather than RMM-controlled workstations, chapter-local rather than federation-coordinated, and light superadmin review rather than formal verification.
+
+The Stage 5 scope can be calibrated for Tier C launch — a minimal universal arsenal catalog of 30-50 tests is sufficient to make Tier C events meaningful. The catalog deepens from there as more events run.
+
+**Practical implication**: the first real HackLet event at BU can happen after Stage 5 ships with minimal Stage 4. Earliest realistic timing depends on whether Stage 4 is deferred (faster) or built in parallel (more substrate options).
+
+### After Stage 7: Tier A Events Viable (Credentialing-Grade)
+
+Tier A events require the full infrastructure stack:
+- Stages 1-3 for platform event support
+- Stage 4 for league-hosted AI substrate with enforced token budgets
+- Stage 5 for automated fuzz runner with deep catalog
+- Stage 6 for broadcast infrastructure
+- Stage 7 for workstation hardening (RMM, master images, firewall configuration)
+
+Without Stage 7, the "structural anti-cheating" property that makes Tier A credentials reliable (see LEAGUE_OPERATIONS.md §4 and IDEAS_FOR_LATER.md "credential reliability argument") doesn't exist. Tier A operations can't honestly claim credentialing-grade integrity without infrastructure-enforced substrate control.
+
+### After Stage 8: Multi-Chapter Coordination Viable
+
+Cross-chapter rankings, regional events, qualifier flows, and the federation operational model require Stage 8 to function. Pre-Stage 8 the platform can support multiple chapters as data, but cross-chapter event coordination is manual.
+
+### After Stage 9: Formal Tier A Verification Process
+
+The verification application workflow, documentation review, and ongoing compliance monitoring are Stage 9 work. Before Stage 9, Tier A status (if conferred) is informal — superadmin says "yes" without a structured verification artifact. Acceptable for the first 1-2 Tier A chapters; needs Stage 9 before broader Tier A expansion.
+
+### Stage 11/12: Additional Format Variants
+
+### Stage 11/12: Format and Substrate Expansions
+
+Unslop (Stage 11) adds the second format axis (build-from-scratch becomes the Vibe family; remediate-broken becomes the Unslop family). The agent interface (Stage 12) adds a parallel client to the league-hosted AI substrate. Neither unlocks new tier capabilities — they expand the format ecosystem and substrate capability within the existing tier structure.
 
 ---
 
 ## Total Realistic Timeline
 
-If starting Stage 0 today:
+Starting from current state (Stage 1 shipped 2026-06):
 
-- **Stage 0**: this week (1 afternoon)
-- **Stage 1**: 4-6 weeks
-- **Stage 2**: 4-6 weeks
-- **Stage 3**: 4-6 weeks
-- **Stage 4**: 4-6 weeks
-- **Stage 5**: 8-12 weeks
+- **Stage 0**: ✓ shipped 2026-06
+- **Stage 1**: ✓ shipped 2026-06 (Google SSO + foundation)
+- **Stage 2**: 4-6 weeks part-time, 1-2 weeks summer velocity
+- **Stage 3**: 4-6 weeks part-time, 1.5-2.5 weeks summer velocity
+- **Stage 4**: 4-6 weeks (deferrable for Tier C launch — defer to Tier B horizon)
+- **Stage 5**: 8-12 weeks part-time, 4-6 weeks summer velocity (genuine engineering complexity; the hardest single stage; don't rush the catalog quality)
 
-**Total to first real hacklet event with full automation: 7-9 months** of part-time work.
+**Total to first Tier C event (BU pilot, BYOD substrate)**:
+- Part-time pace (10-15h/week): roughly 6-8 months from current state if Stage 4 is deferred, 7-9 months if Stage 4 ships sequentially.
+- **Summer velocity (30-40h/week through July-August 2026)**: Stage 5 shipping by end of summer 2026 is genuinely realistic with deferred Stage 4. That puts scrappy dry-run early October 2026 and first BU Tier C pilot late October / November 2026.
 
-This timeline assumes 10-15 hours per week of focused development with AI assistance. Full-time work would compress proportionally. Part-time work with significant other commitments would extend.
+Either way, the first real HackLet event happens after Stage 5, not after Stage 7. **Scrappy dry-runs for format validation can happen even earlier — anytime after Stage 3 round mechanics work.**
+
+**Total to first Tier A event (credentialing-grade)**: Stages 1-7 sequential. The Stage 7 work is *substantially lighter* than originally implied because Stage 5 builds the submission processing pipeline (unpack → containerize → deploy → fuzz → score) that Stage 7 reuses unchanged — Stage 7 adds workstation-side SCP capture as an input mechanism, plus the workstation control infrastructure (RMM, master image, firewall). Roughly 8-12 months from Stage 5 ship to Stage 7 ship at part-time pace; faster with sustained focus.
+
+**What doesn't compress with velocity**:
+- The one-week-stable gate between stages (calendar time, not engineering time)
+- Real-world testing of the fuzz runner (requires humans submitting code)
+- Operational prep (venue, judges, sponsor outreach when relevant)
+- Hetzner migration window (tied to pilot scheduling, not stage shipping)
+
+Part-time pace assumes ~10-15h/week without AI; with AI-assisted development at 30-40h/week, stages compress substantially. Summer velocity scenario assumes sustained 30-40h/week with CC as collaborator through July-August 2026.
 
 ---
 

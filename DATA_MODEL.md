@@ -127,7 +127,8 @@ slug                    : varchar (chapter-scoped unique)
 name                    : varchar
 description             : text
 event_tier              : enum (chapter, regional, championship)
-format_type             : enum (classical) — only 'classical' valid today; structural slot for future formats (e.g. agentic)
+format                  : enum (vibe, unslop) — what the player does; foundational format is 'vibe'; 'unslop' added Stage 11
+timer                   : enum (xp, sprint, scrum, agile, waterfall) — build-phase duration; foundational timer is 'sprint' (24 min)
 status                  : enum (scheduled, registration_open, in_progress, completed, cancelled)
 scheduled_start         : timestamp
 scheduled_end           : timestamp
@@ -140,6 +141,8 @@ created_by_user_id      : FK User
 unique constraint: (chapter_id, slug)
 ```
 
+The `(format, timer)` pair identifies the variant: e.g., `(vibe, sprint)` is HackLet Vibe Sprint, `(unslop, agile)` is HackLet Unslop Agile. Per the 1-event-1-format rule (format_spec.md §7.1), each event commits to one variant for its lifetime. The two-axis taxonomy is intentional — the earlier "Relationship" axis (Classical vs Agentic) has been retired in favor of the unified-substrate model where the league hosts both chat-window and agent-interface clients with a shared token budget (see format_spec.md §1, §5.3). 2 formats × 5 timers = 10 sanctioned variants.
+
 Events inherit credentialing weight from their chapter's tier (tier A chapter events count globally, tier B/C are local-only).
 
 ### Round
@@ -150,22 +153,22 @@ The atomic competitive unit within an event. Multi-round events have multiple Ro
 id                  : UUID primary key
 event_id            : FK Event
 round_number        : int (1, 2, 3... within event)
-status              : enum (scheduled, opening, build, evaluation, pitching, deliberation, awards, completed)
-opening_at          : timestamp (T-5:00)
-build_start_at      : timestamp (T+0:00)
-build_end_at        : timestamp (T+24:00)
-evaluation_end_at   : timestamp (T+36:00)
-pitch_end_at        : timestamp (varies by player count)
-deliberation_end_at : timestamp
-awards_end_at       : timestamp
-zamboni_end_at      : timestamp
+timing_profile      : enum (tier_a, tier_c_mvr, tier_c_extended) — selects the phase set + clock
+status              : enum (scheduled, opening, build, evaluation, judging, awards, completed)
+opening_at          : timestamp   ── universal anchors (present in every profile):
+build_start_at      : timestamp      opening → build → freeze
+build_end_at        : timestamp      (build_end_at is the code-freeze instant)
+phase_schedule      : JSON — post-freeze phase boundaries, keyed by phase, per profile:
+                        tier_a          → evaluation_end, pitch_end, deliberation_end, awards_end, zamboni_end
+                        tier_c_mvr      → pitch_write_end, judging_end, awards_end
+                        tier_c_extended → evaluation_end, pitch_end, deliberation_end, awards_end
 player_count        : int
 prompt_revealed     : text, nullable (round prompt if any)
 
 unique constraint: (event_id, round_number)
 ```
 
-The round status field tracks lifecycle through all phases. Status transitions are server-authoritative via Django signals.
+The three operational profiles share the same opening → build → freeze head but diverge after freeze — the MVR runs PITCH.md-writing + LLM-judging where Tier A runs live pitch + human deliberation — so the post-freeze boundaries live in `phase_schedule` (JSON), keyed by the phases that profile actually uses, with `timing_profile` selecting the set. The `status` enum is a superset; the active subset depends on `timing_profile`. (If per-phase querying or independent phase-state transitions are later needed, promote `phase_schedule` to a normalized `RoundPhase` child table — round_id, phase_key, starts_at, ends_at, sequence.) Status transitions are server-authoritative via Django signals.
 
 ### Submission
 

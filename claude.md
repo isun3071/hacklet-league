@@ -101,8 +101,11 @@ hacklet-league/
 ├── docker-compose.dev.yml
 ├── .github/workflows/
 ├── claude.md                   # This document
-├── format_spec.md              # The competitive format
-├── LEAGUE_OPERATIONS.md        # League governance
+├── format_spec.md              # The competitive format (tier-agnostic)
+├── LEAGUE_OPERATIONS.md        # League governance + tier system overview
+├── TIER_A_OPERATIONS.md        # Tier A operational template (credentialing-grade)
+├── TIER_B_OPERATIONS.md        # Tier B operational template (middle tier)
+├── TIER_C_OPERATIONS.md        # Tier C operational template (MVR / Extended / multi-round profiles)
 ├── DATA_MODEL.md               # Schema details
 ├── ARCHITECTURE.md             # Service relationships
 └── README.md
@@ -183,8 +186,11 @@ For operations that affect credentialing integrity (score changes, verification 
 
 ## Document Map
 
-- **format_spec.md** — What hacklet league is as a competitive format. Read this to understand what the platform is supporting.
-- **LEAGUE_OPERATIONS.md** — How the league operates as a federated institution. Chapters, roles, verification, governance.
+- **format_spec.md** — What hacklet league is as a competitive format. Tier-agnostic format definition: two-axis taxonomy, scoring axes, substrate principles, two-principle thesis. Read this to understand what the platform is supporting.
+- **LEAGUE_OPERATIONS.md** — How the league operates as a federated institution. Chapters, roles, tier system overview, freedom-integrity tradeoff, verification, governance.
+- **TIER_A_OPERATIONS.md** — Tier A operational template. Credentialing-grade tier with full 135-min round profile, broadcast architecture, multi-day tournament template (snake-draft, alternates, two-leaderboard, tag credentialing), anti-cheating enforcement.
+- **TIER_B_OPERATIONS.md** — Tier B operational template. Middle tier with league-hosted substrate + honor-system enforcement. 135-min round profile shared with Tier A but lighter operational burden.
+- **TIER_C_OPERATIONS.md** — Tier C operational template. Training tier and Minimum Viable Round (MVR) floor. BYOD substrate, no enforced budgets, three operational profiles (the 60-min MVR with PITCH.md + LLM judging; Tier C Extended with live pitch/cross-ex + human judges; multi-round MVR-days). PITCH.md as canonical written communication artifact.
 - **DATA_MODEL.md** — Database schema. The entities, relationships, constraints. Required reading before writing models or queries.
 - **ARCHITECTURE.md** — Service relationships, request flows, deployment topology.
 - **README.md** — Getting started for developers.

@@ -10,7 +10,7 @@ HackLet League is structured as a federated platform that aggregates competitive
 
 This model parallels how FIDE coordinates national chess federations and how PVSA verifies organizations to issue volunteer service hours. The league sets standards and verifies compliance; chapters operate within those standards.
 
-FIDE is the cleaner model in a second way: it runs *multiple formats* under one institution — classical, rapid, blitz, bullet — and outlives any single one. HackLet is built the same way. It is a league that runs competitive formats, not a single format that a paradigm shift could obsolete. HackLet Classical (format_spec.md) is the first and currently only operational format; an Agentic format is anticipated as agentic coding matures. The institution, its fuzz catalog, its rankings, and its chapters are the durable assets; individual formats come and go beneath them.
+FIDE is the cleaner model in a second way: it runs *multiple formats* under one institution — classical, rapid, blitz, bullet — and outlives any single one. HackLet is built the same way. It is a league that runs competitive formats, not a single format that a paradigm shift could obsolete. The current format family is **HackLet Vibe** with the foundational variant **Vibe Sprint** (the BU pilot). **HackLet Unslop** is the canonical second format, introduced once Vibe is operationally stable. Additional timer variants, and eventually new format axes beyond Vibe/Unslop, follow as the league matures. The institution, its fuzz catalog, its rankings, and its chapters are the durable assets; individual formats come and go beneath them.
 
 The structural precedent for the whole enterprise is the **Financial Modeling World Cup** (FMWC). Founded in 2020 by Andrew Grigolyunovich (Latvia) after ModelOff was discontinued, FMWC took competitive financial modeling — a niche, measurable skill — to mainstream attention (its All-Star Battle aired on ESPN2 in 2022) through recurring tiered competition and persistent rankings. HackLet applies the same playbook to AI-assisted defensive coding, a domain with a larger participant pool and more cultural relevance. The precedent matters because it answers the first question every chapter operator, sponsor, and player asks — *is this real?* — with a pattern that has already worked: a single measurable skill made into a credentialed competitive institution. HackLet borrows the template, not a claim of equivalent reach.
 
@@ -92,55 +92,65 @@ Chapter owners control mode transitions. The platform may auto-suggest archive m
 
 ## 4. Chapter Tiers and Verification
 
-Chapters are tiered based on their operational rigor. Tiers determine what credentialing weight their events carry.
+Chapters are tiered based on their operational rigor. The tier system is a **mechanic-availability gradient**, not just an integrity gradient: each tier credentials what its infrastructure can actually enforce, and operates the format mechanics its infrastructure can actually support. Higher tiers don't "improve" lower tiers; they *enable additional credentialing claims* that depend on additional infrastructure.
 
-### Tier A (Verified)
+The tiers exist because the format's integrity properties hang together with infrastructure dependencies. Token budget enforcement requires firewall isolation plus league-hosted AI substrate (Tier A). Substrate equality as a credentialing claim requires controlled AI access (Tier A). Resource calibration as a measurable skill requires enforceable token usage measurement (Tier A). At lower tiers, these mechanics adjust honestly rather than claiming enforcement that doesn't exist.
 
-Chapters that have demonstrated infrastructure meeting league standards for credentialing-grade events. Tier A requirements include:
+The format's load-bearing integrity mechanism — the resilience catalog — operates at **full strength at every tier**. The fuzz catalog evaluates submissions identically regardless of how they were produced; slop loses to fuzz regardless of who or what produced it. This is what makes lower-tier events produce real format-validation signal even without credentialing-grade enforcement.
 
-- RMM-controlled workstations with verified configuration
-- Network firewall with allowlist to league infrastructure only
-- Master image deployment for workstation consistency
-- Judge corps of at least 3 members, including at least one tester judge and one UX designer judge
-- Documented venue with appropriate setup
-- Chapter admin team trained on league operations
+### The Freedom-Integrity Tradeoff
 
-Tier A chapters contribute to global league rankings. Their events count toward credentialing claims. Their winners qualify for regional and national events. Tier A status requires application, documentation review, and superadmin approval. Annual re-verification ensures continued compliance.
+The tier system represents a deliberate philosophical tradeoff between two competing values in competitive credentialing:
 
-### Tier B (Standard)
+**Freedom**: players use AI however fits their workflow, no league-imposed substrate constraints, no enforced budgets, no infrastructure restrictions on tool choice.
 
-Chapters running events with chapter-policy-enforced anti-cheating rather than infrastructure-verified anti-cheating. Tier B chapters:
+**Integrity**: enforced equality across players, anti-cheating enforcement, reproducible measurement, market-meaningful credentials that survive employer verification.
 
-- Operate events using available infrastructure (may include BYOD setups)
-- Enforce anti-cheating through honor system and chapter admin oversight
-- Contribute to chapter-local rankings only
-- Do not contribute to global league rankings
-- Do not feed qualifiers to higher-tier events
+These values are **substantively in tension**. Pure freedom undermines credentialing because premium-AI advantages and substrate variance across players turn credentials into "did you pay for premium AI" signals rather than "are you a skilled engineer" signals. Pure integrity constrains authentic workflow because controlled infrastructure forces players into substrates that may not match their actual professional practice.
 
-Tier B is appropriate for chapters establishing themselves, smaller communities, or events where infrastructure-grade rigor isn't feasible. It allows real hacklet operation without the verification burden.
+Each tier articulates a deliberate choice about where to sit on this spectrum:
 
-### Tier C (Practice)
+- **Tier C** maximizes freedom: BYOD substrate, any AI tooling, no enforced budgets, no controlled infrastructure. Credentialing claims are correspondingly bounded — chapter-local rankings only, no global contribution. This is the Minimum Viable Round (MVR) configuration: smallest operational floor that genuinely delivers HackLet competitive infrastructure while honoring player workflow authenticity.
 
-Chapters running events for learning and community building. Tier C chapters:
+- **Tier A** maximizes integrity: league-hosted substrate, enforced equality, controlled workstation environment, structural anti-cheating, comprehensive audit. Credentialing claims are correspondingly strong — global ranking contribution, market-meaningful credentials, employer-interpretable signal.
 
-- Operate without anti-cheating enforcement requirements
-- Run events freely for member practice
-- Do not contribute to any rankings
-- Use the platform to learn the format and develop community
+- **Tier B** sits in the middle: league-hosted substrate (so structural integrity baseline exists) with honor-system enforcement of budgets and anti-cheating. Credentialing claims sit between Tier C and Tier A.
 
-Tier C is for chapter development, new format introduction, and pure educational use.
+The tier choice isn't about prestige — it's about operational match between chapter capability and tier requirements, and about which credentialing claim authentically reflects the integrity infrastructure available. A chapter running excellent Tier C events serves its community well; a chapter that claims Tier A without infrastructure capacity damages the credential. Players choose tier based on what they value (freedom or credentialing); both are valid preferences. The format ecosystem respects both.
+
+### Tier Overview
+
+**Tier A (Verified Credentialing)**: the credentialing-grade tier. Tier A chapters have demonstrated infrastructure that makes faking results structurally hard: RMM-controlled workstations, network firewall with allowlist to league infrastructure only, per-player ephemeral Unix accounts, league-hosted AI substrate with enforced token budgets, broadcast streaming infrastructure, audit logging at every layer, judge corps with calibration discipline. Wins contribute to global league rankings. Tier A events run the full 135-min round profile with multi-day tournament structure for regional and championship events. Tier A operations are Year 3+ territory in the league's strategic sequencing. *See TIER_A_OPERATIONS.md for the full operational template.*
+
+**Tier B (Standard Competitive)**: the middle tier — real competition with policy-based enforcement rather than infrastructure-based enforcement. Tier B chapters host the league AI substrate (providing structural integrity baseline) with honor-system enforcement of budgets and anti-cheating (lighter operational burden than Tier A). Useful for chapters establishing themselves, smaller communities, transitional operations toward Tier A. Wins contribute to chapter-local rankings with partial regional contribution. *See TIER_B_OPERATIONS.md for the full operational template.*
+
+**Tier C (Training Tier / MVR)**: HackLet's training tier and Minimum Viable Round (MVR) floor. BYOD substrate, no enforced token budgets, full fuzz catalog evaluation, PITCH.md as written communication artifact. Operates three profiles: the **60-min MVR** (PITCH.md + LLM judging, any cohort 8-100+), **Tier C Extended** (live pitch + cross-examination with human judges, 8-12 players, weekend timeframe), and **multi-round MVR-days**. The truest expression of "we don't legislate AI usage" — players use whatever AI tooling fits their workflow. Credentials are chapter-local. The MVR is also the league's R&D infrastructure: every event generates operational data that informs catalog evolution, sysprompt calibration, format clock validation. *See TIER_C_OPERATIONS.md for the full operational template.*
+
+### Token Budget's Two Functions
+
+Token budgets serve two distinct functions, and both activate only at Tier A:
+
+**Function 1 — League cost control**: when the league hosts the AI substrate (Tier A and Tier B), every player prompt costs the league real money. Token budgets bound that cost so a runaway player can't burn through chapter monthly budget in a single round. This is operational risk management protecting the league's financial sustainability.
+
+**Function 2 — Credentialing the resourcefulness skill**: once enforced, token budgets test a professional skill — working effectively under resource constraints. Real engineers operate under budget caps (compute costs, API quotas). Players who produce defended apps within constrained AI usage demonstrate something employers care about, and per the 2026 tokenmaxxing crisis data this skill is increasingly market-relevant.
+
+Function 2 *requires* Function 1 to be enforced — you can't credential a skill you can't measure. But Function 1 doesn't require Tier A; it requires *the league hosting the AI* in the first place. At Tier B, Function 1 operates with honor-system enforcement (the league hosts AI, but budgets are policy-enforced rather than firewall-enforced); Most Efficient award operates with reduced credentialing weight. At Tier C with BYOD substrate, neither function applies because the league isn't paying for AI and can't enforce the budget anyway. This is why token budgets drop entirely at Tier C rather than operating as honor system theater.
 
 ### Verification Process
 
-Tier B and C chapters are created with light superadmin review (name and basic legitimacy check). Tier A verification involves:
+Tier B and Tier C chapters are created with light superadmin review (name and basic legitimacy check). Tier A verification involves:
 
 1. Chapter owner submits verification application with required documentation
-2. Documents reviewed: RMM configuration, network rules, judge corps, venue setup, prior event evidence
+2. Documents reviewed: RMM configuration, network rules, judge corps, venue setup, prior event evidence, specialized variant(s) for which verification is sought
 3. Superadmin may request additional information or schedule a verification call
-4. If approved, chapter granted tier A status with badge
+4. If approved, chapter granted Tier A status with badge for the specific verified variants
 5. Annual re-verification with possible spot checks during the year
 
-Verification may be revoked if standards slip. Chapters can apply for verification at any time after meeting initial requirements.
+Tier A verification is **per-variant**. A chapter verified for Vibe Sprint isn't automatically verified for Unslop Sprint or Vibe Agile. The verification application specifies which format variants the chapter is verifying for; verification expansion to additional variants requires additional applications.
+
+Chapter variant portfolio: specialization is **common but not required**. Chapters often concentrate Tier A verification on one variant or related variant family for operational efficiency. Chapters with substantial operational capacity may apply for verification across multiple variants over time. The 1-event-1-format rule (see format_spec.md §7.1) means each event commits to one variant, but chapters host many events across varied formats over their lifetime.
+
+Verification may be revoked if standards slip. Chapters can apply for verification at any time after meeting initial requirements. Chapters may apply to expand verification to additional variants as their infrastructure and operational experience grow.
 
 ## 5. Role Hierarchy
 

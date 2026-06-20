@@ -12,8 +12,11 @@ Before starting any work, read `BUILD_ROADMAP.md` to understand:
 When asked to do work outside the current stage scope, suggest adding the request to `IDEAS_FOR_LATER.md` rather than implementing it. The discipline matters because it prevents the project from becoming an endless design exercise.
 
 Supporting documents (referenced from `claude.md`):
-- `format_spec.md` — what HackLet League is as a competitive format
-- `LEAGUE_OPERATIONS.md` — how the league operates as a federated institution
+- `format_spec.md` — what HackLet League is as a competitive format (tier-agnostic format definition)
+- `LEAGUE_OPERATIONS.md` — how the league operates as a federated institution (governance, tier system overview, verification)
+- `TIER_A_OPERATIONS.md` — Tier A operational template (credentialing-grade, full 135-min round profile, broadcast architecture, multi-day tournament template)
+- `TIER_B_OPERATIONS.md` — Tier B operational template (middle tier, policy-enforced integrity)
+- `TIER_C_OPERATIONS.md` — Tier C operational template (training tier / MVR, BYOD substrate, three profiles: MVR / Extended / multi-round)
 - `DATA_MODEL.md` — database schema
 - `ARCHITECTURE.md` — service relationships and request flows
 - `FUZZ_RUNNER_SPEC.md` — runner architecture (relevant in Stage 5)

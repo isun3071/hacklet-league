@@ -63,7 +63,7 @@ Public pages are SEO-friendly through SSR. Cache-control headers allow CDN cachi
 
 The OpenRouter API key is stored encrypted server-side (environment variable or secret manager). It is added by Django when constructing the upstream request, never exposed to the frontend.
 
-The proxy is also exposed as an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`), alongside the simple `/api/ai/chat` the portal uses. Any OpenAI-protocol client — the Classical chat window today, an Agentic IDE extension later, CLI tools — targets it with the same session auth, budget enforcement, and audit logging. Compatibility is surface-only: Django pins the season's model, enforces token/fuzz budgets and rate limits server-side, and logs every call; clients cannot choose the model or exceed budget. This decouples the substrate from any specific client choice without changing the API contract.
+The proxy is also exposed as an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`), alongside the simple `/api/ai/chat` the portal uses. Any OpenAI-protocol client — the chat-window interface today, an in-IDE agent interface later, CLI tools — targets it with the same session auth, budget enforcement, and audit logging. Compatibility is surface-only: Django pins the season's model, enforces token/fuzz budgets and rate limits server-side, and logs every call; clients cannot choose the model or exceed budget. This decouples the substrate from any specific client choice without changing the API contract.
 
 ### Fuzz Trigger Flow (during build phase, local runner)
 
@@ -82,8 +82,8 @@ The local fuzz runner contains the public test pool only. The hidden pool exists
 ### Code Submission and Authoritative Fuzz Flow (at code freeze)
 
 1. T+29:00 (round-relative) arrives; Django signals all active player rounds via WebSocket
-2. Django updates round status to evaluation; agentic edit capabilities are revoked (for Agentic formats); files in the player's home directory become read-only via filesystem permission flip
-3. A league daemon on the workstation copies the player's working directory via SCP to league infrastructure at `/opt/hacklet/submissions/$EVENT_ID/$ROUND_ID/$USER/` (service-account path on the league server, not a personal home directory)
+2. Django updates round status to evaluation; agent-interface edit capabilities are revoked (for sessions where the agent was in use, no file modifications via the agent post-freeze); files in the player's home directory become read-only via filesystem permission flip
+3. The submission reaches league infrastructure at `/opt/hacklet/submissions/$EVENT_ID/$ROUND_ID/$USER/` (service-account path on the league server, not a personal home directory). **Tier A/B:** a league daemon on the locked workstation copies the player's working directory there automatically via SCP. **Tier C (BYOD):** the player uploads to the league portal within a short grace period after freeze. Steps 4–9 are identical regardless of how the code arrived
 4. League's fuzz infrastructure picks up the submission, deploys it to an ephemeral container, and assigns a port for judge clickaround access
 5. Central fuzz runner executes both public AND hidden test pools against deployed submission
 6. Results written to FuzzResult records — these are the authoritative scored results
@@ -91,7 +91,7 @@ The local fuzz runner contains the public test pool only. The hidden pool exists
 8. Results visible to judges in their portal for clickaround context
 9. Post-event, completed submissions are mirrored to the public HackLet git org (github.com/hacklet-league/) with player attribution as part of the credentialing artifact archive
 
-SCP-based submission (rather than git push from the workstation) reflects the per-player account lifecycle on workstations. The player's ephemeral, non-sudo Unix account doesn't accumulate git credentials, doesn't maintain long-lived repository state, and is deleted via `userdel -r` at the Zamboni Period. The submission daemon runs as a service account with pre-configured SCP credentials targeting the central path; the player's account is just the source filesystem to copy *from*. The chapter's firewall must allow workstation outbound SCP to the league submission endpoint.
+At Tier A/B, SCP-based capture (rather than git push from the workstation) reflects the per-player account lifecycle on workstations. The player's ephemeral, non-sudo Unix account doesn't accumulate git credentials, doesn't maintain long-lived repository state, and is deleted via `userdel -r` at the Zamboni Period. The submission daemon runs as a service account with pre-configured SCP credentials targeting the central path; the player's account is just the source filesystem to copy *from*. The chapter's firewall must allow workstation outbound SCP to the league submission endpoint. At Tier C there is no league-controlled workstation, so the player uploads to the league portal themselves within the grace period; the downstream deploy → container → fuzz → score pipeline is unchanged.
 
 The AI chat interface remains available during pitch preparation even after files become read-only — players who saved budget can use AI for pitch prep; players who tokenmaxxed get no prep assistance. This is consistent with the no-coddling design principle.
 
@@ -118,7 +118,7 @@ opening (T+0:00) — round starts with 5-min host introduction
    ↓
 build (T+5:00) — 24-min build phase
    ↓
-evaluation (T+29:00) — 18-min concurrent: fuzz runner + judges + players prep pitches (AI chat retained, files read-only, agentic disabled)
+evaluation (T+29:00) — 18-min concurrent: fuzz runner + judges + players prep pitches (AI chat retained, files read-only, agent-interface edits disabled)
    ↓
 pitching (T+47:00) — 28-min for 8 players at 3.5 min each (60s pitch + 120s cross-ex + 30s transition)
    ↓
@@ -131,7 +131,7 @@ completed (T+107:00)
 zamboni (T+107:00 to T+135:00) — per-player account teardown + next round preparation
 ```
 
-Timing reflects HackLet Vibe: Classical Sprint (24-min build); other format variants scale timings proportionally to their timer axis (XP=12min build, Scrum=36min, Agile=48min, Waterfall=72-96min).
+Timing reflects HackLet Vibe Sprint (24-min build); other format variants scale timings proportionally to their timer axis (XP=12min build, Scrum=36min, Agile=48min, Waterfall=72-96min).
 
 Transitions are triggered by:
 - Time-based (Django scheduled task checking timestamps)
@@ -299,8 +299,8 @@ Explicitly deferred from MVP, documented for awareness:
 - **Mobile apps** — Web-first for now; native apps deferred
 - **Internationalization** — English-only for MVP; i18n added when international chapters appear
 - **Multi-region deployment** — Single VPS sufficient until latency becomes issue for global users
-- **HackLet Unslop format support** — Pilot operates HackLet Vibe: Classical Sprint; Unslop variants add a slop-generation pipeline (league substrate generates broken application live during round opening, distributed identically to all workstations) and slightly different submission semantics (still SCP-based, same fuzz catalog). Same infrastructure substrate, additional generation/distribution step. Documented in format_spec.md §1 and IDEAS_FOR_LATER.md for Season 2-3 introduction.
-- **Agentic format support** — Pilot operates Classical relationship (chat-window AI); Agentic variants add a league-built signed VSCodium extension with accept/reject UI, agent freeze semantics (revert to last accepted edit), and extended timer infrastructure (Agile-foundational at 48 min, Waterfall at 72-96 min). Stage 12+.
+- **HackLet Unslop format support** — Pilot operates HackLet Vibe Sprint; Unslop variants add a slop-generation pipeline (league substrate generates broken application server-side, distributed to all workstations at Tier A/B and via zip download to player portal at Tier C — both with zero leakage because generation is server-controlled and not published until round opening) and slightly different submission semantics (same submission/deployment pipeline, same fuzz catalog). Same infrastructure substrate, additional generation/distribution step. Documented in format_spec.md §1 and IDEAS_FOR_LATER.md for Season 2-3 introduction.
+- **Agent interface (substrate expansion)** — Pilot operates the chat-window interface only; the agent interface adds a league-built signed VSCodium extension with accept/reject UI alongside the chat window, both routed through the same proxy with unified token budget, agent freeze semantics (revert to last accepted edit at code freeze; pending proposals dropped). Stage 12+. Not a new format variant — players at Tier A/B receive both interfaces and use whichever combination fits their workflow.
 - **Post-event public submission archive** — Mirror completed submissions to github.com/hacklet-league/ with player attribution. Becomes part of the credentialing artifact surface — anyone can review what HackLet champions actually built. Lands as operational policy when chapter operations mature.
 
 ---
