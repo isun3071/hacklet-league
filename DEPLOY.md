@@ -116,75 +116,74 @@ docker compose build && docker compose up -d
 ## Securing the admin portal (Tailscale)
 
 The Django admin is the keys to the kingdom — every user, every record — so it is **not
-exposed to the public internet at all**. Two layers, both already wired into the code:
+exposed to the public internet at all**. Two layers, both wired into the repo:
 
 1. **Secret path** — admin is mounted at `$ADMIN_PATH` (from `.env`), not `/admin`.
-2. **Tailnet-only** — Caddy serves that path **only** when the request originates from your
+2. **Tailnet-only** — Caddy serves that path **only** when the request comes from your
    Tailscale tailnet (`100.64.0.0/10`). Everyone else — including anyone probing `/admin` —
    gets a bare `404`, indistinguishable from a path that doesn't exist.
 
 You reach it by pointing `hackletleague.com` at the box's *tailnet* IP on your own devices,
-so it serves over the **existing** Let's Encrypt cert at the **same origin** — sessions,
-CSRF, and secure cookies work with zero extra Django/cookie config.
+so admin serves over the **existing** cert at the **same origin** — sessions, CSRF, and
+secure cookies work with zero extra Django config, and the URL stays portless.
+
+> **Why Caddy runs on the host network.** The tailnet gate matches on the client's source
+> IP, so Caddy must see the *real* one. On a Docker bridge network it can't: traffic to the
+> VM's own tailnet IP is delivered locally and Docker masquerades the source to a `172.x`
+> bridge address, so the `100.x` never reaches the matcher and admin 404s even on the
+> tailnet. The fix (in `docker-compose.yml`) is `network_mode: host` for Caddy — it binds
+> `:80/:443` directly, sees real client IPs, and reaches the app via the backend/frontend
+> **loopback-published** ports (`127.0.0.1:8000` / `:3000`).
+>
+> ⚠️ **Do NOT set `"userland-proxy": false`** in `/etc/docker/daemon.json` — it breaks
+> those `127.0.0.1`-published upstreams (loopback DNAT needs the userland proxy). Leave
+> Docker at its default; if you created a `daemon.json` for this, remove it and
+> `sudo systemctl restart docker`.
 
 ### One-time setup
 
-**a. Pick a secret admin slug** in `.env`, then rebuild so both Django and Caddy pick it up:
+**a. Secret admin slug** in `.env` (both Django and Caddy read it):
 
 ```bash
-echo "ADMIN_PATH=$(openssl rand -hex 12)" >> .env    # e.g. ADMIN_PATH=9f2c0b...
-docker compose up -d --build
+echo "ADMIN_PATH=$(openssl rand -hex 12)" >> .env
 ```
 
-**b. Install Tailscale on the host** (the box running Docker):
+**b. Install Tailscale on the host:**
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
-tailscale ip -4                       # note the box's tailnet IP, e.g. 100.x.y.z
-# If you run ufw, let tailnet traffic in (Docker usually bypasses ufw, but to be safe):
-sudo ufw allow in on tailscale0
+tailscale ip -4                       # the box's tailnet IP, e.g. 100.x.y.z
+sudo ufw allow in on tailscale0       # only if you run ufw
 ```
 
-**c. Install Tailscale on the device(s) you'll administer from** (laptop/phone) and join
-the same tailnet — https://tailscale.com/download.
+**c. Install Tailscale on the device(s) you administer from** and join the same tailnet —
+https://tailscale.com/download.
 
-**d. Make `hackletleague.com` resolve to the box's tailnet IP on those admin devices.**
-Simplest is one `/etc/hosts` line per device (macOS/Linux `/etc/hosts`, Windows
-`C:\Windows\System32\drivers\etc\hosts`):
+**d. Point `hackletleague.com` at the box's tailnet IP on those devices** — one line in
+`/etc/hosts` (Windows: `C:\Windows\System32\drivers\etc\hosts`):
 
 ```
 100.x.y.z   hackletleague.com
 ```
 
-> Don't want per-device edits? Use Tailscale **split DNS** (admin console → DNS), or ask
-> and I'll set up a dedicated `*.ts.net` admin host with a Tailscale-issued cert instead.
+> Prefer no per-device edits? Use Tailscale **split DNS** (admin console → DNS).
 
 ### Reaching admin
 
-From a tailnet device (with the hosts entry), browse to:
-
-```
-https://hackletleague.com/<your ADMIN_PATH>/
-```
-
-To the browser it's still `https://hackletleague.com`, so the real cert is valid and login
-works normally — the packets just travel over the encrypted tailnet.
+From a tailnet device (with the hosts line): `https://hackletleague.com/<ADMIN_PATH>/`.
+To the browser it's still `https://hackletleague.com`, so the cert is valid and login works
+— the packets just ride the encrypted tailnet.
 
 ### Verify the lockdown
 
-- From a **non-tailnet** device (e.g. phone on cellular), both
-  `https://hackletleague.com/<slug>/` and `https://hackletleague.com/admin/` return **404**.
-- From the **tailnet**, the admin login page loads.
-- Confirm Caddy sees the **real** client IP (the gate depends on it):
+- **Non-tailnet** device (e.g. phone on cellular): `…/<slug>/` and `…/admin/` both **404**.
+- **Tailnet** device: the admin login loads.
+- The client IP Caddy sees should now be your `100.x` (host networking makes this true):
 
   ```bash
   docker compose logs caddy | grep "<slug>" | tail
   ```
-
-  The client address on those hits should be your `100.x` tailnet IP. If you instead see a
-  Docker bridge address (`172.x`), the published-port NAT is masquerading the source — tell
-  me and I'll switch the gate to a tailnet-only listener (port isolation) instead of an IP match.
 
 > **Next layers** (worth adding once there's real PII): admin 2FA via
 > `django-two-factor-auth`, and login lockout via `django-axes`. Both are cheap drop-ins.

@@ -11,9 +11,13 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
+    # Host networking so Caddy sees the REAL client IP. On a bridge network, Docker's
+    # NAT masquerades traffic destined to the VM's own Tailscale IP as a 172.x address,
+    # which defeats the tailnet admin gate. On the host network Caddy binds :80/:443
+    # directly and reaches the app over the loopback-published ports below.
+    # NOTE: keep Docker's userland-proxy at its default (true) — setting it false breaks
+    # those 127.0.0.1-published upstreams.
+    network_mode: host
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (e.g. hackletleague.com for HTTPS, or http://localhost)}
       LAN_ADDRESS: ${LAN_ADDRESS:-http://localhost}
@@ -54,7 +58,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # No host port published; Caddy reaches it on the internal network as backend:8000.
+    # Published on loopback only so the host-networked Caddy can reach it (Caddy can't
+    # use the docker-network name `backend` while on the host net). Not exposed off-box.
+    ports:
+      - "127.0.0.1:8000:8000"
 
   frontend:
     build: ./frontend
@@ -62,7 +69,10 @@ services:
     environment:
       # Server-side (SSR) fetches reach the backend over the internal docker network.
       INTERNAL_API_URL: http://backend:8000
-    # No host port published; Caddy reaches it at frontend:3000.
+    # Published on loopback only so the host-networked Caddy can reach it. The frontend
+    # stays on the default bridge, so its SSR fetches to `backend` still resolve.
+    ports:
+      - "127.0.0.1:3000:3000"
 
   db:
     image: postgres:16-alpine

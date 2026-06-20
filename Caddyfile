@@ -26,9 +26,12 @@
 		# The admin lives at a secret slug ($ADMIN_PATH), NOT /admin, and is reachable
 		# ONLY from the Tailscale tailnet (100.64.0.0/10) or loopback. Every other
 		# caller gets a bare 404 — indistinguishable from a path that doesn't exist.
-		# remote_ip is the direct client IP (Caddy is the edge; no CDN). If a CDN is
-		# ever put in front, switch to client_ip + a trusted_proxies allowlist, or
-		# remote_ip becomes attacker-spoofable via X-Forwarded-For.
+		# This Caddy runs on the HOST network (see docker-compose.yml), so remote_ip is
+		# the TRUE client IP. That's essential: on a Docker bridge network, NAT
+		# masquerades tailnet traffic (destined to the VM's own tailnet IP) as a 172.x
+		# address, so the gate could never match. Upstreams are likewise reached over
+		# loopback-published ports. If a CDN is ever fronted, switch remote_ip ->
+		# client_ip + trusted_proxies, else it becomes spoofable via X-Forwarded-For.
 		@admin_offnet {
 			path /{$ADMIN_PATH}/*
 			not remote_ip 100.64.0.0/10 127.0.0.1/8 ::1
@@ -36,15 +39,15 @@
 		respond @admin_offnet 404
 
 		@admin path /{$ADMIN_PATH}/*
-		reverse_proxy @admin backend:8000
+		reverse_proxy @admin 127.0.0.1:8000
 
 		# Django backend (API, static assets, allauth OAuth callbacks).
 		@backend path /api/* /static/* /_allauth/* /accounts/*
-		reverse_proxy @backend backend:8000
+		reverse_proxy @backend 127.0.0.1:8000
 
 		# Next.js frontend (everything else). The legacy /admin path lands here and
 		# gets Next's ordinary 404 — no hint that a Django admin exists anywhere.
-		reverse_proxy frontend:3000
+		reverse_proxy 127.0.0.1:3000
 	}
 }
 
