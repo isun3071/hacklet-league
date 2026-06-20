@@ -18,6 +18,8 @@ services:
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (e.g. hackletleague.com for HTTPS, or http://localhost)}
       LAN_ADDRESS: ${LAN_ADDRESS:-http://localhost}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (for Let's Encrypt)}
+      # Secret admin slug — Caddy serves it only to the tailnet. Must match the backend's.
+      ADMIN_PATH: ${ADMIN_PATH:-admin}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./landing:/srv:ro
@@ -36,6 +38,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://hacklet:hacklet@db:5432/hacklet}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://hackletleague.com}
+      # Secret path the Django admin is mounted at. Must match Caddy's ADMIN_PATH.
+      ADMIN_PATH: ${ADMIN_PATH:-admin}
       # Transactional email. RESEND_API_KEY (HTTP API) wins; SMTP is the fallback.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_HOST: ${EMAIL_HOST:-}

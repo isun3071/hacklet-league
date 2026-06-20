@@ -10,6 +10,12 @@ SECRET_KEY = env("SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env.bool("DEBUG", default=False)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
+# The Django admin is mounted at this (secret, env-set) path in production; Caddy
+# additionally restricts that path to the Tailscale tailnet, so the public internet
+# can't even discover it. Bare slug, no slashes; defaults to "admin" for local dev.
+# See DEPLOY.md "Securing the admin portal".
+ADMIN_PATH = env("ADMIN_PATH", default="admin").strip("/")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

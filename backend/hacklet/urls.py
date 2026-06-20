@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
@@ -23,7 +24,8 @@ router = DefaultRouter()
 router.register(r"chapters", ChapterViewSet, basename="chapter")
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # Mounted at a secret, env-set slug in prod; Caddy gates that path to the tailnet.
+    path(f"{settings.ADMIN_PATH}/", admin.site.urls),
     path("api/healthz", healthz),
     path("api/csrf/", csrf),
     path("api/me/", MeView.as_view()),

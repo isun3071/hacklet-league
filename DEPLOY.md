@@ -113,6 +113,84 @@ docker compose build && docker compose up -d
 
 ---
 
+## Securing the admin portal (Tailscale)
+
+The Django admin is the keys to the kingdom — every user, every record — so it is **not
+exposed to the public internet at all**. Two layers, both already wired into the code:
+
+1. **Secret path** — admin is mounted at `$ADMIN_PATH` (from `.env`), not `/admin`.
+2. **Tailnet-only** — Caddy serves that path **only** when the request originates from your
+   Tailscale tailnet (`100.64.0.0/10`). Everyone else — including anyone probing `/admin` —
+   gets a bare `404`, indistinguishable from a path that doesn't exist.
+
+You reach it by pointing `hackletleague.com` at the box's *tailnet* IP on your own devices,
+so it serves over the **existing** Let's Encrypt cert at the **same origin** — sessions,
+CSRF, and secure cookies work with zero extra Django/cookie config.
+
+### One-time setup
+
+**a. Pick a secret admin slug** in `.env`, then rebuild so both Django and Caddy pick it up:
+
+```bash
+echo "ADMIN_PATH=$(openssl rand -hex 12)" >> .env    # e.g. ADMIN_PATH=9f2c0b...
+docker compose up -d --build
+```
+
+**b. Install Tailscale on the host** (the box running Docker):
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4                       # note the box's tailnet IP, e.g. 100.x.y.z
+# If you run ufw, let tailnet traffic in (Docker usually bypasses ufw, but to be safe):
+sudo ufw allow in on tailscale0
+```
+
+**c. Install Tailscale on the device(s) you'll administer from** (laptop/phone) and join
+the same tailnet — https://tailscale.com/download.
+
+**d. Make `hackletleague.com` resolve to the box's tailnet IP on those admin devices.**
+Simplest is one `/etc/hosts` line per device (macOS/Linux `/etc/hosts`, Windows
+`C:\Windows\System32\drivers\etc\hosts`):
+
+```
+100.x.y.z   hackletleague.com
+```
+
+> Don't want per-device edits? Use Tailscale **split DNS** (admin console → DNS), or ask
+> and I'll set up a dedicated `*.ts.net` admin host with a Tailscale-issued cert instead.
+
+### Reaching admin
+
+From a tailnet device (with the hosts entry), browse to:
+
+```
+https://hackletleague.com/<your ADMIN_PATH>/
+```
+
+To the browser it's still `https://hackletleague.com`, so the real cert is valid and login
+works normally — the packets just travel over the encrypted tailnet.
+
+### Verify the lockdown
+
+- From a **non-tailnet** device (e.g. phone on cellular), both
+  `https://hackletleague.com/<slug>/` and `https://hackletleague.com/admin/` return **404**.
+- From the **tailnet**, the admin login page loads.
+- Confirm Caddy sees the **real** client IP (the gate depends on it):
+
+  ```bash
+  docker compose logs caddy | grep "<slug>" | tail
+  ```
+
+  The client address on those hits should be your `100.x` tailnet IP. If you instead see a
+  Docker bridge address (`172.x`), the published-port NAT is masquerading the source — tell
+  me and I'll switch the gate to a tailnet-only listener (port isolation) instead of an IP match.
+
+> **Next layers** (worth adding once there's real PII): admin 2FA via
+> `django-two-factor-auth`, and login lockout via `django-axes`. Both are cheap drop-ins.
+
+---
+
 ## CI/CD + monitoring (Stage 1)
 
 ### CI — automatic, on GitHub's runners

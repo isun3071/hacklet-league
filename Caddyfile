@@ -13,32 +13,38 @@
 (app) {
 	encode zstd gzip
 
-	# Django backend
-	handle /api/* {
-		reverse_proxy backend:8000
-	}
-	handle /admin/* {
-		reverse_proxy backend:8000
-	}
-	handle /static/* {
-		reverse_proxy backend:8000
-	}
-	handle /_allauth/* {
-		reverse_proxy backend:8000
-	}
-	handle /accounts/* {
-		reverse_proxy backend:8000
-	}
-
-	# Next.js frontend (everything else)
-	handle {
-		reverse_proxy frontend:3000
-	}
-
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		-Server
+	}
+
+	# One ordered route so the admin guards below evaluate top-down (handle/respond
+	# ordering is otherwise directive-order dependent, which is too subtle to trust here).
+	route {
+		# --- Admin portal hardening (see DEPLOY.md "Securing the admin portal") ---
+		# The admin lives at a secret slug ($ADMIN_PATH), NOT /admin, and is reachable
+		# ONLY from the Tailscale tailnet (100.64.0.0/10) or loopback. Every other
+		# caller gets a bare 404 — indistinguishable from a path that doesn't exist.
+		# remote_ip is the direct client IP (Caddy is the edge; no CDN). If a CDN is
+		# ever put in front, switch to client_ip + a trusted_proxies allowlist, or
+		# remote_ip becomes attacker-spoofable via X-Forwarded-For.
+		@admin_offnet {
+			path /{$ADMIN_PATH}/*
+			not remote_ip 100.64.0.0/10 127.0.0.1/8 ::1
+		}
+		respond @admin_offnet 404
+
+		@admin path /{$ADMIN_PATH}/*
+		reverse_proxy @admin backend:8000
+
+		# Django backend (API, static assets, allauth OAuth callbacks).
+		@backend path /api/* /static/* /_allauth/* /accounts/*
+		reverse_proxy @backend backend:8000
+
+		# Next.js frontend (everything else). The legacy /admin path lands here and
+		# gets Next's ordinary 404 — no hint that a Django admin exists anywhere.
+		reverse_proxy frontend:3000
 	}
 }
 
