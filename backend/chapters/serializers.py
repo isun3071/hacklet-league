@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Chapter
+from .models import Chapter, ChapterStaff
 
 
 class ChapterSerializer(serializers.ModelSerializer):
@@ -35,3 +35,52 @@ class ChapterWriteSerializer(serializers.ModelSerializer):
             "name", "description", "location_text", "tier",
             "institutional_affiliation", "contact_email", "website_url",
         ]
+
+
+# ---- staff -----------------------------------------------------------------
+
+class ChapterStaffSerializer(serializers.ModelSerializer):
+    """Read view of a chapter staff member (org team + judge corps)."""
+
+    user_id = serializers.UUIDField(read_only=True)
+    email = serializers.CharField(source="user.email", read_only=True)
+    display_name = serializers.CharField(source="user.display_name", read_only=True)
+    chapter_slug = serializers.SlugField(source="chapter.slug", read_only=True)
+
+    class Meta:
+        model = ChapterStaff
+        fields = [
+            "id", "chapter_slug", "user_id", "email", "display_name",
+            "roles", "status", "joined_at", "notes",
+        ]
+
+
+class ChapterStaffWriteSerializer(serializers.Serializer):
+    """Add a staff member to a chapter. Identify by user_id or email — but unlike an event
+    invite, staff must be an EXISTING account (ChapterStaff.user is required)."""
+
+    chapter = serializers.SlugRelatedField(slug_field="slug", queryset=Chapter.objects.all())
+    user_id = serializers.UUIDField(required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    roles = serializers.ListField(
+        child=serializers.ChoiceField(choices=ChapterStaff.Role.choices), allow_empty=False
+    )
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if bool(attrs.get("user_id")) == bool(attrs.get("email")):
+            raise serializers.ValidationError("Provide exactly one of user_id or email.")
+        return attrs
+
+
+class ChapterStaffUpdateSerializer(serializers.ModelSerializer):
+    """Update an existing staff row's roles / status / notes."""
+
+    roles = serializers.ListField(
+        child=serializers.ChoiceField(choices=ChapterStaff.Role.choices),
+        allow_empty=False, required=False,
+    )
+
+    class Meta:
+        model = ChapterStaff
+        fields = ["roles", "status", "notes"]

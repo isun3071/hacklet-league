@@ -13,8 +13,9 @@ from rest_framework.response import Response
 
 from chapters.models import Chapter, ChapterStaff
 
+from chapters.permissions import is_chapter_manager, managed_chapter_ids
+
 from .models import Event, EventParticipant
-from .permissions import is_chapter_manager, managed_chapter_ids
 from .serializers import (
     ApplySerializer,
     CorpsJudgeSerializer,

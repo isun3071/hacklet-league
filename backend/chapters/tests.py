@@ -129,3 +129,181 @@ def test_contact_email_visible_only_to_owner(user):
         verification_status=Chapter.VerificationStatus.VERIFIED
     )
     assert APIClient().get(f"/api/chapters/{slug}/").data["contact_email"] == ""
+
+
+# ===========================================================================
+# 2c — chapter staff management (/api/chapter-staff/)
+# ===========================================================================
+
+@pytest.fixture
+def owner(db):
+    return User.objects.create_user(email="owner@example.com", password="pw")
+
+
+@pytest.fixture
+def owned_chapter(db, owner):
+    ch = Chapter.objects.create(
+        name="Owned", slug="owned", created_by=owner,
+        verification_status=Chapter.VerificationStatus.VERIFIED,
+    )
+    ChapterStaff.objects.create(
+        user=owner, chapter=ch,
+        roles=[ChapterStaff.Role.OWNER], status=ChapterStaff.Status.ACTIVE,
+    )
+    return ch
+
+
+def _client(u):
+    c = APIClient()
+    c.force_authenticate(u)
+    return c
+
+
+@pytest.mark.django_db
+def test_owner_adds_organizer_by_email(owner, owned_chapter):
+    bob = User.objects.create_user(email="bob@example.com", password="pw")
+    r = _client(owner).post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "bob@example.com", "roles": ["organizer"]},
+        format="json",
+    )
+    assert r.status_code == 201
+    s = ChapterStaff.objects.get(chapter=owned_chapter, user=bob)
+    assert s.roles == ["organizer"]
+    assert s.status == "active"
+    assert s.approved_by_id == owner.id
+
+
+@pytest.mark.django_db
+def test_add_staff_requires_existing_account(owner, owned_chapter):
+    r = _client(owner).post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "ghost@example.com", "roles": ["judge"]},
+        format="json",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_non_manager_cannot_add_staff(owner, owned_chapter):
+    stranger = User.objects.create_user(email="stranger@example.com", password="pw")
+    User.objects.create_user(email="victim@example.com", password="pw")
+    r = _client(stranger).post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "victim@example.com", "roles": ["judge"]},
+        format="json",
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.django_db
+def test_organizer_cannot_grant_owner(owner, owned_chapter):
+    org = User.objects.create_user(email="org@example.com", password="pw")
+    ChapterStaff.objects.create(
+        user=org, chapter=owned_chapter,
+        roles=[ChapterStaff.Role.ORGANIZER], status=ChapterStaff.Status.ACTIVE,
+    )
+    User.objects.create_user(email="target@example.com", password="pw")
+    r = _client(org).post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "target@example.com", "roles": ["owner"]},
+        format="json",
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.django_db
+def test_owner_can_grant_owner(owner, owned_chapter):
+    User.objects.create_user(email="co@example.com", password="pw")
+    r = _client(owner).post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "co@example.com", "roles": ["owner"]},
+        format="json",
+    )
+    assert r.status_code == 201
+
+
+@pytest.mark.django_db
+def test_duplicate_staff_rejected(owner, owned_chapter):
+    User.objects.create_user(email="dup@example.com", password="pw")
+    c = _client(owner)
+    c.post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "dup@example.com", "roles": ["judge"]},
+        format="json",
+    )
+    r = c.post(
+        "/api/chapter-staff/",
+        {"chapter": "owned", "email": "dup@example.com", "roles": ["organizer"]},
+        format="json",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_list_staff_is_manager_only(owner, owned_chapter):
+    assert _client(owner).get("/api/chapter-staff/?chapter=owned").status_code == 200
+    stranger = User.objects.create_user(email="s2@example.com", password="pw")
+    assert _client(stranger).get("/api/chapter-staff/?chapter=owned").status_code == 403
+
+
+@pytest.mark.django_db
+def test_update_staff_roles(owner, owned_chapter):
+    judge = User.objects.create_user(email="j@example.com", password="pw")
+    s = ChapterStaff.objects.create(
+        user=judge, chapter=owned_chapter,
+        roles=[ChapterStaff.Role.JUDGE], status=ChapterStaff.Status.ACTIVE,
+    )
+    r = _client(owner).patch(
+        f"/api/chapter-staff/{s.id}/", {"roles": ["organizer", "judge"]}, format="json"
+    )
+    assert r.status_code == 200
+    s.refresh_from_db()
+    assert set(s.roles) == {"organizer", "judge"}
+
+
+@pytest.mark.django_db
+def test_cannot_delete_last_owner(owner, owned_chapter):
+    s = ChapterStaff.objects.get(chapter=owned_chapter, user=owner)
+    r = _client(owner).delete(f"/api/chapter-staff/{s.id}/")
+    assert r.status_code == 400
+    assert ChapterStaff.objects.filter(id=s.id).exists()
+
+
+@pytest.mark.django_db
+def test_cannot_demote_last_owner(owner, owned_chapter):
+    s = ChapterStaff.objects.get(chapter=owned_chapter, user=owner)
+    r = _client(owner).patch(f"/api/chapter-staff/{s.id}/", {"roles": ["organizer"]}, format="json")
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_organizer_cannot_remove_owner(owner, owned_chapter):
+    org = User.objects.create_user(email="o3@example.com", password="pw")
+    ChapterStaff.objects.create(
+        user=org, chapter=owned_chapter,
+        roles=[ChapterStaff.Role.ORGANIZER], status=ChapterStaff.Status.ACTIVE,
+    )
+    owner_row = ChapterStaff.objects.get(chapter=owned_chapter, user=owner)
+    r = _client(org).delete(f"/api/chapter-staff/{owner_row.id}/")
+    assert r.status_code == 403
+
+
+@pytest.mark.django_db
+def test_remove_staff(owner, owned_chapter):
+    judge = User.objects.create_user(email="j2@example.com", password="pw")
+    s = ChapterStaff.objects.create(
+        user=judge, chapter=owned_chapter,
+        roles=[ChapterStaff.Role.JUDGE], status=ChapterStaff.Status.ACTIVE,
+    )
+    r = _client(owner).delete(f"/api/chapter-staff/{s.id}/")
+    assert r.status_code == 204
+    assert not ChapterStaff.objects.filter(id=s.id).exists()
+
+
+@pytest.mark.django_db
+def test_mine_lists_my_staff_rows(owner, owned_chapter):
+    r = _client(owner).get("/api/chapter-staff/mine/")
+    assert r.status_code == 200
+    assert len(r.data) == 1
+    assert r.data[0]["chapter_slug"] == "owned"
