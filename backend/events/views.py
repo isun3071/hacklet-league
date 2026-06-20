@@ -140,7 +140,7 @@ class EventViewSet(
         (and no emails); chapter managers see everyone — applicants, invitees — with email."""
         event = self.get_object()
         is_mgr = is_chapter_manager(request.user, event.chapter)
-        qs = event.participants.select_related("user", "event").all()
+        qs = event.participants.select_related("user", "event", "event__chapter").all()
         if not is_mgr:
             qs = qs.filter(status=EventParticipant.Status.REGISTERED)
         ser = EventParticipantSerializer(

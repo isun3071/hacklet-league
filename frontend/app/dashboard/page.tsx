@@ -3,61 +3,67 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { request } from "@/lib/http";
-import type { Chapter } from "@/lib/api";
+import type { Chapter, LeagueEvent, Participant } from "@/lib/api";
+import {
+  PARTICIPANT_STATUS_LABEL,
+  ROLE_LABEL,
+  SOURCE_LABEL,
+  STATUS_LABEL,
+  fmtDate,
+} from "@/lib/events";
 
-// Owner-facing copy for each lifecycle state (see chapters/models.py).
-const STATUS: Record<string, { label: string; cls: string; blurb: string }> = {
-  pending: {
-    label: "pending review",
-    cls: "badge-pending",
-    blurb: "awaiting review by a league admin",
-  },
-  verified: {
-    label: "verified",
-    cls: "badge-verified",
-    blurb: "approved and public in the directory",
-  },
-  suspended: {
-    label: "suspended",
-    cls: "badge-suspended",
-    blurb: "verification revoked — contact the league to restore it",
-  },
-  unverified: {
-    label: "not approved",
-    cls: "badge-unverified",
-    blurb: "reviewed and not approved — you can revise and resubmit",
-  },
+const CHAPTER_STATUS: Record<string, { label: string; cls: string }> = {
+  pending: { label: "pending review", cls: "badge-pending" },
+  verified: { label: "verified", cls: "badge-verified" },
+  suspended: { label: "suspended", cls: "badge-suspended" },
+  unverified: { label: "not approved", cls: "badge-unverified" },
 };
 
 export default function DashboardPage() {
-  const [chapters, setChapters] = useState<Chapter[] | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [events, setEvents] = useState<LeagueEvent[]>([]);
+  const [parts, setParts] = useState<Participant[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "unauth">("loading");
 
   useEffect(() => {
-    request<Chapter[]>("/api/chapters/mine/", "GET").then((res) => {
-      if (res.status === 200 && Array.isArray(res.data)) {
-        setChapters(res.data);
-        setState("ready");
-      } else {
+    (async () => {
+      const ch = await request<Chapter[]>("/api/chapters/mine/", "GET");
+      if (ch.status !== 200 || !Array.isArray(ch.data)) {
         setState("unauth");
+        return;
       }
-    });
+      setChapters(ch.data);
+      const [ev, pp] = await Promise.all([
+        request<LeagueEvent[]>("/api/events/mine/", "GET"),
+        request<Participant[]>("/api/event-participants/mine/", "GET"),
+      ]);
+      if (ev.data) setEvents(ev.data);
+      if (pp.data) setParts(pp.data);
+      setState("ready");
+    })();
   }, []);
 
-  async function onDelete(c: Chapter) {
-    if (
-      !window.confirm(
-        `Delete "${c.name}"? This permanently removes the chapter and can't be undone.`,
-      )
-    ) {
-      return;
-    }
+  async function refetchParts() {
+    const pp = await request<Participant[]>("/api/event-participants/mine/", "GET");
+    if (pp.data) setParts(pp.data);
+  }
+
+  async function respond(p: Participant, action: "accept" | "decline") {
+    const res = await request(`/api/event-participants/${p.id}/respond/`, "POST", { action });
+    if (res.ok) refetchParts();
+  }
+
+  async function withdraw(p: Participant) {
+    if (!window.confirm("Withdraw from this event?")) return;
+    const res = await request(`/api/event-participants/${p.id}/withdraw/`, "POST", {});
+    if (res.ok) refetchParts();
+  }
+
+  async function deleteChapter(c: Chapter) {
+    if (!window.confirm(`Delete "${c.name}"? This can't be undone.`)) return;
     const res = await request(`/api/chapters/${c.slug}/`, "DELETE");
-    if (res.ok) {
-      setChapters((prev) => (prev ? prev.filter((x) => x.id !== c.id) : prev));
-    } else {
-      window.alert("Could not delete that chapter. Please try again.");
-    }
+    if (res.ok) setChapters((prev) => prev.filter((x) => x.id !== c.id));
+    else window.alert("Could not delete that chapter.");
   }
 
   if (state === "loading") {
@@ -67,81 +73,183 @@ export default function DashboardPage() {
       </main>
     );
   }
-
   if (state === "unauth") {
     return (
       <main className="container block">
         <h1 className="page-title"># dashboard</h1>
         <p className="body">
-          You need to <Link href="/auth/login">log in</Link> to manage your chapters.
+          You need to <Link href="/auth/login">log in</Link> to see your dashboard.
         </p>
       </main>
     );
   }
 
-  const list = chapters ?? [];
-
   return (
     <main className="container block">
       <h1 className="page-title"># dashboard</h1>
-      <p className="subtitle">// your chapters</p>
 
-      {list.length === 0 ? (
+      {/* chapters */}
+      <h2 className="h2"># my chapters</h2>
+      {chapters.length === 0 ? (
         <p className="note">
-          // you haven&apos;t created a chapter yet.{" "}
-          <Link href="/chapters/new">apply to create one &rarr;</Link>
+          // no chapters yet. <Link href="/chapters/new">apply to create one &rarr;</Link>
         </p>
       ) : (
-        <>
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>chapter</th>
-                  <th>tier</th>
-                  <th>status</th>
-                  <th>actions</th>
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>chapter</th>
+                <th>tier</th>
+                <th>status</th>
+                <th>actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chapters.map((c) => {
+                const s = CHAPTER_STATUS[c.verification_status] ?? {
+                  label: c.verification_status,
+                  cls: "badge-unverified",
+                };
+                return (
+                  <tr key={c.id}>
+                    <td>
+                      <Link href={`/chapters/${c.slug}`}>{c.name}</Link>
+                    </td>
+                    <td>{c.tier}</td>
+                    <td>
+                      <span className={`badge ${s.cls}`}>{s.label}</span>
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <Link href={`/events/new?chapter=${c.slug}`}>new event</Link>
+                        <Link href={`/chapters/${c.slug}/staff`}>staff</Link>
+                        <Link href={`/chapters/${c.slug}/edit`}>edit</Link>
+                        <button
+                          type="button"
+                          className="linkbtn-danger"
+                          onClick={() => deleteChapter(c)}
+                        >
+                          delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* events I run */}
+      <h2 className="h2"># events i run</h2>
+      {events.length === 0 ? (
+        <p className="note">// no events yet — create one from a chapter above.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>event</th>
+                <th>chapter</th>
+                <th>when</th>
+                <th>status</th>
+                <th>actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e) => (
+                <tr key={e.id}>
+                  <td>
+                    <Link href={`/events/${e.chapter.slug}/${e.slug}`}>{e.name}</Link>
+                  </td>
+                  <td>{e.chapter.name}</td>
+                  <td>{fmtDate(e.scheduled_start)}</td>
+                  <td>{STATUS_LABEL[e.status]}</td>
+                  <td>
+                    <div className="row-actions">
+                      <Link href={`/events/${e.chapter.slug}/${e.slug}/manage`}>manage</Link>
+                      <Link href={`/events/${e.chapter.slug}/${e.slug}/edit`}>edit</Link>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {list.map((c) => {
-                  const s = STATUS[c.verification_status] ?? {
-                    label: c.verification_status,
-                    cls: "badge-unverified",
-                    blurb: "",
-                  };
-                  return (
-                    <tr key={c.id}>
-                      <td>
-                        <Link href={`/chapters/${c.slug}`}>{c.name}</Link>
-                      </td>
-                      <td>{c.tier}</td>
-                      <td>
-                        <span className={`badge ${s.cls}`}>{s.label}</span>
-                        {s.blurb && <span className="badge-blurb"> — {s.blurb}</span>}
-                      </td>
-                      <td>
-                        <div className="row-actions">
-                          <Link href={`/chapters/${c.slug}/edit`}>edit</Link>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* my participations */}
+      <h2 className="h2"># my invitations &amp; applications</h2>
+      {parts.length === 0 ? (
+        <p className="note">
+          // nothing yet. <Link href="/events">browse events &rarr;</Link>
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>event</th>
+                <th>role</th>
+                <th>via</th>
+                <th>status</th>
+                <th>actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parts.map((p) => {
+                const isInvitePending = p.source === "invited" && p.status === "pending";
+                const canWithdraw = p.status === "pending" || p.status === "registered";
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <Link href={`/events/${p.event.chapter_slug}/${p.event.slug}`}>
+                        {p.event.name}
+                      </Link>
+                    </td>
+                    <td>{ROLE_LABEL[p.role]}</td>
+                    <td>{SOURCE_LABEL[p.source]}</td>
+                    <td>{PARTICIPANT_STATUS_LABEL[p.status]}</td>
+                    <td>
+                      <div className="row-actions">
+                        {isInvitePending && (
+                          <>
+                            <button
+                              type="button"
+                              className="linkbtn"
+                              onClick={() => respond(p, "accept")}
+                            >
+                              accept
+                            </button>
+                            <button
+                              type="button"
+                              className="linkbtn-danger"
+                              onClick={() => respond(p, "decline")}
+                            >
+                              decline
+                            </button>
+                          </>
+                        )}
+                        {!isInvitePending && canWithdraw && (
                           <button
                             type="button"
                             className="linkbtn-danger"
-                            onClick={() => onDelete(c)}
+                            onClick={() => withdraw(p)}
                           >
-                            delete
+                            withdraw
                           </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="note">
-            <Link href="/chapters/new">+ apply to create another chapter</Link>
-          </p>
-        </>
+                        )}
+                        {!isInvitePending && !canWithdraw && <span className="dim">—</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
   );

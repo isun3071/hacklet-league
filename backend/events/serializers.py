@@ -105,7 +105,12 @@ class EventParticipantSerializer(serializers.ModelSerializer):
         return ""
 
     def get_event(self, obj):
-        return {"id": str(obj.event_id), "slug": obj.event.slug, "name": obj.event.name}
+        return {
+            "id": str(obj.event_id),
+            "slug": obj.event.slug,
+            "name": obj.event.name,
+            "chapter_slug": obj.event.chapter.slug,
+        }
 
 
 class _RoleSpecSerializer(serializers.Serializer):

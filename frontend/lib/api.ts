@@ -103,7 +103,7 @@ export type ParticipantStatus =
 
 export type Participant = {
   id: string;
-  event: { id: string; slug: string; name: string };
+  event: { id: string; slug: string; name: string; chapter_slug: string };
   role: ParticipantRole;
   judge_specialization: JudgeSpecialization;
   source: ParticipantSource;
