@@ -138,6 +138,20 @@ export async function getEvent(
   return rows[0] ?? null;
 }
 
+export type ChapterRole = "owner" | "organizer" | "judge";
+
+export type ChapterStaffRow = {
+  id: string;
+  chapter_slug: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  roles: ChapterRole[];
+  status: "pending" | "active" | "suspended";
+  joined_at: string;
+  notes: string;
+};
+
 export async function getEventParticipants(eventId: string): Promise<Participant[]> {
   const res = await fetch(`${API_BASE}/api/events/${eventId}/participants/`, {
     cache: "no-store",

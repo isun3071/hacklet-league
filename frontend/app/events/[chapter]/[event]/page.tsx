@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EventApply } from "@/components/EventApply";
 import { getEvent, getEventParticipants, type Participant } from "@/lib/api";
 import {
   ACCESS_LABEL,
@@ -86,6 +87,8 @@ export default async function EventPage({
         {event.description && <p className="chapter-desc">{event.description}</p>}
       </div>
 
+      <EventApply eventId={event.id} accessMode={event.access_mode} />
+
       <h2 className="h2"># participants</h2>
       {participants.length === 0 ? (
         <p className="note">// no one registered yet.</p>
@@ -125,6 +128,10 @@ export default async function EventPage({
 
       <p className="note">
         <Link href="/events">&larr; all events</Link>
+        {"  ·  "}
+        <Link href={`/events/${event.chapter.slug}/${event.slug}/manage`}>
+          organizer tools &rarr;
+        </Link>
       </p>
     </main>
   );
