@@ -87,7 +87,11 @@ export default async function EventPage({
         {event.description && <p className="chapter-desc">{event.description}</p>}
       </div>
 
-      <EventApply eventId={event.id} accessMode={event.access_mode} />
+      <EventApply
+        eventId={event.id}
+        accessMode={event.access_mode}
+        status={event.status}
+      />
 
       <h2 className="h2"># participants</h2>
       {participants.length === 0 ? (

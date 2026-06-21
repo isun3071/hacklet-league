@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { request } from "@/lib/http";
 import { getSession } from "@/lib/auth";
-import type { AccessMode, ParticipantRole } from "@/lib/api";
+import type { AccessMode, EventStatus, ParticipantRole } from "@/lib/api";
 
 const OPTIONS: { role: ParticipantRole; label: string }[] = [
   { role: "player", label: "I want to compete" },
@@ -12,12 +12,22 @@ const OPTIONS: { role: ParticipantRole; label: string }[] = [
   { role: "audience", label: "I want to attend" },
 ];
 
+const CLOSED_NOTE: Partial<Record<EventStatus, string>> = {
+  scheduled: "registration hasn't opened yet — check back soon.",
+  registration_closed: "registration has closed for this event.",
+  in_progress: "this event is underway.",
+  completed: "this event has concluded.",
+  cancelled: "this event was cancelled.",
+};
+
 export function EventApply({
   eventId,
   accessMode,
+  status,
 }: {
   eventId: string;
   accessMode: AccessMode;
+  status: EventStatus;
 }) {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,6 +43,9 @@ export function EventApply({
     return (
       <p className="note">// invite-only — you need an invitation from the organizers to take part.</p>
     );
+  }
+  if (status !== "registration_open") {
+    return <p className="note">// {CLOSED_NOTE[status] ?? "registration is closed."}</p>;
   }
   if (authed === null) return null;
   if (authed === false) {

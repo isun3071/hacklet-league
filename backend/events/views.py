@@ -127,6 +127,10 @@ class EventViewSet(
         if not is_chapter_manager(self.request.user, event.chapter):
             raise PermissionDenied("You don't manage this event's chapter.")
 
+    def _require_active_event(self, event):
+        if event.status in (Event.Status.COMPLETED, Event.Status.CANCELLED):
+            raise ValidationError("This event is closed; you can't add participants.")
+
     def _participant_response(self, participant, status_code=status.HTTP_200_OK):
         ser = EventParticipantSerializer(
             participant,
@@ -157,6 +161,8 @@ class EventViewSet(
         event = self.get_object()
         if event.access_mode != Event.AccessMode.APPLICATION:
             raise PermissionDenied("This event is invite-only.")
+        if event.status != Event.Status.REGISTRATION_OPEN:
+            raise ValidationError("Registration isn't open for this event.")
         ser = ApplySerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         if EventParticipant.objects.filter(event=event, user=request.user).exists():
@@ -183,6 +189,7 @@ class EventViewSet(
         """Manager invites someone by account (user_id) or by email (may be unregistered)."""
         event = self.get_object()
         self._require_manager(event)
+        self._require_active_event(event)
         ser = InviteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
@@ -224,6 +231,7 @@ class EventViewSet(
         Corps judges are pre-vetted, so they're registered directly."""
         event = self.get_object()
         self._require_manager(event)
+        self._require_active_event(event)
         ser = CorpsJudgeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         staff = (

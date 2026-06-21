@@ -66,6 +66,16 @@ class EventWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"chapter": "An event can't be moved to another chapter."}
             )
+        # Completed/cancelled are terminal — their status can't change.
+        if self.instance and "status" in attrs:
+            current = self.instance.status
+            if (
+                current in (Event.Status.COMPLETED, Event.Status.CANCELLED)
+                and attrs["status"] != current
+            ):
+                raise serializers.ValidationError(
+                    {"status": f"A {current} event can't change status."}
+                )
         return attrs
 
 

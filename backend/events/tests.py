@@ -217,6 +217,7 @@ def app_event(db, manager, chapter):
     return _mk_event(
         chapter, "Open Event", "open-event", manager,
         access_mode=Event.AccessMode.APPLICATION,
+        status=Event.Status.REGISTRATION_OPEN,
     )
 
 
@@ -503,3 +504,64 @@ def test_withdraw(player, app_event):
     assert r.status_code == 200
     p.refresh_from_db()
     assert p.status == "withdrawn"
+
+
+# ===========================================================================
+# increment 4 — registration window + status-lifecycle guardrails
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_apply_blocked_unless_registration_open(player, manager, chapter):
+    # an application event that is merely SCHEDULED (registration not open yet)
+    ev = _mk_event(
+        chapter, "Not Open", "not-open", manager,
+        access_mode=Event.AccessMode.APPLICATION, status=Event.Status.SCHEDULED,
+    )
+    c = APIClient()
+    c.force_authenticate(player)
+    r = c.post(f"/api/events/{ev.id}/apply/", {"role": "player"}, format="json")
+    assert r.status_code == 400
+    # opening registration lets it through
+    ev.status = Event.Status.REGISTRATION_OPEN
+    ev.save(update_fields=["status"])
+    r = c.post(f"/api/events/{ev.id}/apply/", {"role": "player"}, format="json")
+    assert r.status_code == 201
+
+
+@pytest.mark.django_db
+def test_cannot_invite_to_completed_event(manager, chapter):
+    ev = _mk_event(
+        chapter, "Done", "done", manager,
+        access_mode=Event.AccessMode.APPLICATION, status=Event.Status.COMPLETED,
+    )
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.post(
+        f"/api/events/{ev.id}/invite/",
+        {"email": "late@example.com", "role": "player"}, format="json",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_completed_event_status_is_locked(manager, chapter):
+    ev = _mk_event(
+        chapter, "Final", "final", manager, status=Event.Status.COMPLETED,
+    )
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.patch(f"/api/events/{ev.id}/", {"status": "scheduled"}, format="json")
+    assert r.status_code == 400
+    # a non-status edit on a completed event is still fine
+    r = c.patch(f"/api/events/{ev.id}/", {"description": "recap"}, format="json")
+    assert r.status_code == 200
+
+
+@pytest.mark.django_db
+def test_non_terminal_status_transitions_freely(manager, chapter):
+    ev = _mk_event(chapter, "Flow", "flow", manager, status=Event.Status.SCHEDULED)
+    c = APIClient()
+    c.force_authenticate(manager)
+    r = c.patch(f"/api/events/{ev.id}/", {"status": "registration_open"}, format="json")
+    assert r.status_code == 200
+    assert r.data["status"] == "registration_open"
