@@ -1,8 +1,30 @@
+import { AsciiRule } from "@/components/AsciiRule";
+import { FuzzWave } from "@/components/FuzzWave";
+import { Icon } from "@/components/Icon";
+import { TimelineBar, type Phase } from "@/components/TimelineBar";
+
+const VIBE_PHASES: Phase[] = [
+  { name: "opening", mins: 5, time: "5m", tone: "muted" },
+  { name: "build", mins: 24, time: "24m", tone: "accent" },
+  { name: "defend", mins: 18, time: "18m", tone: "danger" },
+  { name: "pitch", mins: 15, time: "5–30m", tone: "muted" },
+  { name: "awards", mins: 8, time: "8m", tone: "muted" },
+];
+
+const UNSLOP_PHASES: Phase[] = [
+  { name: "opening", mins: 5, time: "5m", tone: "muted" },
+  { name: "remediate", mins: 24, time: "24m", tone: "accent" },
+  { name: "defend", mins: 18, time: "18m", tone: "danger" },
+  { name: "pitch", mins: 15, time: "5–30m", tone: "muted" },
+  { name: "awards", mins: 8, time: "8m", tone: "muted" },
+];
+
 export default function Home() {
   return (
     <main>
       {/* SECTION 1: HERO */}
       <section className="container hero">
+        <FuzzWave />
         <h1 className="headline">
           24 minutes of competitive vibecoding. no slop survives.
         </h1>
@@ -13,7 +35,7 @@ export default function Home() {
         </p>
       </section>
 
-      <hr className="rule" />
+      <AsciiRule />
 
       {/* SECTION 2: DICTIONARY ENTRY */}
       <section className="container block" id="define">
@@ -36,7 +58,7 @@ export default function Home() {
         </div>
       </section>
 
-      <hr className="rule" />
+      <AsciiRule />
 
       {/* SECTION 3: HOW IT WORKS */}
       <section className="container block" id="how">
@@ -51,8 +73,13 @@ export default function Home() {
   unslop   diagnose and fix a broken ai-generated app (the kind
            you'd call "slop")`}</pre>
 
-        <h3 className="h3">## HackLet Vibe: build from scratch</h3>
+        <h3 className="h3">
+          <span className="icon-label">
+            <Icon name="vibe" /> ## HackLet Vibe: build from scratch
+          </span>
+        </h3>
         <p className="body">Build a working web app with AI assistance of your own choice.</p>
+        <TimelineBar phases={VIBE_PHASES} />
         <pre className="codeblock">{`$ ./hacklet --format vibe --timeline
   5 min     opening · round prep
   24 min    build · ai-assisted building (aka vibecoding)
@@ -65,11 +92,16 @@ export default function Home() {
           apps of function, instead of apps of just form.
         </p>
 
-        <h3 className="h3">## HackLet Unslop: fix the slop (hence the name ;) )</h3>
+        <h3 className="h3">
+          <span className="icon-label">
+            <Icon name="unslop" /> ## HackLet Unslop: fix the slop (hence the name ;) )
+          </span>
+        </h3>
         <p className="body">
           Receive a broken AI-written codebase at the beginning. Figure out what&rsquo;s wrong
           across multiple dimensions and improve upon it. Ship a defended version.
         </p>
+        <TimelineBar phases={UNSLOP_PHASES} />
         <pre className="codeblock">{`$ ./hacklet --format unslop --timeline
   5 min     opening · broken codebase revealed
   24 min    remediate · ai-assisted diagnosis and repair
@@ -83,7 +115,7 @@ export default function Home() {
         </p>
       </section>
 
-      <hr className="rule" />
+      <AsciiRule />
 
       {/* SECTION 4: CTA / NEWSLETTER SIGNUP */}
       <section className="container block" id="signup">
