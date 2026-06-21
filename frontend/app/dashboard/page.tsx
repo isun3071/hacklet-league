@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { request } from "@/lib/http";
+import { Icon } from "@/components/Icon";
 import type { Chapter, LeagueEvent, Participant } from "@/lib/api";
 import {
   PARTICIPANT_STATUS_LABEL,
@@ -209,7 +210,11 @@ export default function DashboardPage() {
                         {p.event.name}
                       </Link>
                     </td>
-                    <td>{ROLE_LABEL[p.role]}</td>
+                    <td>
+                      <span className="icon-label">
+                        <Icon name={p.role} /> {ROLE_LABEL[p.role]}
+                      </span>
+                    </td>
                     <td>{SOURCE_LABEL[p.source]}</td>
                     <td>{PARTICIPANT_STATUS_LABEL[p.status]}</td>
                     <td>

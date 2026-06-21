@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EventApply } from "@/components/EventApply";
+import { Icon } from "@/components/Icon";
 import { getEvent, getEventParticipants, type Participant } from "@/lib/api";
 import {
   ACCESS_LABEL,
@@ -118,7 +119,11 @@ export default async function EventPage({
                 {participants.map((p) => (
                   <tr key={p.id}>
                     <td>{p.display_name || "—"}</td>
-                    <td>{ROLE_LABEL[p.role]}</td>
+                    <td>
+                      <span className="icon-label">
+                        <Icon name={p.role} /> {ROLE_LABEL[p.role]}
+                      </span>
+                    </td>
                     <td>
                       {p.role === "judge" ? SPECIALIZATION_LABEL[p.judge_specialization] : "—"}
                     </td>

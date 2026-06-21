@@ -43,6 +43,19 @@ body::after {
   opacity: 0.5;
 }
 
+/* Atmosphere: faint grid + edge vignette + a soft accent glow up top. Sits behind
+   all content (z-index -1), pointer-events none — purely a backdrop. */
+body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(70% 45% at 50% -8%, rgba(182, 244, 0, 0.07), transparent 70%),
+    radial-gradient(130% 120% at 50% 30%, transparent 55%, rgba(0, 0, 0, 0.55)),
+    linear-gradient(rgba(182, 244, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(182, 244, 0, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+}
+
 ::selection { background: var(--accent); color: var(--bg); }
 
 .container { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 1.5rem; }
@@ -81,6 +94,18 @@ a { color: var(--accent); text-decoration: none; }
 .readout { color: var(--accent); font-size: clamp(0.85rem, 1.8vw, 1rem); margin: 0 0 1.3rem; letter-spacing: 0.02em; }
 .sub { color: var(--muted); font-size: clamp(0.95rem, 1.8vw, 1.1rem); max-width: 60ch; margin: 0 0 1.8rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2rem; }
+
+/* Hero: staggered "boot print" reveal — each line prints in just after the last. */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.hero > * { opacity: 0; animation: rise 0.5s ease-out forwards; }
+.hero > .prompt { animation-delay: 0.05s; }
+.hero > .headline { animation-delay: 0.28s; }
+.hero > .readout { animation-delay: 0.48s; }
+.hero > .sub { animation-delay: 0.64s; }
+.hero > .actions { animation-delay: 0.82s; }
+@media (prefers-reduced-motion: reduce) {
+  .hero > * { opacity: 1; transform: none; animation: none; }
+}
 
 /* Buttons / links */
 .btn {
@@ -175,6 +200,12 @@ a { color: var(--accent); text-decoration: none; }
 .linkbtn { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
 .linkbtn:hover { text-decoration: underline; }
 .check { display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 0.9rem; font-size: 0.9rem; }
+
+/* Format timeline diagram + inline functional icons */
+.fmt-timeline { display: block; width: 100%; max-width: 640px; height: auto; margin: 0.4rem 0 0.6rem; }
+.fmt-timeline text { font-family: var(--mono); }
+.icon { width: 1em; height: 1em; vertical-align: -0.125em; flex: none; }
+.icon-label { display: inline-flex; align-items: center; gap: 0.4rem; }
 .kv { margin: 0 0 1.2rem; display: grid; gap: 0.55rem; }
 .kv div { display: flex; gap: 1rem; font-size: 0.92rem; }
 .kv dt { color: var(--muted); min-width: 7rem; }

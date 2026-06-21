@@ -1,3 +1,5 @@
+import { FormatTimeline } from "@/components/FormatTimeline";
+
 export default function Home() {
   return (
     <main>
@@ -32,6 +34,7 @@ export default function Home() {
           At zero, the network drops and your code freezes. A commit grabs exactly what was
           there at the buzzer, and that&rsquo;s your submission. Then it gets attacked.
         </p>
+        <FormatTimeline />
       </section>
 
       <hr className="rule" />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { request } from "@/lib/http";
 import { getSession } from "@/lib/auth";
+import { Icon } from "@/components/Icon";
 import type { AccessMode, EventStatus, ParticipantRole } from "@/lib/api";
 
 const OPTIONS: { role: ParticipantRole; label: string }[] = [
@@ -91,7 +92,7 @@ export function EventApply({
             disabled={busy}
             onClick={() => apply(o.role)}
           >
-            [ {o.label} ]
+            [ <Icon name={o.role} /> {o.label} ]
           </button>
         ))}
       </div>
