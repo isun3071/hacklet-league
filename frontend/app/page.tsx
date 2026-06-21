@@ -1,62 +1,96 @@
-import { FormatTimeline } from "@/components/FormatTimeline";
-
 export default function Home() {
   return (
     <main>
+      {/* SECTION 1: HERO */}
       <section className="container hero">
-        <p className="prompt">
-          hacklet@league:~$ ./about --season-1<span className="cursor">█</span>
-        </p>
-        <h1 className="headline">The fuzz is what separates hacklets from slop.</h1>
-        <p className="readout">build 24:00 &middot; one AI &middot; ship it &middot; then defend it</p>
+        <h1 className="headline">
+          24 minutes of competitive vibecoding. no slop survives.
+        </h1>
+        <p className="readout">build with AI • defend it • pitch it • under pressure</p>
         <p className="sub">
-          24 minutes. One AI. Build a web app, then watch attackers try to break it.
-          The people who win can steer a model and catch its mistakes before they ship.
+          We took a hackathon and messed up the units. Now we only get 24 minutes to build.
+          AI included. The winners can steer it and avoid catastrophic bugs on stage.
         </p>
-        <div className="actions">
-          <a className="btn" href="#signup">[ get updates ]</a>
+      </section>
+
+      <hr className="rule" />
+
+      {/* SECTION 2: DICTIONARY ENTRY */}
+      <section className="container block" id="define">
+        <div className="dict">
+          <p className="dict-head">
+            hack<span className="dict-sep">•</span>let
+            <span className="dict-ipa">(hæk-lət)</span>
+            <span className="dict-pos">n.</span>
+          </p>
+          <ol className="dict-defs">
+            <li>
+              An app built in a very short amount of time, typically with AI assistance:{" "}
+              <em>My roommate built a hacklet while waiting for his flight.</em>
+            </li>
+            <li>
+              A tightly compressed hackathon with an audience possibility:{" "}
+              <em>Come attend a hacklet; it lasts no longer than a cs club meeting.</em>
+            </li>
+          </ol>
         </div>
       </section>
 
       <hr className="rule" />
 
-      <section className="container block" id="format">
-        <h2 className="h2"># the format</h2>
+      {/* SECTION 3: HOW IT WORKS */}
+      <section className="container block" id="how">
+        <h2 className="h2"># how it works</h2>
         <p className="body">
-          <strong className="hl">
-            Hackathon, but minutes instead of hours. With a crowd watching.
-          </strong>{" "}
-          You get 24 minutes and one mid-tier AI to build a working web app and write it
-          up. No web search, no second AI, no pasting from Stack Overflow. What&rsquo;s left
-          is how well you drive the model, and whether you catch it when it&rsquo;s wrong.
+          HackLet League runs two formats. Both compress engineering into 24 minutes with AI,
+          both run the same QA catalog at time expiry, both score across resilience and
+          communication. They differ in what you do during the build phase.
         </p>
+        <pre className="codeblock">{`$ ./hacklet --formats
+  vibe     build a working web app from scratch
+  unslop   diagnose and fix a broken ai-generated app (the kind
+           you'd call "slop")`}</pre>
+
+        <h3 className="h3">## HackLet Vibe: build from scratch</h3>
+        <p className="body">Build a working web app with AI assistance of your own choice.</p>
+        <pre className="codeblock">{`$ ./hacklet --format vibe --timeline
+  5 min     opening · round prep
+  24 min    build · ai-assisted building (aka vibecoding)
+  18 min    defend · qa testing + pitch prep
+  5-30 min  pitch · judging
+  8 min     awards · closing`}</pre>
         <p className="body">
-          At zero, the network drops and your code freezes. A commit grabs exactly what was
-          there at the buzzer, and that&rsquo;s your submission. Then it gets attacked.
+          HackLet Vibe is akin to a traditional hackathon except with time compressed to
+          minutes instead of hours. As AI is ubiquitous, HackLet Vibe tests if you can build
+          apps of function, instead of apps of just form.
         </p>
-        <FormatTimeline />
+
+        <h3 className="h3">## HackLet Unslop: fix the slop (hence the name ;) )</h3>
+        <p className="body">
+          Receive a broken AI-written codebase at the beginning. Figure out what&rsquo;s wrong
+          across multiple dimensions and improve upon it. Ship a defended version.
+        </p>
+        <pre className="codeblock">{`$ ./hacklet --format unslop --timeline
+  5 min     opening · broken codebase revealed
+  24 min    remediate · ai-assisted diagnosis and repair
+  18 min    defend · same qa testing + pitch prep
+  5-30 min  pitch · same judging
+  8 min     awards · closing`}</pre>
+        <p className="body">
+          HackLet Unslop reflects the reality of engineering work: working with existing
+          codebases that may or may not be functioning ideally. HackLet Unslop tests if you
+          can deal with existing code you see at work... under pressure.
+        </p>
       </section>
 
       <hr className="rule" />
 
-      <section className="container band">
-        <p className="band-line">
-          <span className="dim">//</span> the models do the typing. the judgment is yours.
-        </p>
-        <p className="band-sub">
-          A model will write you a demo in a minute. Whether it survives a real attacker is
-          the harder question, and the more interesting one. That doesn&rsquo;t get easier as
-          the models improve. It&rsquo;s the part we score.
-        </p>
-      </section>
-
-      <hr className="rule" />
-
+      {/* SECTION 4: CTA / NEWSLETTER SIGNUP */}
       <section className="container block" id="signup">
-        <h2 className="h2"># season one is coming</h2>
+        <h2 className="h2"># First HackLet coming soon</h2>
         <p className="body">
-          I&rsquo;m still building this. Leave your email and I&rsquo;ll let you know when there&rsquo;s a
-          season to sign up for.
+          I&rsquo;m still building this. Leave your email and I&rsquo;ll let you know when
+          there&rsquo;s a HackLet to sign up for.
         </p>
         <form
           className="signup-form"

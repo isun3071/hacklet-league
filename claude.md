@@ -10,6 +10,22 @@ HackLet League is a competitive format for AI-assisted technical building. In on
 
 This repository implements hackletleague.com, the platform that coordinates league operations, manages chapters and users, runs the AI proxy, executes fuzz testing, and maintains rankings. The platform is event coordination and credentialing infrastructure, not a development environment. Players develop locally on chapter-operated workstations; the platform supplies the AI chat interface and event coordination.
 
+## Brand vocabulary: `hacklet` vs `HackLet` (load-bearing)
+
+Capitalization carries meaning — this is institutional vocabulary discipline. Apply it consistently across **all copy, all files, all surfaces** (current and future). Without the documented convention, the distinction drifts.
+
+- **`hacklet`** (lowercase) — the **generic** noun: an app built quickly with AI assistance, OR a compressed hackathon-like event anyone can run. Use in slogans, generic descriptions, the dictionary entry, casual mentions, and example sentences.
+- **`HackLet`** (CamelCase) — **HackLet League-sanctioned** events, formats, tournaments, or the league itself. Use for institutional references, formal event names, format names (HackLet Vibe, HackLet Unslop), and the organization-as-noun.
+
+Correct usage:
+- ✓ "the fuzz is what separates hacklets from slop" (generic principle)
+- ✓ "Come attend a hacklet" (generic event)
+- ✓ "build a hacklet in 24 minutes" (generic activity)
+- ✓ "First HackLet coming soon" (formal league event)
+- ✓ "HackLet League runs two formats" (the league)
+- ✓ "HackLet Vibe is akin to..." (formal format name)
+- ✓ "qualified for HackLet Vibe Sprint Regionals" (formal tournament)
+
 ## Tech Stack
 
 - **Backend**: Django 5.x + Django REST Framework + Django Channels
