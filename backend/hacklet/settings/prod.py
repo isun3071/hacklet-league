@@ -21,6 +21,10 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["https://hackle
 SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
+# One proxy in front (Caddy). Lets DRF read the real client IP from X-Forwarded-For for
+# per-IP throttling (the newsletter endpoint) rather than seeing Caddy's address for all.
+REST_FRAMEWORK = {**REST_FRAMEWORK, "NUM_PROXIES": 1}  # noqa: F405
+
 # Transactional email — three paths, in priority order:
 #   1. RESEND_API_KEY set  -> Resend HTTP API over 443 (recommended). Survives ISPs
 #      that block SMTP ports, and uses Resend's sending reputation (good for a box on

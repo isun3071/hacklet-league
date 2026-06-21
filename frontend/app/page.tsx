@@ -1,6 +1,7 @@
 import { AsciiRule } from "@/components/AsciiRule";
 import { FuzzWave } from "@/components/FuzzWave";
 import { Icon } from "@/components/Icon";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { TimelineBar, type Phase } from "@/components/TimelineBar";
 
 const VIBE_PHASES: Phase[] = [
@@ -124,25 +125,7 @@ export default function Home() {
           I&rsquo;m still building this. Leave your email and I&rsquo;ll let you know when
           there&rsquo;s a HackLet to sign up for.
         </p>
-        <form
-          className="signup-form"
-          action="https://buttondown.com/api/emails/embed-subscribe/iansun20"
-          method="post"
-          target="popupwindow"
-        >
-          <label className="sr-only" htmlFor="bd-email">email address</label>
-          <span className="form-prompt">subscribe:~$</span>
-          <input
-            id="bd-email"
-            type="email"
-            name="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            required
-          />
-          <input type="hidden" name="embed" defaultValue="1" />
-          <button type="submit" className="btn">[ notify me ]</button>
-        </form>
+        <NewsletterSignup />
       </section>
     </main>
   );

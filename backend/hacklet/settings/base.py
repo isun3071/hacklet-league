@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "users",
     "chapters",
     "events",
+    "newsletter",
 ]
 
 MIDDLEWARE = [
@@ -119,6 +120,11 @@ HEADLESS_FRONTEND_URLS = {
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="HackLet League <no-reply@hackletleague.com>")
 
+# Newsletter (Buttondown). The API key is secret — only the backend proxy view uses it,
+# never the browser. Distinct from transactional email (Resend) above. See claude.md.
+BUTTONDOWN_API_KEY = env("BUTTONDOWN_API_KEY", default="")
+BUTTONDOWN_API_URL = env("BUTTONDOWN_API_URL", default="https://api.buttondown.com/v1")
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -147,4 +153,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticatedOrReadOnly",
     ],
+    # Only views that opt in (e.g. the public newsletter endpoint) are throttled.
+    "DEFAULT_THROTTLE_RATES": {"newsletter": "30/hour"},
 }

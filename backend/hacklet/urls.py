@@ -7,6 +7,7 @@ from rest_framework.routers import DefaultRouter
 
 from chapters.views import ChapterStaffViewSet, ChapterViewSet
 from events.views import EventParticipantViewSet, EventViewSet
+from newsletter.views import NewsletterSubscribeView
 from users.views import MeView
 
 
@@ -33,6 +34,7 @@ urlpatterns = [
     path("api/healthz", healthz),
     path("api/csrf/", csrf),
     path("api/me/", MeView.as_view()),
+    path("api/newsletter/subscribe/", NewsletterSubscribeView.as_view()),
     path("api/", include(router.urls)),
     # django-allauth. The headless API drives the SPA; the regular allauth URLs are
     # mounted because (even with HEADLESS_ONLY) they serve the social provider OAuth
