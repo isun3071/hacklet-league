@@ -88,8 +88,8 @@ a { color: var(--accent); text-decoration: none; }
 @keyframes blink { 50% { opacity: 0; } }
 .headline {
   font-size: clamp(1.7rem, 5vw, 3rem); line-height: 1.08; font-weight: 700;
-  letter-spacing: -0.01em; text-transform: uppercase; color: var(--text);
-  margin: 0 0 1.3rem; max-width: 20ch;
+  letter-spacing: -0.01em; color: var(--text);
+  margin: 0 0 1.3rem; max-width: 26ch;
 }
 .readout { color: var(--accent); font-size: clamp(0.85rem, 1.8vw, 1rem); margin: 0 0 1.3rem; letter-spacing: 0.02em; }
 .sub { color: var(--muted); font-size: clamp(0.95rem, 1.8vw, 1.1rem); max-width: 60ch; margin: 0 0 1.8rem; }
