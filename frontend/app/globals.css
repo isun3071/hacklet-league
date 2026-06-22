@@ -319,3 +319,34 @@ a { color: var(--accent); text-decoration: none; }
 .menu-panel a:hover, .menu-item-btn:hover {
   color: var(--accent); background: rgba(182, 244, 0, 0.07);
 }
+
+/* Dashboard command-center stats */
+.statband {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 0 0 1.4rem;
+}
+.statband .stat { background: var(--panel); }
+.stat { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem 1.1rem; }
+.stat-num {
+  font-family: var(--mono); font-weight: 700; color: var(--accent);
+  font-size: clamp(1.5rem, 4vw, 2.1rem); line-height: 1;
+}
+.stat-label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat--sm { padding: 0.45rem 0.2rem; gap: 0.15rem; }
+.stat--sm .stat-num { font-size: 1.25rem; }
+
+.statcards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem; margin: 0 0 1.2rem;
+}
+.statcard {
+  border: 1px solid var(--line); background: var(--panel);
+  padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.9rem;
+}
+.statcard-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
+.statcard-title { color: var(--text); font-weight: 700; font-size: 1.05rem; margin-right: auto; }
+.statcard-title:hover { color: var(--accent); }
+.statcard-metrics {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem 0.4rem;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.7rem 0;
+}

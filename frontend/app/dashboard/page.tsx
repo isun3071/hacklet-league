@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { request } from "@/lib/http";
 import { Icon } from "@/components/Icon";
-import type { Chapter, LeagueEvent, Participant } from "@/lib/api";
+import type { Chapter, ChapterStat, LeagueEvent, Participant } from "@/lib/api";
 import {
   PARTICIPANT_STATUS_LABEL,
   ROLE_LABEL,
@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [events, setEvents] = useState<LeagueEvent[]>([]);
   const [parts, setParts] = useState<Participant[]>([]);
+  const [stats, setStats] = useState<ChapterStat[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "unauth">("loading");
 
   useEffect(() => {
@@ -34,12 +35,14 @@ export default function DashboardPage() {
         return;
       }
       setChapters(ch.data);
-      const [ev, pp] = await Promise.all([
+      const [ev, pp, st] = await Promise.all([
         request<LeagueEvent[]>("/api/events/mine/", "GET"),
         request<Participant[]>("/api/event-participants/mine/", "GET"),
+        request<ChapterStat[]>("/api/chapters/stats/", "GET"),
       ]);
       if (ev.data) setEvents(ev.data);
       if (pp.data) setParts(pp.data);
+      if (st.data) setStats(st.data);
       setState("ready");
     })();
   }, []);
@@ -85,9 +88,51 @@ export default function DashboardPage() {
     );
   }
 
+  const statById = new Map(stats.map((s) => [s.chapter_id, s]));
+  const totals = stats.reduce(
+    (a, s) => ({
+      events: a.events + s.events_total,
+      players: a.players + s.players,
+      rounds: a.rounds + s.rounds_total,
+      ranked: a.ranked + s.ranked_players,
+    }),
+    { events: 0, players: 0, rounds: 0, ranked: 0 },
+  );
+  const metric = (num: number, label: string) => (
+    <div className="stat stat--sm">
+      <span className="stat-num">{num}</span>
+      <span className="stat-label">{label}</span>
+    </div>
+  );
+
   return (
     <main className="container block">
       <h1 className="page-title"># dashboard</h1>
+
+      {chapters.length > 0 && (
+        <div className="statband">
+          <div className="stat">
+            <span className="stat-num">{chapters.length}</span>
+            <span className="stat-label">chapters</span>
+          </div>
+          <div className="stat">
+            <span className="stat-num">{totals.events}</span>
+            <span className="stat-label">events hosted</span>
+          </div>
+          <div className="stat">
+            <span className="stat-num">{totals.players}</span>
+            <span className="stat-label">player regs</span>
+          </div>
+          <div className="stat">
+            <span className="stat-num">{totals.rounds}</span>
+            <span className="stat-label">rounds run</span>
+          </div>
+          <div className="stat">
+            <span className="stat-num">{totals.ranked}</span>
+            <span className="stat-label">ranked players</span>
+          </div>
+        </div>
+      )}
 
       {/* chapters */}
       <h2 className="h2" id="my-chapters"># my chapters</h2>
@@ -96,50 +141,45 @@ export default function DashboardPage() {
           // no chapters yet. <Link href="/chapters/new">apply to create one &rarr;</Link>
         </p>
       ) : (
-        <div className="table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>chapter</th>
-                <th>tier</th>
-                <th>status</th>
-                <th>actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chapters.map((c) => {
-                const s = CHAPTER_STATUS[c.verification_status] ?? {
-                  label: c.verification_status,
-                  cls: "badge-unverified",
-                };
-                return (
-                  <tr key={c.id}>
-                    <td>
-                      <Link href={`/chapters/${c.slug}`}>{c.name}</Link>
-                    </td>
-                    <td>{c.tier}</td>
-                    <td>
-                      <span className={`badge ${s.cls}`}>{s.label}</span>
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <Link href={`/events/new?chapter=${c.slug}`}>new event</Link>
-                        <Link href={`/chapters/${c.slug}/staff`}>staff</Link>
-                        <Link href={`/chapters/${c.slug}/edit`}>edit</Link>
-                        <button
-                          type="button"
-                          className="linkbtn-danger"
-                          onClick={() => deleteChapter(c)}
-                        >
-                          delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="statcards">
+          {chapters.map((c) => {
+            const badge = CHAPTER_STATUS[c.verification_status] ?? {
+              label: c.verification_status,
+              cls: "badge-unverified",
+            };
+            const s = statById.get(c.id);
+            return (
+              <div className="statcard" key={c.id}>
+                <div className="statcard-head">
+                  <Link href={`/chapters/${c.slug}`} className="statcard-title">
+                    {c.name}
+                  </Link>
+                  <span className="dim">Tier {c.tier}</span>
+                  <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                </div>
+                <div className="statcard-metrics">
+                  {metric(s?.events_total ?? 0, "events")}
+                  {metric(s?.players ?? 0, "players")}
+                  {metric(s?.judges ?? 0, "judges")}
+                  {metric(s?.members_total ?? 0, "members")}
+                  {metric(s?.rounds_total ?? 0, "rounds")}
+                  {metric(s?.ranked_players ?? 0, "ranked")}
+                </div>
+                <div className="row-actions">
+                  <Link href={`/events/new?chapter=${c.slug}`}>new event</Link>
+                  <Link href={`/chapters/${c.slug}/staff`}>staff</Link>
+                  <Link href={`/chapters/${c.slug}/edit`}>edit</Link>
+                  <button
+                    type="button"
+                    className="linkbtn-danger"
+                    onClick={() => deleteChapter(c)}
+                  >
+                    delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

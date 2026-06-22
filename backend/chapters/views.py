@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from .models import Chapter, ChapterStaff
 from .permissions import is_chapter_manager, is_chapter_owner
+from .stats import chapter_stats
 from .serializers import (
     ChapterSerializer,
     ChapterStaffSerializer,
@@ -99,6 +100,11 @@ class ChapterViewSet(
         """Chapters the current user created, any status (for their dashboard)."""
         qs = Chapter.objects.filter(created_by=request.user)
         return Response(self.get_serializer(qs, many=True).data)
+
+    @action(detail=False, permission_classes=[permissions.IsAuthenticated])
+    def stats(self, request):
+        """Command-center dashboard aggregates per chapter the user manages."""
+        return Response(chapter_stats(request.user))
 
 
 class ChapterStaffViewSet(

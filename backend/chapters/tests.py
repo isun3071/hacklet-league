@@ -307,3 +307,59 @@ def test_mine_lists_my_staff_rows(owner, owned_chapter):
     assert r.status_code == 200
     assert len(r.data) == 1
     assert r.data[0]["chapter_slug"] == "owned"
+
+
+@pytest.mark.django_db
+def test_chapter_stats_endpoint(user):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from events.models import Event, EventParticipant
+    from rounds.models import Round
+
+    chapter = Chapter.objects.create(
+        name="BU", slug="bu", created_by=user, tier="A",
+        verification_status=Chapter.VerificationStatus.VERIFIED,
+    )
+    ChapterStaff.objects.create(
+        user=user, chapter=chapter, roles=[ChapterStaff.Role.OWNER],
+        status=ChapterStaff.Status.ACTIVE,
+    )
+    corps = User.objects.create_user(email="cj@example.com", password="pw")
+    ChapterStaff.objects.create(
+        user=corps, chapter=chapter, roles=[ChapterStaff.Role.JUDGE],
+        status=ChapterStaff.Status.ACTIVE,
+    )
+    start = timezone.now() + timedelta(days=1)
+    event = Event.objects.create(
+        chapter=chapter, name="E", slug="e", created_by=user,
+        scheduled_start=start, scheduled_end=start + timedelta(hours=2),
+    )
+    for i, role in enumerate(["player", "player", "judge"]):
+        u = User.objects.create_user(email=f"sp{i}@example.com", password="pw")
+        EventParticipant.objects.create(
+            event=event, user=u, role=role, source="applied",
+            status=EventParticipant.Status.REGISTERED,
+        )
+    Round.objects.create(event=event, round_number=1)
+
+    client = APIClient()
+    client.force_authenticate(user)
+    r = client.get("/api/chapters/stats/")
+    assert r.status_code == 200
+    row = next(x for x in r.data if x["slug"] == "bu")
+    assert row["events_total"] == 1
+    assert row["players"] == 2
+    assert row["judges"] == 1
+    assert row["participants_total"] == 3
+    assert row["members_total"] == 2
+    assert row["organizers"] == 1
+    assert row["corps_judges"] == 1
+    assert row["rounds_total"] == 1
+    assert row["tier"] == "A"
+
+
+@pytest.mark.django_db
+def test_chapter_stats_requires_auth():
+    assert APIClient().get("/api/chapters/stats/").status_code in (401, 403)

@@ -31,6 +31,27 @@ export type Chapter = {
   created_at: string;
 };
 
+// Command-center dashboard aggregates per managed chapter (GET /api/chapters/stats/).
+export type ChapterStat = {
+  chapter_id: string;
+  slug: string;
+  name: string;
+  tier: "A" | "B" | "C";
+  verification_status: string;
+  events_total: number;
+  events_completed: number;
+  members_total: number;
+  organizers: number;
+  corps_judges: number;
+  players: number;
+  judges: number;
+  audience: number;
+  participants_total: number;
+  rounds_total: number;
+  rounds_completed: number;
+  ranked_players: number;
+};
+
 export async function getChapters(): Promise<Chapter[]> {
   const res = await fetch(`${API_BASE}/api/chapters/`, {
     cache: "no-store",
