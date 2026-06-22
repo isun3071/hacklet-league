@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 from chapters.views import ChapterStaffViewSet, ChapterViewSet
 from events.views import EventParticipantViewSet, EventViewSet
 from newsletter.views import NewsletterSubscribeView
-from rounds.views import RoundViewSet, SubmissionViewSet
+from rounds.views import RoundViewSet, ScoreViewSet, SubmissionViewSet
 from users.views import MeView
 
 
@@ -30,6 +30,7 @@ router.register(r"events", EventViewSet, basename="event")
 router.register(r"event-participants", EventParticipantViewSet, basename="event-participant")
 router.register(r"rounds", RoundViewSet, basename="round")
 router.register(r"submissions", SubmissionViewSet, basename="submission")
+router.register(r"scores", ScoreViewSet, basename="score")
 
 urlpatterns = [
     # Mounted at a secret, env-set slug in prod; Caddy gates that path to the tailnet.

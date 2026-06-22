@@ -12,18 +12,23 @@ from chapters.models import Chapter
 from chapters.permissions import is_chapter_manager, managed_chapter_ids
 from events.models import EventParticipant
 
-from .models import Round, Submission
+from .models import Round, Score, Submission
+from .scoring import compute_round_results
 from .serializers import (
     RoundSerializer,
     RoundWriteSerializer,
     ScheduleSerializer,
+    ScoreSerializer,
+    ScoreWriteSerializer,
     SubmissionSerializer,
     SubmitSerializer,
 )
-from .services import build_phase_schedule
+from .services import build_phase_schedule, current_phase
 
 
 def _is_registered_player(user, event):
+    if not (user and user.is_authenticated):
+        return False
     return EventParticipant.objects.filter(
         event=event, user=user,
         role=EventParticipant.Role.PLAYER, status=EventParticipant.Status.REGISTERED,
@@ -31,6 +36,8 @@ def _is_registered_player(user, event):
 
 
 def _is_event_judge(user, event):
+    if not (user and user.is_authenticated):
+        return False
     return EventParticipant.objects.filter(
         event=event, user=user,
         role=EventParticipant.Role.JUDGE, status=EventParticipant.Status.REGISTERED,
@@ -236,6 +243,21 @@ class RoundViewSet(
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True)
+    def results(self, request, pk=None):
+        """Computed standings + categorical awards. Managers/judges can see them anytime;
+        the public only once the round reaches awards/completed (results are revealed)."""
+        rnd = self.get_object()
+        is_staff = is_chapter_manager(request.user, rnd.event.chapter) or _is_event_judge(
+            request.user, rnd.event
+        )
+        revealed = current_phase(rnd, timezone.now()) in ("awards", "completed")
+        if not (is_staff or revealed):
+            raise PermissionDenied("Results aren't public until the round reaches awards.")
+        data = compute_round_results(rnd)
+        data["revealed"] = revealed
+        return Response(data)
+
 
 class SubmissionViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
     """Read + download submissions. Access is restricted to the submitting player, the
@@ -302,3 +324,68 @@ class SubmissionViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewse
             as_attachment=True,
             filename=submission.archive_filename or "submission.zip",
         )
+
+
+class ScoreViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Judges record scores per submission per dimension; managers + judges read them.
+    judge_participant is derived from the requesting user, never client-supplied. Players
+    can't access raw scores (results are surfaced via the round's `results` action)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ScoreSerializer
+
+    def get_queryset(self):
+        return Score.objects.select_related(
+            "submission", "submission__round", "judge_participant", "judge_participant__user"
+        )
+
+    def create(self, request, *args, **kwargs):
+        write = ScoreWriteSerializer(data=request.data)
+        write.is_valid(raise_exception=True)
+        submission = write.validated_data["submission"]
+        event = submission.round.event
+        judge = EventParticipant.objects.filter(
+            event=event, user=request.user,
+            role=EventParticipant.Role.JUDGE, status=EventParticipant.Status.REGISTERED,
+        ).first()
+        if not judge:
+            raise PermissionDenied("Only registered judges for this event can score.")
+        if submission.round.status in (Round.Status.CANCELLED, Round.Status.COMPLETED):
+            raise ValidationError("Scoring is closed for this round.")
+        score, _ = Score.objects.update_or_create(
+            submission=submission,
+            judge_participant=judge,
+            score_type=write.validated_data["score_type"],
+            defaults={
+                "value": write.validated_data["value"],
+                "comments": write.validated_data.get("comments", ""),
+            },
+        )
+        return Response(ScoreSerializer(score).data, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        submission_id = request.query_params.get("submission")
+        round_id = request.query_params.get("round")
+        if submission_id:
+            sub = (
+                Submission.objects.select_related("round__event__chapter")
+                .filter(id=submission_id).first()
+            )
+            if not sub:
+                raise Http404
+            event = sub.round.event
+            qs = self.get_queryset().filter(submission_id=submission_id)
+        elif round_id:
+            rnd = Round.objects.select_related("event__chapter").filter(id=round_id).first()
+            if not rnd:
+                raise Http404
+            event = rnd.event
+            qs = self.get_queryset().filter(submission__round_id=round_id)
+        else:
+            raise ValidationError("Provide ?submission=<id> or ?round=<id>.")
+        if not (
+            is_chapter_manager(request.user, event.chapter)
+            or _is_event_judge(request.user, event)
+        ):
+            raise PermissionDenied("Only managers and judges can view scores.")
+        return Response(ScoreSerializer(qs, many=True).data)

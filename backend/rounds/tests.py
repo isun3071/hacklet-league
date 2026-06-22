@@ -372,3 +372,139 @@ def test_round_submissions_visibility(mgr_event, settings, tmp_path):
     pr = _client(p1).get(f"/api/submissions/?round={rnd.id}")
     assert len(pr.data) == 1
     assert pr.data[0]["player_email"] == "p1@example.com"
+
+
+# ===========================================================================
+# increment 4 — scoring API + composite + awards
+# ===========================================================================
+
+def _judge(event, email="j@example.com"):
+    user = User.objects.create_user(email=email, password="pw")
+    return EventParticipant.objects.create(
+        event=event, user=user, role="judge", source="corps", status="registered",
+    )
+
+
+def _scored_submission(rnd, player, judge, scores):
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    for score_type, value in scores.items():
+        Score.objects.create(
+            submission=sub, judge_participant=judge, score_type=score_type, value=value,
+        )
+    return sub
+
+
+@pytest.mark.django_db
+def test_judge_submits_and_updates_score(mgr_event):
+    rnd = _live_round(mgr_event["event"])  # status scheduled -> scoring open
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    judge = _judge(mgr_event["event"])
+    jc = _client(judge.user)
+    r = jc.post(
+        "/api/scores/",
+        {"submission": str(sub.id), "score_type": "pitch_quality", "value": "80"},
+        format="json",
+    )
+    assert r.status_code == 201
+    # re-scoring the same dimension upserts (one row, updated value)
+    r2 = jc.post(
+        "/api/scores/",
+        {"submission": str(sub.id), "score_type": "pitch_quality", "value": "85"},
+        format="json",
+    )
+    assert r2.status_code == 201
+    qs = Score.objects.filter(submission=sub, score_type="pitch_quality")
+    assert qs.count() == 1
+    assert float(qs.get().value) == 85.0
+
+
+@pytest.mark.django_db
+def test_non_judge_cannot_score(mgr_event):
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    stranger = _client(User.objects.create_user(email="s@example.com", password="pw"))
+    r = stranger.post(
+        "/api/scores/",
+        {"submission": str(sub.id), "score_type": "pitch_quality", "value": "80"},
+        format="json",
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.django_db
+def test_scoring_closed_when_round_completed(mgr_event):
+    rnd = Round.objects.create(
+        event=mgr_event["event"], round_number=1, status=Round.Status.COMPLETED,
+    )
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    judge = _judge(mgr_event["event"])
+    r = _client(judge.user).post(
+        "/api/scores/",
+        {"submission": str(sub.id), "score_type": "pitch_quality", "value": "80"},
+        format="json",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_score_value_out_of_range(mgr_event):
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    judge = _judge(mgr_event["event"])
+    r = _client(judge.user).post(
+        "/api/scores/",
+        {"submission": str(sub.id), "score_type": "pitch_quality", "value": "150"},
+        format="json",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_scores_list_is_manager_or_judge_only(mgr_event):
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    Submission.objects.create(round=rnd, player=player, status="submitted")
+    assert _client(mgr_event["mgr"]).get(f"/api/scores/?round={rnd.id}").status_code == 200
+    assert _client(player).get(f"/api/scores/?round={rnd.id}").status_code == 403
+
+
+@pytest.mark.django_db
+def test_results_composite_and_awards(mgr_event):
+    rnd = Round.objects.create(event=mgr_event["event"], round_number=1)
+    judge = _judge(mgr_event["event"])
+    a = _registered_player(mgr_event["event"], "a@example.com")
+    b = _registered_player(mgr_event["event"], "b@example.com")
+    # A: strong engineering, weak communication. B: the reverse.
+    _scored_submission(rnd, a, judge, {"technical_execution": 90, "pitch_quality": 60, "cross_examination": 60})
+    _scored_submission(rnd, b, judge, {"technical_execution": 60, "pitch_quality": 90, "cross_examination": 90})
+    r = _client(mgr_event["mgr"]).get(f"/api/rounds/{rnd.id}/results/")
+    assert r.status_code == 200
+    standings = {s["player_id"]: s for s in r.data["standings"]}
+    assert standings[str(a.id)]["engineering_rank"] == 1
+    assert standings[str(b.id)]["communication_rank"] == 1
+    # rank-sum ties 3-3; tiebreak (|diff| equal, then best engineering rank) -> A overall #1
+    assert standings[str(a.id)]["overall_rank"] == 1
+    assert standings[str(b.id)]["overall_rank"] == 2
+    assert r.data["awards"]["most_resilient"] == [str(a.id)]
+    assert r.data["awards"]["best_communicator"] == [str(b.id)]
+    assert r.data["awards"]["best_overall"] == [str(a.id)]
+
+
+@pytest.mark.django_db
+def test_results_hidden_until_revealed(mgr_event):
+    rnd = Round.objects.create(event=mgr_event["event"], round_number=1)
+    judge = _judge(mgr_event["event"])
+    p = _registered_player(mgr_event["event"], "p@example.com")
+    _scored_submission(rnd, p, judge, {"technical_execution": 70, "pitch_quality": 70})
+    # not revealed yet -> public gets 403, but a manager can preview
+    assert APIClient().get(f"/api/rounds/{rnd.id}/results/").status_code == 403
+    assert _client(mgr_event["mgr"]).get(f"/api/rounds/{rnd.id}/results/").status_code == 200
+    # completing the round reveals results publicly
+    _client(mgr_event["mgr"]).post(f"/api/rounds/{rnd.id}/complete/", {}, format="json")
+    pub = APIClient().get(f"/api/rounds/{rnd.id}/results/")
+    assert pub.status_code == 200
+    assert pub.data["revealed"] is True

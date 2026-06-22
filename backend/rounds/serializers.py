@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from events.models import Event
 
-from .models import Round, Submission
+from .models import Round, Score, Submission
 from .services import PROMPT_VISIBLE_PHASES, current_phase
 
 
@@ -142,3 +142,32 @@ class SubmitSerializer(serializers.Serializer):
         if head != b"PK":  # every zip variant begins with the "PK" signature
             raise serializers.ValidationError("Upload must be a .zip archive.")
         return f
+
+
+class ScoreSerializer(serializers.ModelSerializer):
+    """Read view of a single judge's score (managers/judges only)."""
+
+    judge_email = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Score
+        fields = [
+            "id", "submission", "judge_participant", "judge_email",
+            "score_type", "value", "comments", "submitted_at",
+        ]
+
+    def get_judge_email(self, obj):
+        jp = obj.judge_participant
+        if not jp:
+            return ""
+        return jp.user.email if jp.user_id else jp.email
+
+
+class ScoreWriteSerializer(serializers.Serializer):
+    """A judge scoring one dimension of a submission. judge_participant is derived from the
+    requesting user in the view (never client-supplied)."""
+
+    submission = serializers.PrimaryKeyRelatedField(queryset=Submission.objects.all())
+    score_type = serializers.ChoiceField(choices=Score.ScoreType.choices)
+    value = serializers.DecimalField(max_digits=6, decimal_places=2, min_value=0, max_value=100)
+    comments = serializers.CharField(required=False, allow_blank=True, default="")
