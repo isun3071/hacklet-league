@@ -120,7 +120,7 @@ a { color: var(--accent); text-decoration: none; }
 /* Sections */
 .rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .block { padding: clamp(2.2rem, 5vw, 3.4rem) 1.5rem; }
-.h2 { color: var(--accent); font-size: clamp(1.05rem, 2.3vw, 1.35rem); font-weight: 700; margin: 2.4rem 0 1.3rem; }
+.h2 { color: var(--accent); font-size: clamp(1.05rem, 2.3vw, 1.35rem); font-weight: 700; margin: 2.4rem 0 1.3rem; scroll-margin-top: 72px; }
 .body { color: var(--text); margin: 0 0 1.1rem; max-width: 72ch; }
 
 /* Thesis band */
@@ -293,4 +293,29 @@ a { color: var(--accent); text-decoration: none; }
 .score-grid {
   display: grid; gap: 0.7rem 1.1rem; margin: 0.4rem 0 1rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+/* Account dropdown (header) — collapses login-gated pages under [username] */
+.menu { position: relative; display: flex; align-items: center; }
+.menu-trigger {
+  background: none; border: 0; cursor: pointer; padding: 0;
+  color: var(--accent); font-family: var(--mono); font-size: 0.9rem;
+  letter-spacing: 0.02em; white-space: nowrap;
+}
+.menu-trigger:hover { color: var(--text); }
+.menu-panel {
+  position: absolute; right: 0; top: 100%; z-index: 50;
+  display: none; flex-direction: column; min-width: 172px;
+  background: var(--panel); border: 1px solid var(--line); padding: 0.35rem;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+.menu-panel.open { display: flex; }
+.menu-panel a, .menu-item-btn {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 0; cursor: pointer;
+  color: var(--muted); font-family: var(--mono); font-size: 0.88rem;
+  padding: 0.5rem 0.65rem; text-decoration: none; white-space: nowrap;
+}
+.menu-panel a:hover, .menu-item-btn:hover {
+  color: var(--accent); background: rgba(182, 244, 0, 0.07);
 }

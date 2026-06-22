@@ -90,7 +90,7 @@ export default function DashboardPage() {
       <h1 className="page-title"># dashboard</h1>
 
       {/* chapters */}
-      <h2 className="h2"># my chapters</h2>
+      <h2 className="h2" id="my-chapters"># my chapters</h2>
       {chapters.length === 0 ? (
         <p className="note">
           // no chapters yet. <Link href="/chapters/new">apply to create one &rarr;</Link>
@@ -144,7 +144,7 @@ export default function DashboardPage() {
       )}
 
       {/* events I run */}
-      <h2 className="h2"># events i run</h2>
+      <h2 className="h2" id="events-i-run"># events i run</h2>
       {events.length === 0 ? (
         <p className="note">// no events yet — create one from a chapter above.</p>
       ) : (
