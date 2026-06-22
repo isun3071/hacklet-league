@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getChapter } from "@/lib/api";
+import { getChapter, getRankings } from "@/lib/api";
+import { LeaderboardTable } from "@/components/LeaderboardTable";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function ChapterPage({
   if (!chapter) notFound();
 
   const banner = STATUS_BANNER[chapter.verification_status];
+  const rankings = await getRankings("chapter", chapter.id);
 
   return (
     <main className="container block">
@@ -83,8 +85,14 @@ export default async function ChapterPage({
         <p className="chapter-desc">{chapter.description || "No description yet."}</p>
       </div>
 
+      <h2 className="h2"># chapter leaderboard</h2>
+      <p className="subtitle">// all-time · every event this chapter runs</p>
+      <LeaderboardTable rows={rankings} />
+
       <p className="note">
         <Link href="/chapters">&larr; all chapters</Link>
+        {"  ·  "}
+        <Link href="/leaderboard">global leaderboard &rarr;</Link>
       </p>
     </main>
   );

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EventApply } from "@/components/EventApply";
 import { Icon } from "@/components/Icon";
-import { getEvent, getEventParticipants, type Participant } from "@/lib/api";
+import { getEvent, getEventParticipants, getRounds, type Participant } from "@/lib/api";
+import { PHASE_LABEL, type Round } from "@/lib/rounds";
 import {
   ACCESS_LABEL,
   EVENT_TIER_LABEL,
@@ -34,6 +35,14 @@ export default async function EventPage({
   } catch {
     participants = [];
   }
+
+  let rounds: Round[] = [];
+  try {
+    rounds = await getRounds(event.id);
+  } catch {
+    rounds = [];
+  }
+  rounds.sort((a, b) => a.round_number - b.round_number);
   participants.sort(
     (a, b) => (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9),
   );
@@ -93,6 +102,38 @@ export default async function EventPage({
         accessMode={event.access_mode}
         status={event.status}
       />
+
+      <h2 className="h2"># rounds</h2>
+      {rounds.length === 0 ? (
+        <p className="note">// no rounds scheduled yet.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>round</th>
+                <th>phase</th>
+                <th>checked in</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rounds.map((r) => (
+                <tr key={r.id}>
+                  <td>#{r.round_number}</td>
+                  <td>{PHASE_LABEL[r.phase]}</td>
+                  <td>{r.checked_in_count}{r.player_count ? ` / ${r.player_count}` : ""}</td>
+                  <td>
+                    <Link href={`/events/${event.chapter.slug}/${event.slug}/rounds/${r.round_number}`}>
+                      open &rarr;
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <h2 className="h2"># participants</h2>
       {participants.length === 0 ? (

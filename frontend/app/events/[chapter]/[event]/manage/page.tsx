@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { request } from "@/lib/http";
+import { RoundManager } from "@/components/RoundManager";
 import type {
   ChapterStaffRow,
   LeagueEvent,
@@ -156,6 +157,9 @@ export default function ManageEventPage() {
       </p>
 
       {actionError && <p className="form-error">{actionError}</p>}
+
+      {/* rounds — the competition lifecycle */}
+      <RoundManager eventId={ev.id} chapterSlug={ev.chapter.slug} eventSlug={ev.slug} />
 
       {/* applications awaiting a decision */}
       <h2 className="h2"># pending applications</h2>

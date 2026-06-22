@@ -3,6 +3,7 @@
 // hits /api/... same-origin through Caddy (used in later client-side features).
 
 import { cookies } from "next/headers";
+import type { Ranking, Round } from "@/lib/rounds";
 
 const API_BASE = process.env.INTERNAL_API_URL ?? "http://backend:8000";
 
@@ -158,5 +159,52 @@ export async function getEventParticipants(eventId: string): Promise<Participant
     headers: await ssrHeaders(),
   });
   if (!res.ok) throw new Error(`GET /api/events/${eventId}/participants/ -> ${res.status}`);
+  return res.json();
+}
+
+// ---- rounds + rankings (Stage 3) -------------------------------------------
+// Types + display helpers live in lib/rounds.ts (client-safe); these fetchers are server-only.
+
+export async function getRounds(eventId: string): Promise<Round[]> {
+  const res = await fetch(`${API_BASE}/api/rounds/?event=${encodeURIComponent(eventId)}`, {
+    cache: "no-store",
+    headers: await ssrHeaders(),
+  });
+  if (!res.ok) throw new Error(`GET /api/rounds/ -> ${res.status}`);
+  return res.json();
+}
+
+export async function getRound(roundId: string): Promise<Round | null> {
+  const res = await fetch(`${API_BASE}/api/rounds/${roundId}/`, {
+    cache: "no-store",
+    headers: await ssrHeaders(),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GET /api/rounds/${roundId}/ -> ${res.status}`);
+  return res.json();
+}
+
+/** Resolve a round by its human-facing number within an event. */
+export async function getRoundByNumber(
+  eventId: string,
+  roundNumber: number,
+): Promise<Round | null> {
+  const rounds = await getRounds(eventId);
+  return rounds.find((r) => r.round_number === roundNumber) ?? null;
+}
+
+export async function getRankings(
+  scope: "global" | "chapter",
+  chapterId?: string,
+): Promise<Ranking[]> {
+  const qs =
+    scope === "chapter" && chapterId
+      ? `?scope=chapter&chapter=${encodeURIComponent(chapterId)}`
+      : "?scope=global";
+  const res = await fetch(`${API_BASE}/api/rankings/${qs}`, {
+    cache: "no-store",
+    headers: await ssrHeaders(),
+  });
+  if (!res.ok) return []; // unverified-chapter / no-board -> empty, not a hard error
   return res.json();
 }
