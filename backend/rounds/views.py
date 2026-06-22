@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from chapters.models import Chapter
 from chapters.permissions import is_chapter_manager, managed_chapter_ids
 from events.models import EventParticipant
+from rankings.services import recompute_rankings
 
 from .models import Round, Score, Submission
 from .scoring import compute_round_results
@@ -161,19 +162,27 @@ class RoundViewSet(
         return self._read(rnd)
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def complete(self, request, pk=None):
+        """Finalize the round. Results are now revealed publicly and the chapter + global
+        leaderboards are recomputed to fold in this round's placements."""
         rnd = self.get_object()
         self._require_manager(rnd)
         rnd.status = Round.Status.COMPLETED
         rnd.save(update_fields=["status"])
+        recompute_rankings(rnd.event.chapter)
         return self._read(rnd)
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def cancel(self, request, pk=None):
+        """Void the round. Leaderboards are recomputed so a previously-completed round that's
+        now cancelled is dropped from the standings."""
         rnd = self.get_object()
         self._require_manager(rnd)
         rnd.status = Round.Status.CANCELLED
         rnd.save(update_fields=["status"])
+        recompute_rankings(rnd.event.chapter)
         return self._read(rnd)
 
     @action(

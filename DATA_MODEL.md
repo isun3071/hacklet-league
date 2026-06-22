@@ -354,6 +354,8 @@ unique constraint: (user_id, scope, scope_reference_id, period, season_year)
 
 Rankings are computed periodically (probably after each event completes). Global rankings only include tier A chapter events for credentialing integrity.
 
+**Stage 3 computation** (`rankings/services.py`). Each finalized (completed) round awards every player *placement points* = `field_size − overall_rank + 1` (1st of N → N, ties share a rank and its points), scaled by an *event-tier weight* (chapter ×1, regional ×2, championship ×3 — format_spec §7 "weighted by event tier"). A scope's `rank_points` is the sum across all its completed rounds; `rank` is the standard-competition (1224) ordering by points; `events_competed` counts distinct events; `last_event_at` is the latest round's freeze/finish. Recompute runs on round **complete** *and* **cancel** (so voiding a finished round drops it), and fully rebuilds the affected scope — idempotent and self-healing. Stage 3 populates two slots: **chapter** (period `all_time`, one board per chapter, all events) and **global** (period `all_time`, Tier A chapters only). Regional scope and the `current_season` period are modeled but deferred until a season entity exists.
+
 ## Audit Entities
 
 ### AuditLog
