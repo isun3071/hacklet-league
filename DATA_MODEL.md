@@ -179,8 +179,9 @@ A player's work product in a round.
 id                      : UUID primary key
 round_id                : FK Round
 player_user_id          : FK User
-status                  : enum (in_progress, submitted_deployed, submitted_failed, dnf)
-git_repo_reference      : varchar (path/URL to league-managed repo)
+status                  : enum (in_progress, submitted, submitted_deployed, submitted_failed, dnf)
+archive                 : file (uploaded zip; stored privately, never extracted until the Stage 5 sandbox)
+archive_filename        : varchar (player's original filename, for display)
 deployed_url            : varchar, nullable (where fuzz runner can reach it)
 readme_content          : text
 token_budget_used       : int
@@ -191,7 +192,7 @@ submitted_at            : timestamp, nullable
 unique constraint: (round_id, player_user_id)
 ```
 
-One submission per player per round. Status tracks whether it deployed successfully. Surface coverage is computed from fuzz test applicability after evaluation.
+One submission per player per round. **Submissions are uploaded directly to the platform as a single zip archive — NOT via git** (git was removed as a needless middleman + attack surface). The archive is stored on private storage and served only through an auth-gated download endpoint; it is never extracted or run until the Stage 5 sandbox pipeline. Status lifecycle: `in_progress` (checked in) → `submitted` (archive captured at code-freeze) → `submitted_deployed` / `submitted_failed` (set by the Stage 5 deploy pipeline); `dnf` if never submitted. Surface coverage is computed from fuzz test applicability after evaluation (Stage 5).
 
 ### WorkstationSession
 

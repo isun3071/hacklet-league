@@ -146,6 +146,14 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
 
+# Private uploads (player submission archives). MEDIA_ROOT is backed by a Docker volume in
+# prod; there is deliberately NO Caddy/MEDIA_URL route — submissions are served only through
+# an auth-gated download endpoint, never statically. See rounds/views.py.
+MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
+MEDIA_URL = "/_private_media_unrouted/"  # intentionally not routed by Caddy
+# Hard cap on an uploaded submission archive (bytes). 50 MB by default.
+MAX_SUBMISSION_BYTES = env.int("MAX_SUBMISSION_BYTES", default=50 * 1024 * 1024)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {

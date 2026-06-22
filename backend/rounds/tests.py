@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -245,3 +246,129 @@ def test_complete_and_cancel(mgr_event):
     assert c.post(f"/api/rounds/{rnd.id}/complete/", {}, format="json").data["phase"] == "completed"
     rnd2 = Round.objects.create(event=mgr_event["event"], round_number=2)
     assert c.post(f"/api/rounds/{rnd2.id}/cancel/", {}, format="json").data["phase"] == "cancelled"
+
+
+# ===========================================================================
+# increment 3 — submission upload (zip, server-side freeze) + download
+# ===========================================================================
+
+ZIP_BYTES = b"PK\x03\x04" + b"x" * 128  # valid zip magic prefix
+
+
+def _zip(name="app.zip"):
+    return SimpleUploadedFile(name, ZIP_BYTES, content_type="application/zip")
+
+
+def _live_round(event, number=1):
+    """A round currently in its build window (before code-freeze)."""
+    now = timezone.now()
+    return Round.objects.create(
+        event=event, round_number=number, timing_profile="tier_c_mvr",
+        opening_at=now - timedelta(minutes=10),
+        build_start_at=now - timedelta(minutes=5),
+        build_end_at=now + timedelta(minutes=15),
+    )
+
+
+@pytest.mark.django_db
+def test_player_submits_zip_before_freeze(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    r = _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/",
+        {"archive": _zip(), "readme_content": "hi"}, format="multipart",
+    )
+    assert r.status_code == 200
+    assert r.data["status"] == "submitted"
+    assert r.data["has_archive"] is True
+    sub = Submission.objects.get(round=rnd, player=player)
+    assert sub.submitted_at is not None
+    assert sub.archive_filename == "app.zip"
+
+
+@pytest.mark.django_db
+def test_submit_rejected_after_freeze(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    now = timezone.now()
+    rnd = Round.objects.create(
+        event=mgr_event["event"], round_number=1, timing_profile="tier_c_mvr",
+        opening_at=now - timedelta(minutes=40),
+        build_start_at=now - timedelta(minutes=35),
+        build_end_at=now - timedelta(minutes=11),  # freeze passed
+    )
+    player = _registered_player(mgr_event["event"], "late@example.com")
+    r = _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/", {"archive": _zip()}, format="multipart",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_submit_rejected_for_non_player(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = _live_round(mgr_event["event"])
+    stranger = _client(User.objects.create_user(email="s@example.com", password="pw"))
+    r = stranger.post(
+        f"/api/rounds/{rnd.id}/submit/", {"archive": _zip()}, format="multipart",
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.django_db
+def test_submit_rejects_non_zip(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "p2@example.com")
+    not_zip = SimpleUploadedFile("app.txt", b"hello not a zip", content_type="text/plain")
+    r = _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/", {"archive": not_zip}, format="multipart",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_submit_rejected_when_unscheduled(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = Round.objects.create(event=mgr_event["event"], round_number=1)  # no build_end_at
+    player = _registered_player(mgr_event["event"], "p3@example.com")
+    r = _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/", {"archive": _zip()}, format="multipart",
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_submission_download_access(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "dl@example.com")
+    _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/", {"archive": _zip()}, format="multipart",
+    )
+    sub = Submission.objects.get(round=rnd, player=player)
+    assert _client(player).get(f"/api/submissions/{sub.id}/download/").status_code == 200
+    assert _client(mgr_event["mgr"]).get(f"/api/submissions/{sub.id}/download/").status_code == 200
+    stranger = _client(User.objects.create_user(email="x@example.com", password="pw"))
+    assert stranger.get(f"/api/submissions/{sub.id}/download/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_round_submissions_visibility(mgr_event, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = _live_round(mgr_event["event"])
+    p1 = _registered_player(mgr_event["event"], "p1@example.com")
+    p2 = _registered_player(mgr_event["event"], "p2b@example.com")
+    Submission.objects.create(round=rnd, player=p1, status="submitted")
+    Submission.objects.create(round=rnd, player=p2, status="submitted")
+    judge_user = User.objects.create_user(email="j@example.com", password="pw")
+    EventParticipant.objects.create(
+        event=mgr_event["event"], user=judge_user, role="judge",
+        source="corps", status="registered",
+    )
+    # a judge sees every submission in the round
+    assert len(_client(judge_user).get(f"/api/submissions/?round={rnd.id}").data) == 2
+    # a player sees only their own
+    pr = _client(p1).get(f"/api/submissions/?round={rnd.id}")
+    assert len(pr.data) == 1
+    assert pr.data[0]["player_email"] == "p1@example.com"

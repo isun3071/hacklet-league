@@ -1,9 +1,11 @@
 from django.db import transaction
 from django.db.models import Q
+from django.http import FileResponse, Http404
 from django.utils import timezone
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from chapters.models import Chapter
@@ -11,8 +13,28 @@ from chapters.permissions import is_chapter_manager, managed_chapter_ids
 from events.models import EventParticipant
 
 from .models import Round, Submission
-from .serializers import RoundSerializer, RoundWriteSerializer, ScheduleSerializer
+from .serializers import (
+    RoundSerializer,
+    RoundWriteSerializer,
+    ScheduleSerializer,
+    SubmissionSerializer,
+    SubmitSerializer,
+)
 from .services import build_phase_schedule
+
+
+def _is_registered_player(user, event):
+    return EventParticipant.objects.filter(
+        event=event, user=user,
+        role=EventParticipant.Role.PLAYER, status=EventParticipant.Status.REGISTERED,
+    ).exists()
+
+
+def _is_event_judge(user, event):
+    return EventParticipant.objects.filter(
+        event=event, user=user,
+        role=EventParticipant.Role.JUDGE, status=EventParticipant.Status.REGISTERED,
+    ).exists()
 
 
 class RoundViewSet(
@@ -155,13 +177,7 @@ class RoundViewSet(
         """A registered player checks into a round — reserves their submission slot
         (in_progress). Closes at code-freeze (server clock)."""
         rnd = self.get_object()
-        is_player = EventParticipant.objects.filter(
-            event=rnd.event,
-            user=request.user,
-            role=EventParticipant.Role.PLAYER,
-            status=EventParticipant.Status.REGISTERED,
-        ).exists()
-        if not is_player:
+        if not _is_registered_player(request.user, rnd.event):
             raise PermissionDenied("You're not a registered player for this event.")
         if rnd.status in (Round.Status.COMPLETED, Round.Status.CANCELLED):
             raise ValidationError("This round is closed.")
@@ -175,4 +191,114 @@ class RoundViewSet(
         return Response(
             {"checked_in": True, "submission_id": str(submission.id), "created": created},
             status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=True, methods=["post"], url_path="submit",
+        permission_classes=[permissions.IsAuthenticated],
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def submit(self, request, pk=None):
+        """A registered player uploads their zip. SERVER-AUTHORITATIVE FREEZE: the server
+        compares its own clock to build_end_at and rejects anything past it — the client's
+        clock/timezone is never consulted. Re-uploading before freeze overwrites."""
+        rnd = self.get_object()
+        if not _is_registered_player(request.user, rnd.event):
+            raise PermissionDenied("You're not a registered player for this event.")
+        if rnd.status in (Round.Status.CANCELLED, Round.Status.COMPLETED):
+            raise ValidationError("This round is closed.")
+        if not rnd.build_end_at:
+            raise ValidationError("This round hasn't been scheduled yet.")
+        if timezone.now() > rnd.build_end_at:
+            raise ValidationError("Code freeze has passed — submissions are closed.")
+
+        ser = SubmitSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        upload = data["archive"]
+
+        submission, _ = Submission.objects.get_or_create(
+            round=rnd, player=request.user,
+            defaults={"status": Submission.Status.IN_PROGRESS},
+        )
+        if submission.archive:  # replace any prior upload
+            submission.archive.delete(save=False)
+        submission.archive_filename = (getattr(upload, "name", "") or "submission.zip")[:255]
+        submission.archive.save("submission.zip", upload, save=False)
+        submission.readme_content = data.get("readme_content", "")
+        submission.deployed_url = data.get("deployed_url", "")
+        submission.attack_surface_coverage = data.get("attack_surface_coverage", "")
+        submission.status = Submission.Status.SUBMITTED
+        submission.submitted_at = timezone.now()
+        submission.save()
+        return Response(
+            SubmissionSerializer(submission, context=self.get_serializer_context()).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SubmissionViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Read + download submissions. Access is restricted to the submitting player, the
+    chapter's managers, and the event's registered judges — submissions are never public.
+    Unauthorized access to a specific record returns 404 (no existence leak)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = SubmissionSerializer
+
+    def get_queryset(self):
+        return Submission.objects.select_related(
+            "round", "round__event", "round__event__chapter", "player"
+        )
+
+    def _can_access(self, submission, user):
+        event = submission.round.event
+        return (
+            submission.player_id == user.id
+            or is_chapter_manager(user, event.chapter)
+            or _is_event_judge(user, event)
+        )
+
+    def list(self, request, *args, **kwargs):
+        qs = self.get_queryset()
+        round_id = request.query_params.get("round")
+        if round_id:
+            qs = qs.filter(round_id=round_id)
+            rnd = (
+                Round.objects.select_related("event__chapter").filter(id=round_id).first()
+            )
+            staff_view = rnd and (
+                is_chapter_manager(request.user, rnd.event.chapter)
+                or _is_event_judge(request.user, rnd.event)
+            )
+            if not staff_view:
+                qs = qs.filter(player=request.user)  # players see only their own
+        else:
+            qs = qs.filter(player=request.user)
+        ser = SubmissionSerializer(qs, many=True, context=self.get_serializer_context())
+        return Response(ser.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        submission = self.get_object()
+        if not self._can_access(submission, request.user):
+            raise Http404
+        ser = SubmissionSerializer(submission, context=self.get_serializer_context())
+        return Response(ser.data)
+
+    @action(detail=False)
+    def mine(self, request):
+        qs = self.get_queryset().filter(player=request.user)
+        ser = SubmissionSerializer(qs, many=True, context=self.get_serializer_context())
+        return Response(ser.data)
+
+    @action(detail=True)
+    def download(self, request, pk=None):
+        submission = self.get_object()
+        if not self._can_access(submission, request.user):
+            raise Http404
+        if not submission.archive:
+            raise Http404
+        return FileResponse(
+            submission.archive.open("rb"),
+            as_attachment=True,
+            filename=submission.archive_filename or "submission.zip",
         )

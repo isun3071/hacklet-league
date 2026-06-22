@@ -65,12 +65,21 @@ class Round(models.Model):
         return f"{self.event} — round {self.round_number}"
 
 
+def submission_upload_path(instance, filename):
+    """Private, per-event/round/player path. The on-disk name is forced to submission.zip
+    (the player's original name is kept in archive_filename) so untrusted filenames never
+    touch the filesystem. Mirrors the Stage 5/7 submissions/$EVENT/$ROUND/$PLAYER/ layout."""
+    return f"submissions/{instance.round.event_id}/{instance.round_id}/{instance.player_id}/submission.zip"
+
+
 class Submission(models.Model):
-    """A player's submission for a round. In Stage 3 this is recorded manually (a git push
-    reference or zip + README), captured at code-freeze. See DATA_MODEL.md."""
+    """A player's submission for a round. Uploaded directly to the platform as a single zip
+    archive (no git) and captured at code-freeze; stored privately and never extracted until
+    the Stage 5 sandbox. See DATA_MODEL.md."""
 
     class Status(models.TextChoices):
         IN_PROGRESS = "in_progress", "In progress"
+        SUBMITTED = "submitted", "Submitted"
         SUBMITTED_DEPLOYED = "submitted_deployed", "Submitted (deployed)"
         SUBMITTED_FAILED = "submitted_failed", "Submitted (deploy failed)"
         DNF = "dnf", "Did not finish"
@@ -88,7 +97,12 @@ class Submission(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.IN_PROGRESS
     )
-    git_repo_reference = models.CharField(max_length=300, blank=True)
+    # Uploaded zip, stored on private storage (MEDIA_ROOT); served only via an auth-gated
+    # download endpoint, never publicly. archive_filename keeps the player's original name.
+    # max_length must fit the per-event/round/player path (three UUIDs deep ~ 140 chars);
+    # the FileField default of 100 is too short and storage raises SuspiciousFileOperation.
+    archive = models.FileField(upload_to=submission_upload_path, blank=True, max_length=255)
+    archive_filename = models.CharField(max_length=255, blank=True)
     deployed_url = models.URLField(blank=True)
     readme_content = models.TextField(blank=True)
     token_budget_used = models.PositiveIntegerField(default=0)

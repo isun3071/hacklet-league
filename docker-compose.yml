@@ -64,6 +64,10 @@ services:
     # use the docker-network name `backend` while on the host net). Not exposed off-box.
     ports:
       - "127.0.0.1:8000:8000"
+    # Private submission archives (MEDIA_ROOT=/app/media). Persisted across deploys; never
+    # served publicly — downloads go through the auth-gated API endpoint.
+    volumes:
+      - submissions_media:/app/media
 
   frontend:
     build: ./frontend
@@ -92,6 +96,7 @@ services:
       retries: 5
 
 volumes:
+  submissions_media:
   caddy_data:
   caddy_config:
   pgdata:

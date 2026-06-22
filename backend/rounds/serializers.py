@@ -1,9 +1,10 @@
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
 from events.models import Event
 
-from .models import Round
+from .models import Round, Submission
 from .services import PROMPT_VISIBLE_PHASES, current_phase
 
 
@@ -90,3 +91,54 @@ class ScheduleSerializer(serializers.Serializer):
     timing_profile = serializers.ChoiceField(
         choices=Round.TimingProfile.choices, required=False,
     )
+
+
+class SubmissionSerializer(serializers.ModelSerializer):
+    """Read view of a submission. Never exposes the archive's storage path/URL — clients
+    fetch the file via the auth-gated /api/submissions/<id>/download/ endpoint. Identity is
+    shown because access is already restricted to the player, managers, and judges."""
+
+    round = serializers.PrimaryKeyRelatedField(read_only=True)
+    player_email = serializers.SerializerMethodField()
+    player_display = serializers.SerializerMethodField()
+    has_archive = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id", "round", "player_email", "player_display", "status", "deployed_url",
+            "readme_content", "attack_surface_coverage", "has_archive", "archive_filename",
+            "submitted_at", "created_at",
+        ]
+
+    def get_player_email(self, obj):
+        return obj.player.email
+
+    def get_player_display(self, obj):
+        return obj.player.display_name or ""
+
+    def get_has_archive(self, obj):
+        return bool(obj.archive)
+
+
+class SubmitSerializer(serializers.Serializer):
+    """Upload body (multipart). The archive is validated cheaply (size + zip magic) but NOT
+    extracted — at rest it's an opaque blob; unpacking happens only in the Stage 5 sandbox."""
+
+    archive = serializers.FileField()
+    readme_content = serializers.CharField(required=False, allow_blank=True, default="")
+    deployed_url = serializers.URLField(required=False, allow_blank=True, default="")
+    attack_surface_coverage = serializers.ChoiceField(
+        choices=Submission.AttackSurfaceCoverage.choices,
+        required=False, allow_blank=True, default="",
+    )
+
+    def validate_archive(self, f):
+        if f.size > settings.MAX_SUBMISSION_BYTES:
+            mb = settings.MAX_SUBMISSION_BYTES // (1024 * 1024)
+            raise serializers.ValidationError(f"Archive too large (max {mb} MB).")
+        head = f.read(2)
+        f.seek(0)
+        if head != b"PK":  # every zip variant begins with the "PK" signature
+            raise serializers.ValidationError("Upload must be a .zip archive.")
+        return f
