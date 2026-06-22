@@ -159,7 +159,12 @@ export default function ManageEventPage() {
       {actionError && <p className="form-error">{actionError}</p>}
 
       {/* rounds — the competition lifecycle */}
-      <RoundManager eventId={ev.id} chapterSlug={ev.chapter.slug} eventSlug={ev.slug} />
+      <RoundManager
+        eventId={ev.id}
+        chapterSlug={ev.chapter.slug}
+        eventSlug={ev.slug}
+        format={ev.format}
+      />
 
       {/* applications awaiting a decision */}
       <h2 className="h2"># pending applications</h2>

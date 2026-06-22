@@ -34,7 +34,7 @@ export default async function RoundPage({
         <Link href={`/events/${event.chapter.slug}/${event.slug}`}>event page</Link>
       </p>
 
-      <RoundLive initialRound={round} />
+      <RoundLive initialRound={round} format={event.format} />
 
       <p className="note">
         <Link href={`/events/${event.chapter.slug}/${event.slug}`}>&larr; back to event</Link>

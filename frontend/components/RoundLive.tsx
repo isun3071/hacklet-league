@@ -14,7 +14,7 @@ import {
   type Round,
   type Submission,
 } from "@/lib/rounds";
-import type { Participant, ParticipantRole } from "@/lib/api";
+import type { EventFormat, Participant, ParticipantRole } from "@/lib/api";
 
 const BOUNDARY_LABEL: Record<string, string> = {
   evaluation_end: "evaluation ends",
@@ -54,7 +54,13 @@ function fmtCountdown(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-export function RoundLive({ initialRound }: { initialRound: Round }) {
+export function RoundLive({
+  initialRound,
+  format,
+}: {
+  initialRound: Round;
+  format: EventFormat;
+}) {
   const roundId = initialRound.id;
   const eventId = initialRound.event.id;
   const [round, setRound] = useState<Round>(initialRound);
@@ -146,9 +152,10 @@ export function RoundLive({ initialRound }: { initialRound: Round }) {
         </div>
       </dl>
 
-      {round.prompt_revealed && (
+      {/* Only Unslop has a starter prompt (the slop app to fix); Vibe is an open build. */}
+      {format === "unslop" && round.prompt_revealed && (
         <div className="panel">
-          <p className="subtitle">// prompt</p>
+          <p className="subtitle">// starter prompt</p>
           <pre className="codeblock">{round.prompt_revealed}</pre>
         </div>
       )}

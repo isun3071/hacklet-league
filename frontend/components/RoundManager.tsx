@@ -9,6 +9,7 @@ import {
   type Round,
   type TimingProfile,
 } from "@/lib/rounds";
+import type { EventFormat } from "@/lib/api";
 
 const PROFILES: TimingProfile[] = ["tier_c_mvr", "tier_c_extended", "tier_a"];
 
@@ -19,11 +20,15 @@ export function RoundManager({
   eventId,
   chapterSlug,
   eventSlug,
+  format,
 }: {
   eventId: string;
   chapterSlug: string;
   eventSlug: string;
+  format: EventFormat;
 }) {
+  // Only Unslop serves a starter (the slop app players download and fix). Vibe is open build.
+  const hasStarter = format === "unslop";
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -47,7 +52,7 @@ export function RoundManager({
     setErr(null);
     const body: Record<string, unknown> = { event: eventId, timing_profile: form.profile };
     if (form.players) body.player_count = Number(form.players);
-    if (form.prompt) body.prompt_revealed = form.prompt;
+    if (hasStarter && form.prompt) body.prompt_revealed = form.prompt;
     const res = await request(`/api/rounds/`, "POST", body);
     if (res.status === 201) {
       setForm({ profile: form.profile, players: "", prompt: "" });
@@ -152,14 +157,18 @@ export function RoundManager({
             onChange={(e) => setForm((f) => ({ ...f, players: e.target.value }))}
           />
         </label>
-        <label className="field">
-          <span>prompt (revealed when build begins)</span>
-          <textarea
-            rows={3}
-            value={form.prompt}
-            onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
-          />
-        </label>
+        {hasStarter ? (
+          <label className="field">
+            <span>starter prompt — the slop app brief, revealed when build begins (Unslop)</span>
+            <textarea
+              rows={3}
+              value={form.prompt}
+              onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
+            />
+          </label>
+        ) : (
+          <p className="note">// Vibe has no starter prompt — players build from a blank slate.</p>
+        )}
         <button type="submit" className="btn">
           [ create round ]
         </button>
