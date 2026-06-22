@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     "users",
     "chapters",
     "events",
+    "rounds",
+    "rankings",
     "newsletter",
 ]
 
