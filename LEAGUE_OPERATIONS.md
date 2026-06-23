@@ -136,21 +136,38 @@ Token budgets serve two distinct functions, and both activate only at Tier A:
 
 Function 2 *requires* Function 1 to be enforced — you can't credential a skill you can't measure. But Function 1 doesn't require Tier A; it requires *the league hosting the AI* in the first place. At Tier B, Function 1 operates with honor-system enforcement (the league hosts AI, but budgets are policy-enforced rather than firewall-enforced); Most Efficient award operates with reduced credentialing weight. At Tier C with BYOD substrate, neither function applies because the league isn't paying for AI and can't enforce the budget anyway. This is why token budgets drop entirely at Tier C rather than operating as honor system theater.
 
-### Verification Process
+### Three-Tier Verification Architecture
 
-Tier B and Tier C chapters are created with light superadmin review (name and basic legitimacy check). Tier A verification involves:
+Verification scope scales with credentialing weight. Each tier's audit work matches what its credentials claim.
 
+**Tier C (legitimacy check only)**: chapters are created with light superadmin review (name uniqueness, basic legitimacy). The league does not audit how Tier C chapters run their events. Tier C credentials are chapter-local engagement signal; the league doesn't verify operational integrity because Tier C credentials don't claim it.
+
+**Tier B (written attestation, no per-event inspection)**: chapters seeking Tier B operations submit a written attestation of their anti-cheating policies and a plausible enforcement plan. The attestation must articulate specific policies (substrate access controls, pre-built code prohibitions, player agreements, post-event audit procedures) and describe how the chapter will enforce them at event time. The league reviews the attestation before granting Tier B verification. No on-site inspection per event; the chapter operates Tier B events under its own attested policies. Tier B credentials carry honor-system integrity weight — real but bounded.
+
+**Tier A (chapter verification + per-event on-site inspection)**: Tier A involves two verification layers.
+
+*Chapter-level verification* (one-time, annual re-verification):
 1. Chapter owner submits verification application with required documentation
 2. Documents reviewed: RMM configuration, network rules, judge corps, venue setup, prior event evidence, specialized variant(s) for which verification is sought
 3. Superadmin may request additional information or schedule a verification call
 4. If approved, chapter granted Tier A status with badge for the specific verified variants
 5. Annual re-verification with possible spot checks during the year
 
+*Event-level inspection* (per Tier A event):
+1. Tier A events require a league-appointed inspector on-site during the event
+2. Event scheduling involves coordinating with the league to find a date when an inspector is available
+3. If no inspector is available for a requested date, the chapter reschedules or downgrades the event to Tier B for that date
+4. The inspector verifies infrastructure operates per Tier A standards: RMM deployment, firewall enforcement, ephemeral account provisioning, broadcast capture, judge corps calibration, audit logging
+5. Inspector signs off on the event's compliance with Tier A standards before results are published
+
+The two-layer structure means the league co-operates Tier A events with the host chapter. Inspector availability is a hard constraint on Tier A event volume; growth depends on the league's inspector corps capacity (see IDEAS_FOR_LATER.md).
+
 Tier A verification is **per-variant**. A chapter verified for Vibe Sprint isn't automatically verified for Unslop Sprint or Vibe Agile. The verification application specifies which format variants the chapter is verifying for; verification expansion to additional variants requires additional applications.
 
 Chapter variant portfolio: specialization is **common but not required**. Chapters often concentrate Tier A verification on one variant or related variant family for operational efficiency. Chapters with substantial operational capacity may apply for verification across multiple variants over time. The 1-event-1-format rule (see format_spec.md §7.1) means each event commits to one variant, but chapters host many events across varied formats over their lifetime.
 
-Verification may be revoked if standards slip. Chapters can apply for verification at any time after meeting initial requirements. Chapters may apply to expand verification to additional variants as their infrastructure and operational experience grow.
+Verification may be revoked or events sanctioned if standards slip — see §11 for sanction mechanisms. Chapters can apply for verification at any time after meeting initial requirements. Chapters may apply to expand verification to additional variants as their infrastructure and operational experience grow.
+
 
 ## 5. Role Hierarchy
 
@@ -273,6 +290,84 @@ Growth stage: superadmin team (small group) shares platform operations. Chapter 
 Mature stage: formal governance structure with elected representation from verified chapters, clear separation between platform operations and league rulemaking, dispute resolution processes with appeal paths. As additional formats are introduced, rulemaking separates into per-format concerns (each format has its own spec, catalog configuration, and parameters) and league-wide concerns (chapters, verification, rankings infrastructure) shared across all formats.
 
 The governance evolution is intentional but unhurried. Premature formalization adds bureaucracy without value. Governance matures as the league grows and as decisions affecting many chapters become more frequent.
+
+## 11. Sanctions and Integrity Enforcement
+
+Integrity violations are handled with sanctions calibrated to what actually failed. The league operates two distinct sanction tracks because chapter-level integrity failure and player-level integrity failure are different problems requiring different responses.
+
+### Chapter-Level Integrity Failure: Retroactive Event Downgrade
+
+When a chapter's infrastructure or operational standards fail to meet the tier the event was advertised as (Tier A inspector finds RMM gaps, Tier B attestation found violated in practice, pattern of operational issues across multiple events), the affected event(s) are **retroactively downgraded to Tier C-equivalent**.
+
+What this preserves:
+- Player participation records remain intact
+- Player submission records remain intact
+- The event itself remains in the public archive
+- Players retain a Tier C-equivalent credential (chapter-local engagement signal, comparable to hackathon participation)
+- Players remain eligible for future events at any tier
+
+What this loses:
+- Global ranking contribution that the original tier credentials would have carried
+- Credentialing-grade signal weight (Tier A) or middle-tier signal weight (Tier B)
+- Qualifier feeds to championship events that depended on the original tier's integrity
+- The chapter's verification status for the tier in question (until re-earned)
+
+Chapter recovery:
+- Chapter can continue operating at Tier C while higher-tier verification is restored
+- Chapter applies for re-verification after addressing the issues that triggered the sanction
+- Re-verification may be granted faster than initial verification if the issues are addressed clearly
+
+The principle: when a chapter's integrity infrastructure failed players who competed in good faith, the players' effort is preserved at chapter-local credentialing weight while the credentialing-grade claim is appropriately bounded.
+
+### Player-Level Integrity Failure: Individual Result Voiding
+
+When a specific player cheated (used pre-staged code, bypassed substrate restrictions, received unauthorized outside help, gamed the format), the sanction targets only that player's result.
+
+What this preserves:
+- Other players' credentials hold at full event-tier weight; their work was real, the event's integrity wasn't compromised for them
+- The chapter's verification status (assuming the chapter operated correctly)
+- The event itself remains in the public archive
+
+What this loses:
+- The cheating player's result for that event is voided
+- The cheating player faces additional sanctions appropriate to the violation severity (suspension, review, possible permanent ineligibility for serious or repeated violations)
+
+The principle: precise targeting of the bad actor without collateral damage to legitimate competitors. The sanction targets fraud, not participation.
+
+### Combined Case
+
+When both chapter integrity failure and specific player cheating occur in the same event:
+- The event downgrades to Tier C-equivalent for all participants (chapter-level sanction)
+- AND the cheating player's individual result is voided (player-level sanction)
+- The player who cheated at a compromised event receives neither the Tier C-equivalent fallback nor the original credentialing-grade credential
+
+### Appeals
+
+Chapters and players subject to sanctions have a right to appeal:
+1. Initial sanction notice from superadmin with documentation of the alleged violation
+2. Affected party has opportunity to respond with their account and supporting evidence
+3. Superadmin reviews response and may adjust, sustain, or reverse the sanction
+4. For Tier A events, the inspector's findings inform but don't bind the appeal decision
+
+Appeals must be filed within 14 days of sanction notice. Decisions are typically issued within 30 days of appeal filing.
+
+## 12. Operational Integrity: Dogfooding the Catalog
+
+The league runs the fuzz catalog against league infrastructure (hackletleague.com platform code, league-hosted AI substrate, fuzz runner itself) before every public release. The same probes that evaluate player submissions evaluate the league's own production code.
+
+Why:
+- The catalog has to apply to the league before it can credibly apply to players. The league's own infrastructure is the catalog's first calibration cohort.
+- Dogfooding produces an ongoing audit trail demonstrating the league holds itself to the standard it credentials others against.
+- Catalog runs against league infrastructure surface false positives, missed vulnerabilities, and operational gaps that improve catalog quality continuously.
+- The credibility of the credentialing claim depends on the catalog being applied symmetrically. The league cannot exempt itself from the standard it imposes.
+
+Operational policy:
+- Pre-release: the catalog runs against the candidate build of any league-hosted infrastructure component
+- Results are logged with timestamps, catalog version, and outcomes
+- Failures block deployment until addressed
+- The audit log is internally auditable and may be selectively published as institutional credibility evidence
+
+Dogfooding is also why the catalog evolves continuously rather than being declared finished. Every catalog run against league infrastructure that surfaces a real issue improves the catalog. Player submissions are evaluated against the same catalog the league has already applied to itself.
 
 ---
 

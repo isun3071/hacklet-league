@@ -5,8 +5,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: "HackLet League — competitive AI-assisted defensive coding",
-  description:
-    "Hackathon, but minutes instead of hours. 24 minutes, one sanctioned AI, then automated adversarial testing and live judging.",
+  description: "24 minutes of competitive vibecoding. no slop survives.",
 };
 
 export default function RootLayout({

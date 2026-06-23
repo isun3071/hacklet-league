@@ -211,6 +211,49 @@ For operations that affect credentialing integrity (score changes, verification 
 - **ARCHITECTURE.md** — Service relationships, request flows, deployment topology.
 - **README.md** — Getting started for developers.
 
+## Naming and Copy Conventions
+
+### Capitalization
+
+The word "hacklet" / "HackLet" uses different capitalization for different meanings. The distinction is load-bearing institutional vocabulary discipline. Apply consistently across all current and future copy on the site, in documentation, and in public-facing communications.
+
+**hacklet** (lowercase) = generic noun. An app built quickly with AI assistance, OR a compressed hackathon-like event anyone can run. Used in slogans, generic descriptions, dictionary entries, casual mentions, example sentences.
+
+**HackLet** (CamelCase) = HackLet League-sanctioned events, formats, tournaments, or the league itself. Used for institutional references, formal event names, format names (HackLet Vibe, HackLet Unslop), and the organization-as-noun.
+
+Correct usage examples:
+- "the fuzz is what separates hacklets from slop" (generic principle)
+- "Come attend a hacklet" (generic event)
+- "build a hacklet in 24 minutes" (generic activity)
+- "First HackLet coming soon" (formal league event)
+- "HackLet League runs two formats" (the league)
+- "HackLet Vibe is akin to a traditional hackathon" (formal format name)
+- "qualified for HackLet Vibe Sprint Regionals" (formal tournament)
+
+### Copy Voice (Public-Facing Materials)
+
+Public-facing copy (landing page, sponsor materials, recruitment content, social posts, conference talks) should match founder voice rather than reading as marketing copy. Specifically:
+
+**Avoid these patterns** that mark text as AI-generated and damage founder credibility:
+- Em dashes when commas, periods, or parentheses would work
+- "-grade" suffixes used for fake precision (exception: "credentialing-grade" is project canonical)
+- "substantively" as compulsive hedge word
+- "adversarial" / "robust" / "calibrated" / "comprehensive" / "thoughtful" / "nuanced" as default qualifiers
+- Triple-clause rhythms ("not X, not Y, but Z" as a tic)
+- "Worth being explicit about" / "Worth flagging" as transition hedges
+- "It's worth noting that" / "That said," / "Moreover," / "Furthermore," as connective tissue
+- "leverage" / "streamline" / "holistic" / "orchestrate" / "facilitate" / "utilize" / "comprises" / "encompasses" / "empower" as verb choices
+- Bolded sentence fragments mid-paragraph signaling "look this is important"
+- "At its core" / "In essence" / "Fundamentally" / "Essentially" as sentence openers
+
+**Prefer instead**:
+- Direct declarative sentences
+- Conjunctions like "and" / "but" / "so" instead of em dashes
+- Concrete nouns and verbs (use, run, help, write)
+- Honest tone over marketing register
+
+Canonical doc voice (format_spec, LEAGUE_OPERATIONS, tier ops) is more formal than public-facing copy and may use em dashes sparingly where they serve clarity. The avoid-list above applies most strictly to founder voice and external communications.
+
 ## What This Document Is Not
 
 This document is project conventions only. It does not:
