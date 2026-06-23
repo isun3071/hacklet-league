@@ -64,30 +64,47 @@ Clearing all gates yields the speed category's positive contribution; there is *
 
 **Reconciliation with format_spec §4.2.** §4.2 previously excluded Core Web Vitals as optimization metrics that "penalize all submissions uniformly without differentiating skill." Abandonment-threshold *gates* are a different instrument: they do not penalize uniformly, they catch only the egregiously broken. The gates above supersede that blanket exclusion; optimization-target scoring (e.g., crediting LCP < 2.5s on a slope) stays out of scope.
 
-### Outcome semantics and the N/A problem
+### Outcome semantics: two evidence models
 
-Each test resolves to one of four outcomes: **defended** (positive), **gracefully_handled** (smaller positive, non-adversarial categories only), **not_applicable** (zero), **broken** (negative).
+Whether a test can credit defense at all depends on whether the defense is **observable**:
 
-There are two kinds of N/A:
+> A defense is **provable** when the dangerous operation's result is visible in a response you can read (XSS: did my payload come back escaped? access control: did I get another user's record? error hygiene: is the stack trace in the body?). It is **unobservable** when the operation is a hidden backend action whose safe handling is identical to its absence (SQLi, command injection, SSTI, NoSQLi: you never see the query or shell, only the final response).
 
-- **Structural N/A** — no surface to test (no endpoint, no input, no HTML document). Resolved by the discovery profile and `applicability.requires`, before any probe fires.
-- **Behavioral N/A** — the surface exists but the vector does not reach a live sink (e.g., a login field that runs no `SELECT`). This **cannot** be read off a profile; it is resolved by an **oracle / differential**, the way real scanners work. You send a matched set of payloads designed to diverge **only if the injection point is live**, never a single payload against a single response.
+Every test declares an `evidence_model`, which fixes its scoring shape.
 
-Worked example, SQLi against a login field:
+**`provable_defense`** — four outcomes; X and Y calibrated independently (format_spec §4.2):
 
-- **Boolean differential** — `' OR '1'='1' --` (TRUE) vs `' AND '1'='2' --` (FALSE). Responses diverge in the attacker's favor → injectable → **broken**.
-- **Error oracle** — a lone `'` yields a 500 with SQL error text → **broken** (and proves SQL is present).
+| Outcome | Score |
+| --- | --- |
+| defended (handling positively observed) | +X |
+| gracefully_handled (non-adversarial only) | +smaller |
+| not_applicable (surface absent) | 0 |
+| broken (oracle fired) | −Y |
+
+**`failure_only`** — penalty-only. There is **no `defended` outcome**, because a defended hidden sink and an absent one are observationally identical:
+
+| Outcome | Score |
+| --- | --- |
+| broken (attack succeeded) | −Y |
+| clear (attack did not succeed — defended *or* no such sink) | 0 |
+
+This is the decision that resolves the falsifiability asymmetry. For failure-only categories we stop trying to distinguish "defended" from "absent" and score both **0**. The reward for safety is **avoiding the −Y**, which is the correct security semantics: a parameterized-SQL app and a no-SQL app are equally unexploitable. *How* a player achieved safety (parameterized queries, an ORM, no SQL at all) is an architecture story, credentialed on the **communication axis** (PITCH.md + cross-examination), not the resilience axis. It also simplifies the runner: failure-only tests need only the failure oracle, not the fragile liveness inference that proving a negative would require.
+
+### Detecting `broken` (the oracle)
+
+Both models detect `broken` the same way — with an **oracle / differential**, never a single payload against a single response. Worked example, SQLi:
+
+- **Boolean differential** — `' OR '1'='1' --` (TRUE) vs `' AND '1'='2' --` (FALSE). Responses diverge in the attacker's favor → **broken**.
+- **Error oracle** — a lone `'` yields a 500 with SQL error text → **broken**.
 - **Time oracle** — a `pg_sleep(5)`-style payload delays the response ~5s → **broken**.
 
-Resolution rule:
+If no oracle fires: a `failure_only` test scores **clear (0)**; a `provable_defense` test then checks its `defended_if` (the positively observed handling, e.g. the XSS payload returned escaped) → **defended**, else **not_applicable**.
 
-1. **Any oracle fires → broken.**
-2. **No oracle fires + positive evidence the sink is live and the attack was neutralized → defended.**
-3. **No oracle, no liveness evidence → not_applicable.**
+### N/A and reporting honesty
 
-**Never award `defended` without positive evidence of resistance. When defended-vs-N/A is ambiguous, default to N/A.** The honest hard case: a perfectly parameterized query is observationally identical to no SQL at all (both swallow the payload, no oracle fires), so both read **N/A**. That is fair — the credential does not fake that distinction. The difference between "avoided the surface" and "defended a broad surface" surfaces in **Attack Surface Coverage** and **Defense Rate** (format_spec §4.2), not in phantom defense credit.
+`not_applicable` applies to provable tests whose surface is absent (structural, from the discovery profile + `applicability.requires`). Failure-only tests do not distinguish N/A from defended — both are **clear (0)** — so their result never claims "defended": it reports **"exploited" (−Y)** or **"no exploit found" (0)**. Defense Rate (format_spec §4.2) is computed over **provable tests only**, since failure-only tests have no `defended` outcome to rate.
 
-Authoring consequence: a test's `broken_if` encodes the **oracle**; its `defended_if` must encode **liveness-gated resistance** (not mere absence of breakage); "neither matches" resolves to N/A by construction.
+Authoring consequence: a `failure_only` test has a `broken_if` (the oracle) and **no** `defended_if`. A `provable_defense` test has a `defended_if` that asserts positively observed handling (not mere absence of breakage), plus `broken_if`. CI enforces that `points_defended` is null exactly when `evidence_model` is `failure_only`.
 
 ## Runner as a Sandboxed, Deployable Service
 
@@ -126,10 +143,12 @@ category: <category-name>          # human-readable category
 subcategory: <subcategory>         # optional, for variant grouping
 difficulty_tier: <1 | 2 | 3 | 4 | 5>
 pool: <public | hidden>
-attack_type: <adversarial | non_adversarial>   # adversarial -> defended|broken only (no graceful)
+attack_type: <adversarial | non_adversarial>        # non_adversarial may award gracefully_handled
+evidence_model: <provable_defense | failure_only>   # failure_only = hidden-sink injection (SQLi, cmd,
+                                                    #   SSTI): defense unobservable, scored penalty-only
 description: <text description of what the test does>
-points_defended: <positive integer>
-points_gracefully_handled: <positive integer or null>  # only if non-adversarial
+points_defended: <positive integer or null>          # null iff evidence_model is failure_only
+points_gracefully_handled: <positive integer or null>  # only if non_adversarial AND provable_defense
 points_broken: <negative integer>
 variant_group_id: <UUID or null>  # if part of a syntactic variant group
 
