@@ -13,6 +13,106 @@ The fuzz runner is responsible for executing standardized tests against player s
 
 Both modes share the same test format and execution semantics. They differ in what catalog content they have access to and where results are persisted.
 
+## v1 Catalog Design (Universal-Only)
+
+### Universal-only principle
+
+The catalog is **language-, framework-, and protocol-agnostic**. Every submission is tested by the same black-box HTTP probing of its deployed app; the catalog contains **no framework-specific tests**. A Python/Flask app, a Go service, and a hand-rolled C HTTP server are all evaluated by the identical catalog.
+
+"Tested the same way" means **same catalog, applicability-resolved per discovered surface** — not literally the same test set for every app. A submission that exposes a file-upload endpoint receives the upload probes; one that does not, cannot (there is nothing to test). That asymmetry is correct and is what **Attack Surface Coverage** (format_spec §4.2, narrow/moderate/broad) measures: exposing more surface means more applicable tests, which is itself signal.
+
+The tradeoff (loss of framework-specific precision) is largely recovered through **universal symptom probes**: a misconfiguration that is framework-specific in cause is usually framework-agnostic in symptom. `DEBUG=True` surfaces as stack traces in responses (caught by universal error-hygiene); an exposed admin/actuator surfaces via a universal sensitive-path probe that GETs a list of known-dangerous paths (`/.env`, `/.git`, `/actuator`, `/admin`, `/debug`, `/swagger`) regardless of stack.
+
+### The intent-independence litmus (authoring invariant)
+
+A test may exist **only if its correct outcome is the same regardless of what the app is supposed to do**. The authoring litmus:
+
+> Is there a legitimate app for which the "failing" behavior is actually correct?
+
+- **No** (wrong for every legitimate intent) → universal → include.
+- **Yes** (some real app legitimately wants it) → intent-dependent → exclude.
+
+| Property | Legit app wanting the "fail"? | Verdict |
+| --- | --- | --- |
+| SQL injection succeeds | none | universal |
+| Stack trace leaked in error response | none | universal |
+| `GET` mutates state | none (HTTP mandates safe `GET` for all apps) | universal |
+| `POST /pay` dedupes a double-submit | yes (an append-only event log wants both writes) | intent-dependent → excluded |
+| at-most-once delivery | yes (messaging legitimately wants at-least-once) | intent-dependent → excluded |
+
+Because every test in the catalog is universal by construction, the schema carries **no intent flag**. Intent-dependent engineering quality is not unmeasured: it is credentialed on the **communication axis** (PITCH.md + cross-examination + judge clickaround), where a human carries the intent the runner refuses to guess. The fuzz/resilience score stays intent-free and fully automated; there is no per-test judge override of fuzz outcomes.
+
+### Bundles
+
+v1 ships three bundles. The six-axis Resilience model (IDEAS_FOR_LATER) adds Race Conditions and Behavioral Consistency as later bundles without changing the runner.
+
+- **security** — OWASP-aligned: injection (SQL/NoSQL/command/template), XSS, auth bypass, broken access control / IDOR, CSRF, SSRF, security headers, sensitive-path exposure.
+- **qa** — universal QA per format_spec §4.2: crash resistance, error hygiene, HTTP semantics, encoding round-trip, deployment hygiene.
+- **performance** — speed checkpoints (below) plus load/spike handling and DoS resistance (oversized bodies/URLs/headers, decompression bombs, unbounded pagination, slow-loris). Load and DoS are measured inside the container's **fixed resource envelope** (identical CPU/RAM/PID quotas for every submission), so comparison is fair: it measures resilience within the standard box, not scaling to arbitrary hardware. DoS probes are bounded so the runner cannot become its own amplifier.
+
+### Speed checkpoints
+
+Speed is scored as **boolean gates at user-abandonment thresholds**, not optimization targets:
+
+| Metric | Gate (fail the speed category at) | Where measured |
+| --- | --- | --- |
+| TTFB | ≥ 3s | server-side timing (any HTTP response) |
+| FCP | ≥ 5s | headless browser; HTML-rendering apps only |
+| INP | ≥ 5s | headless browser (Total-Blocking-Time proxy / scripted interaction); HTML apps only |
+
+Clearing all gates yields the speed category's positive contribution; there is **no marginal credit for being faster** (Goodhart-resistant: players optimize to the gate, then redirect remaining time elsewhere). FCP and INP apply only to apps that serve a rendered HTML document; a pure JSON API scores them **N/A** (structural, from discovery). FCP/INP require the headless-browser harness, which renders untrusted submission pages and is therefore sandboxed like the rest of the runner (isolated context, no host FS, egress-restricted).
+
+**Reconciliation with format_spec §4.2.** §4.2 previously excluded Core Web Vitals as optimization metrics that "penalize all submissions uniformly without differentiating skill." Abandonment-threshold *gates* are a different instrument: they do not penalize uniformly, they catch only the egregiously broken. The gates above supersede that blanket exclusion; optimization-target scoring (e.g., crediting LCP < 2.5s on a slope) stays out of scope.
+
+### Outcome semantics and the N/A problem
+
+Each test resolves to one of four outcomes: **defended** (positive), **gracefully_handled** (smaller positive, non-adversarial categories only), **not_applicable** (zero), **broken** (negative).
+
+There are two kinds of N/A:
+
+- **Structural N/A** — no surface to test (no endpoint, no input, no HTML document). Resolved by the discovery profile and `applicability.requires`, before any probe fires.
+- **Behavioral N/A** — the surface exists but the vector does not reach a live sink (e.g., a login field that runs no `SELECT`). This **cannot** be read off a profile; it is resolved by an **oracle / differential**, the way real scanners work. You send a matched set of payloads designed to diverge **only if the injection point is live**, never a single payload against a single response.
+
+Worked example, SQLi against a login field:
+
+- **Boolean differential** — `' OR '1'='1' --` (TRUE) vs `' AND '1'='2' --` (FALSE). Responses diverge in the attacker's favor → injectable → **broken**.
+- **Error oracle** — a lone `'` yields a 500 with SQL error text → **broken** (and proves SQL is present).
+- **Time oracle** — a `pg_sleep(5)`-style payload delays the response ~5s → **broken**.
+
+Resolution rule:
+
+1. **Any oracle fires → broken.**
+2. **No oracle fires + positive evidence the sink is live and the attack was neutralized → defended.**
+3. **No oracle, no liveness evidence → not_applicable.**
+
+**Never award `defended` without positive evidence of resistance. When defended-vs-N/A is ambiguous, default to N/A.** The honest hard case: a perfectly parameterized query is observationally identical to no SQL at all (both swallow the payload, no oracle fires), so both read **N/A**. That is fair — the credential does not fake that distinction. The difference between "avoided the surface" and "defended a broad surface" surfaces in **Attack Surface Coverage** and **Defense Rate** (format_spec §4.2), not in phantom defense credit.
+
+Authoring consequence: a test's `broken_if` encodes the **oracle**; its `defended_if` must encode **liveness-gated resistance** (not mere absence of breakage); "neither matches" resolves to N/A by construction.
+
+## Runner as a Sandboxed, Deployable Service
+
+The runner is a **standalone deployable component, separate from the hackletleague.com platform process**. It executes untrusted contestant code, so it must not share a trust domain with the platform's database, secrets, or session store. It is deployed isolated (separate host/VM, restricted egress). This separation also makes **dogfooding (LEAGUE_OPERATIONS §12) first-class**: the runner points at any deployed HTTP target, so the league's own production code is just another target.
+
+### Platform ↔ runner contract
+
+1. The platform stores the submission zip at code freeze (portal upload, TIER_C_OPERATIONS §6).
+2. The platform enqueues a run: `{submission_id, artifact_ref, catalog_version}`.
+3. The runner pulls the artifact, deploys it to an ephemeral container, and runs the five phases.
+4. The runner returns a structured **resilience report** (per-test outcomes + points + metadata).
+5. The platform persists `FuzzResult` rows; the scoring engine (separate, see Scoring Integration) folds the result into the composite.
+
+The platform **never executes submission code in-process**.
+
+### Threat model (sandbox for hostile code)
+
+Submissions are untrusted code generated by players directing AI. The runner is a sandbox first, a test executor second.
+
+- **Container isolation** — unprivileged user, no sudo, read-only base image where feasible, ephemeral, destroyed after each run.
+- **Resource exhaustion** — CPU / RAM / disk / PID quotas and a wall-clock lifecycle bound on every container; load and DoS probes are bounded so the runner is never an amplifier.
+- **Network egress** — submission containers have no outbound network except the runner's probe channel. This prevents data exfiltration, lateral movement, and using a submission as an egress proxy.
+- **Hidden-pool boundary** — hidden-pool test definitions exist **only on the central runner**. They are never deployed to workstations, never included in any client- or player-facing payload, and never echoed in player-visible results. The local (workstation) runner contains the public pool only.
+- **Headless-browser harness** — because it renders untrusted submission pages, it runs in the same sandbox posture: isolated browser context, no host filesystem access, egress-restricted.
+
 ## Test Definition Format
 
 Each test is defined as a YAML file with a standardized schema. The schema is validated via Pydantic models in the runner codebase.
@@ -21,13 +121,12 @@ Each test is defined as a YAML file with a standardized schema. The schema is va
 
 ```yaml
 id: <unique-identifier>           # e.g., sec-sqli-001
-bundle: <security | qa>
+bundle: <security | qa | performance>
 category: <category-name>          # human-readable category
 subcategory: <subcategory>         # optional, for variant grouping
 difficulty_tier: <1 | 2 | 3 | 4 | 5>
 pool: <public | hidden>
-intent_dependence: <universal | intent_sensitive>
-attack_type: <adversarial | non_adversarial>
+attack_type: <adversarial | non_adversarial>   # adversarial -> defended|broken only (no graceful)
 description: <text description of what the test does>
 points_defended: <positive integer>
 points_gracefully_handled: <positive integer or null>  # only if non-adversarial
@@ -69,6 +168,7 @@ Common applicability conditions reference properties of the submission profile:
 - `submission_has_api_endpoints`
 - `submission_has_post_endpoints_creating_records`
 - `submission_stores_persistent_data`
+- `submission_serves_html_document`   # gates FCP/INP speed checks; false for pure JSON APIs
 
 The discovery phase produces a submission profile listing which conditions are true for that submission.
 
@@ -104,6 +204,11 @@ Assertions are expressed as structured conditions, with common patterns:
 - `response_received_within: <duration>`
 - `response_received_after: <duration>`
 
+**Speed-gate conditions** (performance bundle; browser-measured ones apply only when `submission_serves_html_document`):
+- `ttfb_under: <duration>`   # server-side; gate fails at >= 3s
+- `fcp_under: <duration>`    # headless browser; gate fails at >= 5s
+- `inp_under: <duration>`    # headless browser (TBT proxy / scripted interaction); gate fails at >= 5s
+
 **Behavioral conditions:**
 - `upload_rejected: true`
 - `upload_succeeds_and_executes: true`
@@ -134,7 +239,9 @@ The runner explores the submission to build its profile:
 4. Identify API endpoints by checking common patterns (`/api/*`, GraphQL, OpenAPI specs if present)
 5. Identify authentication boundaries by examining 401/403 responses
 6. Identify file upload capabilities by checking form encoding types and file inputs
-7. Produce a submission profile structure
+7. Determine whether the app serves a rendered HTML document (`Content-Type: text/html` with a parseable DOM) versus a pure API — this gates the FCP/INP speed checks
+8. Establish per-endpoint baselines (benign-input response signatures: status, length, timing) so adversarial oracles have a reference to diff against
+9. Produce a submission profile structure
 
 The discovery phase runs for a fixed time budget (e.g., 30 seconds) or until exhaustion, whichever comes first.
 
@@ -143,11 +250,9 @@ The discovery phase runs for a fixed time budget (e.g., 30 seconds) or until exh
 For each test in the catalog:
 
 1. Check whether all `applicability.requires` conditions are met against the submission profile
-2. If yes, mark the test as applicable
-3. If intent-sensitive, additionally flag for tester judge review (central runner only)
-4. Universal tests run automatically; intent-sensitive tests run with placeholder pending judge resolution
+2. If yes, mark the test as applicable; if not, the test resolves to `not_applicable` (structural N/A) and is skipped
 
-The result is a list of applicable tests and their initial automated applicability status.
+Applicability is **fully automated** — the catalog is universal-only, so there are no intent-sensitive tests and no judge-resolution step. (Behavioral N/A, where an applicable test's vector turns out not to reach a live sink, is resolved during execution by the test's oracle, not here.) The result is the list of applicable tests.
 
 ### Phase 3: Execution
 
@@ -183,8 +288,8 @@ Results are persisted via different paths depending on runner mode:
 
 **Central runner** (at code freeze):
 - Records to FuzzResult table (authoritative)
-- Notifies tester judge portal for override review
-- Triggers scoring engine when all judges complete reviews
+- Triggers the scoring engine when the run completes — under universal-only the resilience score is fully automated, with no per-test judge override
+- Tester judges may spot-check for false positives out of band, but that does not gate scoring; judges' scored role is the communication axis (clickaround, pitch, cross-examination)
 
 ## Execution Architecture
 
@@ -201,14 +306,14 @@ The local runner does not contain hidden pool tests. Hidden pool YAML files are 
 
 ### Central Runner
 
-Runs as a containerized service on league infrastructure.
+Runs as a standalone, containerized service on league infrastructure, separate from the platform process (see "Runner as a Sandboxed, Deployable Service").
 
-- Receives submission code via git push at code freeze
-- Deploys submission to ephemeral Docker container
-- Container exposes submission's port to runner
-- Runner executes full catalog (both pools) against deployed container
-- After completion, container is destroyed
-- Results persisted to FuzzResult table
+- Pulls the submission **zip** the platform stored at code freeze (portal upload, TIER_C_OPERATIONS §6) — there is no git in the submission path
+- Deploys the submission to an ephemeral Docker container under the sandbox posture (unprivileged, quota-bound, egress-restricted)
+- Container exposes the submission's port to the runner only
+- Runner executes the full catalog (both pools) against the deployed container
+- After completion, the container is destroyed
+- Returns the resilience report to the platform, which persists FuzzResult rows
 
 The central runner runs in a queue model — 12 submissions arrive at freeze, workers process them in parallel up to infrastructure capacity. Target: complete all submissions within the 12-minute evaluation window.
 
@@ -237,6 +342,11 @@ fuzz-catalog/
 │   ├── http-semantics/
 │   ├── timeout/
 │   ├── encoding/
+│   └── ...
+├── performance/
+│   ├── speed-checkpoints/        # TTFB / FCP / INP boolean gates
+│   ├── load-spike/
+│   ├── dos-resistance/
 │   └── ...
 ├── predicates/
 │   ├── http_response.py
@@ -290,7 +400,8 @@ The discovery phase produces a JSON document describing what the runner found:
     "auth_endpoints": ["/login", "/signup"],
     "file_upload": ["/upload"],
     "api_routes": ["/api/users", "/api/items"],
-    "form_routes": ["/login", "/signup", "/contact"]
+    "form_routes": ["/login", "/signup", "/contact"],
+    "serves_html_document": true
   },
   "discovery_completed": true,
   "discovery_duration_seconds": 24
@@ -320,13 +431,13 @@ Adding new predicates requires PR review since they affect test interpretations 
 New tests are added to the catalog through this process:
 
 1. Author creates new YAML file in appropriate category directory
-2. Author runs local validation: schema validation + sample-run against reference submissions
+2. Author runs local validation: schema validation + three-way reference calibration (below)
 3. Author opens PR against the catalog repository
-4. PR review verifies: test schema valid, scoring calibrated appropriately, predicate logic sound
+4. PR review verifies: passes the **intent-independence litmus** (a test that fails it does not get a file), schema valid, scoring calibrated appropriately, predicate logic sound, oracle reliably distinguishes broken from N/A
 5. PR merged to main triggers catalog version bump
 6. Chapter platforms pull updated catalog at next sync
 
-Reference submissions (curated examples that test should and shouldn't catch) are part of the catalog repository for validation.
+**Three-way reference calibration.** Reference submissions are curated apps in the catalog repository. Before a test merges, it must resolve correctly against all three: **broken** on a known-vulnerable app, **defended** on a known-good app that has the real live surface, and **not_applicable** on an app that lacks the surface. A test that cannot cleanly separate those three (in particular, one that reads `defended` where it should read `not_applicable`) is not ready — that separation is the proof the oracle works.
 
 ## Scoring Integration
 
