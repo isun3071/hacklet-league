@@ -335,8 +335,8 @@ AI integration is core to what HackLet League is, but it depends on round mechan
 - Players triggered fuzz during build, saw real intelligence about their defenses
 - At code freeze, code automatically pushes to league infrastructure
 - Central fuzz runner deploys submissions and runs full catalog
-- Tester judges review and override as needed
-- Scoring engine produces composite results including authoritative fuzz scores
+- Tester judges may spot-check for false positives (slop scoring is automated; no per-probe override)
+- Scoring engine produces composite results including authoritative slop scores
 - Result reports include surface coverage metadata
 
 ### Estimated Time

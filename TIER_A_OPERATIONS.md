@@ -201,7 +201,7 @@ The fuzz catalog operates at **full strength** at Tier A (and at every tier — 
 Per format_spec.md §4, Tier A operates the full scoring framework:
 
 **Available per-round awards** at Tier A:
-- **Most Resilient**: highest Fuzz Score
+- **Most Resilient**: lowest Slop Score
 - **Best Communicator**: highest Communication Score (live pitch + cross-ex evaluation, human judges)
 - **People's Hacklet**: highest audience vote
 - **Best Overall**: composite rank with progressive tiebreakers (lowest rank sum → smallest differential → best Fuzz Rank → best Communication Rank → co-Champions)

@@ -5,6 +5,19 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## Scoring: deduction-only "Slop Score" (June 2026, Stage 5 design)
+
+The resilience score was reworked and renamed in two composed changes, formalized during Stage 5 (fuzz runner) design. Best Overall is still the rank-sum composite with Communication — only the resilience component's shape and name changed.
+
+- **Deduction-only.** Scoring no longer awards points for passing a probe. A probe either detects slop (adds a penalty) or it doesn't (zero). This honors the attacker/defender asymmetry (defending 7 of 8 SQL endpoints is still a breach — the 7 add nothing, the 1 adds full penalty) and resolves the parameterized-SQL-invisibility problem structurally (a defended hidden sink and an absent one both score zero, which is correct — neither is vulnerable). It collapses the prior `provable_defense` / `failure_only` scoring split and the `worst_case` / `additive` aggregation modes into one rule: sum the penalties of fired probes. `evidence_model` survives only as a detection hint.
+- **Renamed Resilience Score → Slop Score, sign flipped.** Was `(-∞, 0]`, higher-is-better; now `[0, +∞)`, **lower-is-better, 0 = perfect** (golf-style). Presentation-equivalent, but it closes the loop with the slogans ("no slop survives"; "the fuzz is what separates hacklets from slop"), reads as universally-legible lower-is-better, and coheres with the Vibe Mill → HackLet thesis.
+
+Preserved deliberately: the **"Most Resilient"** award title (aspirational quality vs descriptive measurement), the **"fuzz catalog" / "fuzz runner"** names (fuzzing is the method, slop is the measurement), and **"resilient"** as a quality adjective.
+
+Cascaded across format_spec.md (§4, canonical), LEAGUE_OPERATIONS.md, the tier ops docs, FUZZ_RUNNER_SPEC.md, IDEAS_FOR_LATER.md, BUILD_ROADMAP.md, DATA_MODEL.md, ARCHITECTURE.md, claude.md, and the landing copy. **No platform migration:** the shipped Stage-3 scoring uses a judge-entered `engineering_score` stand-in (higher-is-better), intentionally left as-is; the real deduction-only `slop_score` field is born when the Stage-5 runner is built.
+
+---
+
 ## In progress — Stage 1 close-out (as of 2026-06-18)
 
 - [x] End-to-end acceptance **verified on the live site**: signup → verify email → login → create chapter (pending) → admin approve (verified) → appears in directory → suspend (leaves directory). Full lifecycle walked.

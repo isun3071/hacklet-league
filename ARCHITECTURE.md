@@ -164,8 +164,8 @@ The integration is centralized in `backend/ai_proxy/` Django app. No other app c
 Tier A chapters running broadcast-quality events use broadcast infrastructure components:
 
 - **Workstation streaming**: each workstation runs OBS (or equivalent) streaming its display to an RTMP endpoint. Chapter-side or league-side ingest server receives streams.
-- **Stats overlay API**: league provides real-time data feeds (token budgets, fuzz budgets, fuzz scores, time remaining) via WebSocket or SSE. Broadcast production composites these into stream overlays.
-- **Live leaderboard endpoint**: sortable player-fuzz-score leaderboard, updates as fuzz triggers complete. Display-ready format for broadcast layouts.
+- **Stats overlay API**: league provides real-time data feeds (token budgets, fuzz budgets, slop scores, time remaining) via WebSocket or SSE. Broadcast production composites these into stream overlays.
+- **Live leaderboard endpoint**: sortable player-slop-score leaderboard, updates as fuzz triggers complete. Display-ready format for broadcast layouts.
 - **Commentator dashboard**: dedicated web view showing all players' metrics simultaneously. Used by commentators during broadcast.
 
 For MVP, chapters handle their own video production (cameras, mixers, RTMP outputs). League supplies the data layer (stats, leaderboards, dashboards) that production composites with the video streams. Full integrated broadcast platform is future work.

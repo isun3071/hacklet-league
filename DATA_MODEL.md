@@ -271,7 +271,7 @@ submission_id            : FK Submission
 category                 : varchar (the fuzz category triggered)
 budget_cost              : int (fuzz budget consumed)
 score_delta              : int (signed score change from this invocation)
-running_score_after      : int (player's accumulated fuzz score after this invocation)
+running_score_after      : int (player's accumulated slop score after this invocation)
 running_budget_remaining : int (player's fuzz budget after this invocation)
 invoked_at               : timestamp
 results_summary          : jsonb (counts of defended/broken/etc per this invocation)

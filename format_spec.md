@@ -96,24 +96,24 @@ At Tier B and Tier C, the format runs without broadcast production. In-person au
 
 A player's performance is measured across three components:
 
-- **Fuzz Score**: Sum of signed points across all applicable tests
+- **Slop Score**: the amount of slop the fuzz catalog detected in the submission — a **deduction-only** score in the range **[0, +∞)** where **lower is better and 0 is the aspirational maximum** (a clean submission). It is the sum of per-probe penalties for every probe that detected slop; passing a probe, or not having the surface a probe targets, contributes nothing. Golf-style: you accumulate slop the way a golfer accumulates strokes — zero is perfect, and there is no bound on how much slop a broken submission can carry.
 - **Pitch Quality**: Judge evaluation on a 0-100 scale, averaged across the panel, incorporating judge clickaround findings
 - **Cross-Examination Performance**: Judge evaluation on a 0-100 scale, averaged across the panel, scoring substance and conciseness
 
 Each component is reported as a raw score and used in category awards. The Best Overall determination uses rank-based composition rather than weighted-sum.
 
-### 4.2 Fuzz Scoring Philosophy
+### 4.2 Slop Scoring Philosophy
 
-Fuzz scoring is signed at the test level. Each test specifies its own point values for each possible outcome:
+Slop scoring is **deduction-only**. Each probe has one job: detect whether a specific kind of slop is present. A probe that detects slop adds its penalty to the slop score; a probe that detects nothing — whether because the submission defended correctly or because the targeted surface does not exist — adds **zero**. There is no positive reward for passing. Resilience is table stakes, not bonus territory: you are not credited for *not* having SQL injection, you are penalized for having it.
 
-| Outcome | Score |
+| Probe outcome | Slop contribution |
 | --- | --- |
-| Defended | Positive value (varies by test) |
-| Gracefully Handled (when applicable) | Smaller positive value |
-| Not Applicable | Zero |
-| Broken | Negative value (varies by test) |
+| Slop detected (the failure fired) | + penalty (varies by probe) |
+| Clean (defended, or no such surface) | 0 |
 
-Point values are calibrated using a five-axis methodology:
+This resolves the attacker/defender asymmetry honestly. A submission that defends seven of eight SQL endpoints is fully compromisable through the eighth: the seven clean endpoints add nothing, the one failure adds its full penalty, and the gap between "mostly defended" and "fully defended" is exactly the cost of that one failure — which matches the real-world outcome (you are breached). It also resolves the parameterized-SQL invisibility problem structurally: correctly parameterized SQL is behaviorally identical to "no SQL at all" from a probe's perspective, and deduction-only scoring treats both as zero, which is substantively correct — neither is vulnerable.
+
+Penalty magnitudes are calibrated using a five-axis methodology:
 
 1. **Frequency**: How commonly this vulnerability appears in real applications
 2. **Ease of Exploit**: How much attacker skill, time, and tooling is required to exploit successfully
@@ -121,21 +121,21 @@ Point values are calibrated using a five-axis methodology:
 4. **Contextual Impact**: How the application's specific context amplifies or reduces severity
 5. **Patching Difficulty**: How hard the correct defense is to implement
 
-Scoring values derive systematically from the axes. Vulnerabilities with high frequency and low patching difficulty are scored asymmetrically — modest reward for defense (expected at competence baseline), large penalty for failure (represents negligence). Vulnerabilities with low frequency, hard exploitation, and high patching difficulty score the opposite — large reward for defense (demonstrates depth), modest penalty for failure (rare and difficult to anticipate).
+Penalty magnitudes derive systematically from the axes. High-frequency, easy-to-exploit, severe, easy-to-patch vulnerabilities (SQL injection, auth bypass) carry **large** penalties — failing them is negligence against a known, cheap defense. Low-frequency, hard-to-exploit, hard-to-patch issues carry **smaller** penalties — rare and difficult to anticipate, so their slop weighs less. (Magnitudes are placeholders pending calibration against reference submissions — flagged for follow-up design.)
 
-A test produces the Gracefully Handled outcome only when the attack vector is non-adversarial in nature; adversarial categories do not, because graceful handling does not prevent an iterating attacker from eventually succeeding. Adversarial categories split further by whether the defense is **observable**. Visible-sink categories (XSS, authentication bypass, broken access control) admit Defended or Broken, because the defense shows up in a response that can be read. Hidden-sink injection categories (SQL injection, command injection, server-side template injection) are scored **penalty-only** — Broken or Clear (zero), with no Defended outcome — because a defended hidden sink is observationally identical to an absent one, so positive defense credit cannot be honestly awarded; there the reward for safety is avoiding the penalty. Non-adversarial categories (input validation, type coercion, resource limits) admit graceful handling because the inputs may come from confused users rather than active attackers. See FUZZ_RUNNER_SPEC.md for the per-test `evidence_model`.
+Because scoring is deduction-only, the old distinction between categories where a defense is *observable* (XSS, access control) and categories where it is *not* (SQL injection, command injection) no longer affects scoring at all — both simply report slop-or-clean, penalty if detected and zero otherwise. Whether a probe can see a defense or only a failure is now purely a **detection** concern (the per-probe `evidence_model` in FUZZ_RUNNER_SPEC.md), not a scoring one. Non-adversarial QA probes work the same way: a graceful, correct response adds zero; a crash or a leak adds the penalty.
 
-**Variant Groups**: Some categories contain "variant groups" — sets of tests probing the same logical attack with different syntactic presentations (e.g., SQL injection across different comment syntaxes). These exist where a single correct architectural defense (such as parameterized queries) handles all variants automatically. Within variant groups, point values are calibrated such that partial defense (defending some variants but missing others) typically nets zero or negative. This reflects the security-engineering reality that incomplete defense of the same logical attack often creates false confidence and should not be rewarded as equivalent to architecturally correct defense.
+**Variant Groups**: Some categories contain "variant groups" — sets of probes testing the same logical attack with different syntactic presentations (e.g., SQL injection across different comment syntaxes). These exist where a single correct architectural defense (such as parameterized queries) handles all variants automatically. Each missed variant adds its own slop, so partial defense (handling some variants but missing others) still accumulates slop — incomplete defense of the same logical attack creates false confidence and is not treated as equivalent to architecturally correct defense that clears every variant.
 
-**Result Reporting**: A raw fuzz score in isolation can be ambiguous — a near-zero score could mean catastrophic failure (nothing deployed), strategic minimalism (limited surface), or balanced engagement (broad surface with mixed outcomes). To disambiguate, each submission's result reports the raw fuzz score alongside contextual metadata:
+**Result Reporting**: A slop score in isolation can be ambiguous — a low score could mean a clean submission with broad surface (excellent) or a trivial one with almost no surface to test (Limited Engagement). To disambiguate, each submission's result reports the slop score alongside contextual metadata:
 
-- **Status**: Completed, DNF (Did Not Deploy), or Limited Engagement (fewer than the threshold of applicable tests)
-- **Tests Applicable**: Count of tests that produced non-N/A outcomes
-- **Tests Defended / Gracefully Handled / Broken**: Outcome counts
+- **Status**: Completed, DNF (Did Not Deploy), or Limited Engagement (fewer than the threshold of applicable probes)
+- **Probes Applicable**: Count of probes whose target surface was present
+- **Slop Detected**: Count of probes that fired, with a per-category breakdown
 - **Attack Surface Coverage**: Categorical descriptor (Narrow / Moderate / Broad) derived from applicable count
-- **Defense Rate**: Defended count divided by Applicable count, expressed as a percentage (computed over provable-defense tests only; penalty-only categories have no Defended outcome)
+- **Clean Rate**: probes passed divided by probes applicable, as a percentage (the proportion of the tested surface that carried no slop)
 
-This metadata accompanies the raw score in event results, persistent rankings, and broadcast displays. The composite scoring math uses raw fuzz score for ranking, but interpretation of results uses the full reporting bundle. A player whose persistent rankings show consistent broad coverage with high defense rate has demonstrably different signal than one with consistent narrow coverage at any defense rate.
+This metadata accompanies the slop score in event results, persistent rankings, and broadcast displays. The composite scoring math uses the raw slop score for ranking, but interpretation of results uses the full reporting bundle. A player whose persistent rankings show broad coverage with low slop has demonstrably different signal than one with consistently narrow coverage. Because lower slop is better, a **DNF** (did not deploy) or **Limited Engagement** submission is ranked below every completed submission regardless of its trivially-low raw slop: not deploying is the worst outcome, never a clean zero.
 
 **Test Bundles**: Tests in the catalog are split into two bundles reflecting their different correctness models:
 
@@ -158,7 +158,7 @@ These properties no legitimate application intent violates. They are testable un
 
 The 5-second timeout threshold is deliberately set above tight production targets (real-world abandonment begins around 3 seconds) to remain reasonable for 24-minute builds that cannot fully optimize for performance.
 
-Speed is also measured as **boolean abandonment-threshold gates** in the performance bundle, distinct from optimization targets: TTFB ≥ 3s, FCP ≥ 5s, and INP ≥ 5s fail the speed category, with no marginal credit for being faster (a player clears the gate, then spends remaining time elsewhere). These are gates, not slopes — they catch only the egregiously broken, so they do not "penalize all submissions uniformly." TTFB is server-side and applies to any HTTP response; FCP and INP are browser-measured and apply only to apps that serve a rendered HTML document (a pure API scores them N/A). Optimization-target scoring of Core Web Vitals (for example crediting LCP < 2.5s on a slope) remains excluded: it measures performance tuning rather than engineering correctness. See FUZZ_RUNNER_SPEC.md for the gate mechanics.
+Speed is also measured as **boolean abandonment-threshold gates** in the performance bundle, distinct from optimization targets: TTFB ≥ 3s, FCP ≥ 5s, and INP ≥ 5s each add the speed category's slop penalty, with no marginal credit for being faster (a player clears the gate, then spends remaining time elsewhere). These are gates, not slopes — they catch only the egregiously broken, so they do not "penalize all submissions uniformly." TTFB is server-side and applies to any HTTP response; FCP and INP are browser-measured and apply only to apps that serve a rendered HTML document (a pure API scores them N/A). Optimization-target scoring of Core Web Vitals (for example crediting LCP < 2.5s on a slope) remains excluded: it measures performance tuning rather than engineering correctness. See FUZZ_RUNNER_SPEC.md for the gate mechanics.
 
 **Intent-Dependent QA Properties** — idempotency, specific concurrency behaviors, duplicate handling, persistence semantics — are deferred from the initial catalog. These depend on what the app is supposed to do (a checkout requires idempotency; a chat may not), and rigorous testing requires intent declarations and applicability decisions that add complexity disproportionate to the measurement value for 24-minute builds.
 
@@ -170,12 +170,12 @@ The README remains load-bearing for cross-examination and pitch context. Players
 
 The Best Overall winner is determined through rank-based composition with progressive tiebreaking:
 
-1. Players are ranked independently on Fuzz Score and Communication Score (Communication = average of Pitch Quality and Cross-Examination Performance).
-2. Each player's Rank Sum equals Fuzz Rank plus Communication Rank.
+1. Players are ranked independently on Slop Score and Communication Score (Communication = average of Pitch Quality and Cross-Examination Performance). Slop is ranked **ascending** (lowest slop is rank 1, since lower is better); Communication is ranked descending (highest is rank 1). Because composition is rank-based, the unbounded range and lower-is-better direction of the slop score need no normalization — only the ranking direction differs.
+2. Each player's Rank Sum equals Slop Rank plus Communication Rank.
 3. **Lowest Rank Sum wins.**
-4. Ties on Rank Sum are broken by **smallest absolute differential** between Fuzz Rank and Communication Rank. This rewards balanced performance across components.
-5. Ties on both Rank Sum and differential are broken by **best Fuzz Rank** (favors the engineering side if still tied).
-6. Ties on Rank Sum, differential, and Fuzz Rank are broken by **best Communication Rank** (favors the communication side if still tied).
+4. Ties on Rank Sum are broken by **smallest absolute differential** between Slop Rank and Communication Rank. This rewards balanced performance across components.
+5. Ties on both Rank Sum and differential are broken by **best Slop Rank** (favors the engineering side if still tied).
+6. Ties on Rank Sum, differential, and Slop Rank are broken by **best Communication Rank** (favors the communication side if still tied).
 7. Ties on all four criteria result in co-Champions. No additional tiebreakers are applied.
 
 Standard competition ranking (1224 method) is used for component ranking, with ties shared and subsequent ranks skipping accordingly.
@@ -186,7 +186,7 @@ This produces the right kind of Best Overall winner: the most balanced player am
 
 Per-round categorical awards are kept deliberately small to preserve credentialing signal at 8-player round size. Per-round awards alongside Best Overall (§4.3):
 
-- **Most Resilient**: Highest raw Fuzz Score
+- **Most Resilient**: Lowest raw Slop Score. The award title stays aspirational (it credentials the *quality* of resilience demonstrated) while the underlying measurement is descriptive (slop score 0 is what earned it) — the same way golf names a "Champion," not a "Lowest Score Holder."
 - **Best Communicator**: Highest raw Communication Score (combined Pitch Quality + Cross-Examination Performance per §4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination.
 - **People's Hacklet**: Audience vote (separate from judge evaluation entirely)
 
@@ -214,7 +214,7 @@ All players in an event work on identically-configured workstations supplied by 
 
 **Local fuzz capability for intelligence gathering and broadcast suspense.** Workstations include a locally-installed fuzz runner containing the public test pool. During build phase, players trigger this local runner via the league portal; the runner executes against their local deployment and returns intelligence about their defensive coverage in seconds. The local runner does *not* contain the hidden test pool — hidden tests live only on league central infrastructure. Local fuzz results are informational only; they do not contribute to scoring.
 
-The primary purpose of player-triggered fuzz is **broadcast watchability**. The visible accumulation of player fuzz scores during build creates real-time narrative for audiences and commentators. The gap between visible player-triggered scores and the authoritative hidden-pool results at freeze generates the format's central dramatic tension: did the player's high score reflect genuine defense, or did the hidden tests reveal gaps the player never probed? Player fuzz is intelligence for the player; player fuzz score visibility is suspense for the audience.
+The primary purpose of player-triggered fuzz is **broadcast watchability**. A player's visible slop score falling as they fix issues during build creates real-time narrative for audiences and commentators. The gap between the visible public-pool slop and the authoritative hidden-pool slop at freeze generates the format's central dramatic tension: did the player's low public slop reflect genuine defense, or will the hidden tests surface slop the player never probed for? Player fuzz is intelligence for the player; the visible slop score is suspense for the audience.
 
 Workstations are restricted to non-administrative user accounts. Players cannot modify system configuration, install global software, or access system directories. Within their home directory, they have full freedom to work as they would on any development machine.
 

@@ -132,7 +132,7 @@ The submission infrastructure may differ (SCP from chapter workstations vs porta
 Per format_spec.md §4, Tier B operates the scoring framework with **modified Most Efficient availability**:
 
 **Available per-round awards**:
-- **Most Resilient**: highest Fuzz Score
+- **Most Resilient**: lowest Slop Score
 - **Best Communicator**: highest Communication Score (live pitch + cross-ex with human judges)
 - **People's Hacklet**: highest audience vote *contingent on audience presence*
 - **Best Overall**: composite rank with progressive tiebreakers

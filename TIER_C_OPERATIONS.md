@@ -146,7 +146,7 @@ The LLM judging pipeline still distinguishes capability through patterns the sub
 - **Hallucinated defensive claims**: PITCH.md claiming "I implemented CSRF protection" when the code lacks CSRF — caught by judges reading PITCH.md + code together
 - **Boilerplate disguised as reasoning**: generic AI output without submission-specific context — scored lower than specific reasoning
 - **Missing reasoning depth**: lists of what was built without explaining why — scored lower than substantive rationale
-- **Inconsistency with fuzz catalog results**: PITCH.md claims strong defensive coverage when fuzz score is low — judges identify the mismatch
+- **Inconsistency with fuzz catalog results**: PITCH.md claims strong defensive coverage when the slop score is high — judges identify the mismatch
 
 AI assistance doesn't automatically produce strong PITCH.md. Players must direct AI toward specificity, depth, accuracy, and consistency with their actual submission. That direction is the credentialed skill.
 
@@ -214,7 +214,7 @@ LLM judging is real recurring cost. At large-cohort MVR (30 submissions × 3 Fus
 The full award set and scoring math are defined once in **format_spec.md §4**; this section only notes which awards Tier C offers and how the Communication Score is produced per profile.
 
 Tier C offers the **per-round award set** (format_spec §4):
-- **Most Resilient** — highest Fuzz Score (the deterministic catalog applies identically at every tier).
+- **Most Resilient** — lowest Slop Score (the deterministic catalog applies identically at every tier).
 - **Best Communicator** — highest Communication Score. The score is **LLM-judged** in the MVR profile (PITCH.md, §8) and **human-judged** in the Tier C Extended profile (live pitch + cross-examination); the award honors the same skill dimension either way.
 - **People's Hacklet** — audience-contingent: applies when a chapter hosts an in-person audience, skipped for audience-free events.
 - **Best Overall** — composite ranking per format_spec §4.3.

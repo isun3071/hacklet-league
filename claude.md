@@ -254,6 +254,15 @@ Public-facing copy (landing page, sponsor materials, recruitment content, social
 
 Canonical doc voice (format_spec, LEAGUE_OPERATIONS, tier ops) is more formal than public-facing copy and may use em dashes sparingly where they serve clarity. The avoid-list above applies most strictly to founder voice and external communications.
 
+### Score vocabulary (Slop Score)
+
+The fuzz catalog produces a **Slop Score**: deduction-only, range [0, +∞), **lower is better, 0 is perfect** (golf-style — you accumulate slop, you never earn points). Use "slop score" in all copy, UI labels, and docs for the measurement.
+
+- The score is **Slop Score** — not "Resilience Score" or "Fuzz Score" (both retired names). But **"fuzz catalog" and "fuzz runner" keep the "fuzz" name**: fuzzing is the *method*, slop is what it *measures*.
+- **"Most Resilient"** stays as the award title — it credentials the *quality* (aspirational), while the slop score is the *measurement* (descriptive). Golf names a "Champion," not a "Lowest Score Holder."
+- **"resilient" / "resilience"** as an adjective or property ("build a resilient app," "resilience is what the catalog measures") is fine. Only the *score name* changed.
+- Direction matters: lower slop is better. Never write "high slop score" as praise.
+
 ## What This Document Is Not
 
 This document is project conventions only. It does not:

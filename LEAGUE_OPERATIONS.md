@@ -96,7 +96,7 @@ Chapters are tiered based on their operational rigor. The tier system is a **mec
 
 The tiers exist because the format's integrity properties hang together with infrastructure dependencies. Token budget enforcement requires firewall isolation plus league-hosted AI substrate (Tier A). Substrate equality as a credentialing claim requires controlled AI access (Tier A). Resource calibration as a measurable skill requires enforceable token usage measurement (Tier A). At lower tiers, these mechanics adjust honestly rather than claiming enforcement that doesn't exist.
 
-The format's load-bearing integrity mechanism — the resilience catalog — operates at **full strength at every tier**. The fuzz catalog evaluates submissions identically regardless of how they were produced; slop loses to fuzz regardless of who or what produced it. This is what makes lower-tier events produce real format-validation signal even without credentialing-grade enforcement.
+The format's load-bearing integrity mechanism — the fuzz catalog — operates at **full strength at every tier**. The fuzz catalog evaluates submissions identically regardless of how they were produced; slop loses to fuzz regardless of who or what produced it. This is what makes lower-tier events produce real format-validation signal even without credentialing-grade enforcement.
 
 ### The Freedom-Integrity Tradeoff
 

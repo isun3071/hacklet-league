@@ -40,71 +40,70 @@ A test may exist **only if its correct outcome is the same regardless of what th
 | `POST /pay` dedupes a double-submit | yes (an append-only event log wants both writes) | intent-dependent → excluded |
 | at-most-once delivery | yes (messaging legitimately wants at-least-once) | intent-dependent → excluded |
 
-Because every test in the catalog is universal by construction, the schema carries **no intent flag**. Intent-dependent engineering quality is not unmeasured: it is credentialed on the **communication axis** (PITCH.md + cross-examination + judge clickaround), where a human carries the intent the runner refuses to guess. The fuzz/resilience score stays intent-free and fully automated; there is no per-test judge override of fuzz outcomes.
+Because every test in the catalog is universal by construction, the schema carries **no intent flag**. Intent-dependent engineering quality is not unmeasured: it is credentialed on the **communication axis** (PITCH.md + cross-examination + judge clickaround), where a human carries the intent the runner refuses to guess. The slop score stays intent-free and fully automated; there is no per-test judge override of slop outcomes.
 
 ### Bundles
 
-v1 ships three bundles. The six-axis Resilience model (IDEAS_FOR_LATER) adds Race Conditions and Behavioral Consistency as later bundles without changing the runner.
+v1 ships three bundles. The six-axis Slop model (IDEAS_FOR_LATER) adds Race Conditions and Behavioral Consistency as later bundles without changing the runner.
 
 - **security** — OWASP-aligned: injection (SQL/NoSQL/command/template), XSS, auth bypass, broken access control / IDOR, CSRF, SSRF, security headers, sensitive-path exposure.
 - **qa** — universal QA per format_spec §4.2: crash resistance, error hygiene, HTTP semantics, encoding round-trip, deployment hygiene.
-- **performance** — speed checkpoints (below) plus load/spike handling and DoS resistance (oversized bodies/URLs/headers, decompression bombs, unbounded pagination, slow-loris). Load and DoS are measured inside the container's **fixed resource envelope** (identical CPU/RAM/PID quotas for every submission), so comparison is fair: it measures resilience within the standard box, not scaling to arbitrary hardware. DoS probes are bounded so the runner cannot become its own amplifier.
+- **performance** — speed checkpoints (below) plus load/spike handling and DoS resistance (oversized bodies/URLs/headers, decompression bombs, unbounded pagination, slow-loris). Load and DoS are measured inside the container's **fixed resource envelope** (identical CPU/RAM/PID quotas for every submission), so comparison is fair: it measures how the app holds up within the standard box, not scaling to arbitrary hardware. DoS probes are bounded so the runner cannot become its own amplifier.
 
 ### Speed checkpoints
 
 Speed is scored as **boolean gates at user-abandonment thresholds**, not optimization targets:
 
-| Metric | Gate (fail the speed category at) | Where measured |
+| Metric | Adds slop at | Where measured |
 | --- | --- | --- |
 | TTFB | ≥ 3s | server-side timing (any HTTP response) |
 | FCP | ≥ 5s | headless browser; HTML-rendering apps only |
 | INP | ≥ 5s | headless browser (Total-Blocking-Time proxy / scripted interaction); HTML apps only |
 
-Clearing all gates yields the speed category's positive contribution; there is **no marginal credit for being faster** (Goodhart-resistant: players optimize to the gate, then redirect remaining time elsewhere). FCP and INP apply only to apps that serve a rendered HTML document; a pure JSON API scores them **N/A** (structural, from discovery). FCP/INP require the headless-browser harness, which renders untrusted submission pages and is therefore sandboxed like the rest of the runner (isolated context, no host FS, egress-restricted).
+Clearing all gates adds no slop; each gate that trips adds the speed category's slop, with **no marginal credit for being faster** (Goodhart-resistant: players optimize to the gate, then redirect remaining time elsewhere). FCP and INP apply only to apps that serve a rendered HTML document; a pure JSON API scores them **N/A** (structural, from discovery). FCP/INP require the headless-browser harness, which renders untrusted submission pages and is therefore sandboxed like the rest of the runner (isolated context, no host FS, egress-restricted).
 
 **Reconciliation with format_spec §4.2.** §4.2 previously excluded Core Web Vitals as optimization metrics that "penalize all submissions uniformly without differentiating skill." Abandonment-threshold *gates* are a different instrument: they do not penalize uniformly, they catch only the egregiously broken. The gates above supersede that blanket exclusion; optimization-target scoring (e.g., crediting LCP < 2.5s on a slope) stays out of scope.
 
-### Outcome semantics: two evidence models
+### Outcome semantics: deduction-only (slop)
 
-Whether a test can credit defense at all depends on whether the defense is **observable**:
+Scoring is **deduction-only** (format_spec §4.2). A probe never adds credit, only slop. Each probe resolves to one of:
 
-> A defense is **provable** when the dangerous operation's result is visible in a response you can read (XSS: did my payload come back escaped? access control: did I get another user's record? error hygiene: is the stack trace in the body?). It is **unobservable** when the operation is a hidden backend action whose safe handling is identical to its absence (SQLi, command injection, SSTI, NoSQLi: you never see the query or shell, only the final response).
-
-Every test declares an `evidence_model`, which fixes its scoring shape.
-
-**`provable_defense`** — four outcomes; X and Y calibrated independently (format_spec §4.2):
-
-| Outcome | Score |
+| Outcome | Slop |
 | --- | --- |
-| defended (handling positively observed) | +X |
-| gracefully_handled (non-adversarial only) | +smaller |
-| not_applicable (surface absent) | 0 |
-| broken (oracle fired) | −Y |
+| **slop_detected** (the probe fired) | + penalty |
+| **clean** (applicable surface present, probe did not fire) | 0 |
+| **not_applicable** (no such surface) | 0 |
 
-**`failure_only`** — penalty-only. There is **no `defended` outcome**, because a defended hidden sink and an absent one are observationally identical:
+`clean` and `not_applicable` both contribute 0 — they are tracked separately only for the reporting bundle (Attack Surface Coverage, Clean Rate). The submission's **slop score** is the sum of every fired probe's penalty.
 
-| Outcome | Score |
-| --- | --- |
-| broken (attack succeeded) | −Y |
-| clear (attack did not succeed — defended *or* no such sink) | 0 |
+This collapses the earlier provable/failure-only scoring split. A clean result is 0 whether the defense was *observed* (an XSS payload returned escaped) or simply *never fired* (parameterized SQL, or no SQL at all), so **the runner no longer has to tell "defended" from "absent"** — the unsolvable case dissolves. Every probe needs only a **slop oracle**: the conditions under which slop is present. They match → penalty; otherwise → 0. We never prove the inverse.
 
-This is the decision that resolves the falsifiability asymmetry. For failure-only categories we stop trying to distinguish "defended" from "absent" and score both **0**. The reward for safety is **avoiding the −Y**, which is the correct security semantics: a parameterized-SQL app and a no-SQL app are equally unexploitable. *How* a player achieved safety (parameterized queries, an ORM, no SQL at all) is an architecture story, credentialed on the **communication axis** (PITCH.md + cross-examination), not the resilience axis. It also simplifies the runner: failure-only tests need only the failure oracle, not the fragile liveness inference that proving a negative would require.
+`evidence_model` survives only as a **detection hint**, never a scoring driver:
 
-### Detecting `broken` (the oracle)
+- `provable` — the slop oracle reads observable output (the payload's fate is in the response: XSS escaping, a leaked stack trace, another user's record returned).
+- `oracle` — the sink is hidden (SQLi, command injection, SSTI), so the slop oracle uses a differential / timing / error signal.
 
-Both models detect `broken` the same way — with an **oracle / differential**, never a single payload against a single response. Worked example, SQLi:
+Both score identically (penalty if slop detected, else 0). The distinction only tells the runner *how* to look.
 
-- **Boolean differential** — `' OR '1'='1' --` (TRUE) vs `' AND '1'='2' --` (FALSE). Responses diverge in the attacker's favor → **broken**.
-- **Error oracle** — a lone `'` yields a 500 with SQL error text → **broken**.
-- **Time oracle** — a `pg_sleep(5)`-style payload delays the response ~5s → **broken**.
+### Detecting slop (the oracle)
 
-If no oracle fires: a `failure_only` test scores **clear (0)**; a `provable_defense` test then checks its `defended_if` (the positively observed handling, e.g. the XSS payload returned escaped) → **defended**, else **not_applicable**.
+Never a single payload against a single response — a matched set that fires only when the slop is real. SQLi:
+
+- **Boolean differential** — `' OR '1'='1' --` vs `' AND '1'='2' --` diverge in the attacker's favor → slop.
+- **Error oracle** — a lone `'` yields a 500 with SQL error text → slop.
+- **Time oracle** — a `pg_sleep(5)`-style payload delays the response ~5s → slop.
+
+If none fire → clean (0). Egress is locked, so oracles are **in-band only** (differential / timing / error / observed output); out-of-band callbacks are unavailable (see threat model), which bounds detection of fully-blind injections and OOB-only SSRF.
+
+### Aggregation: plain summation
+
+The slop score is the sum of every fired probe's penalty across its applicable targets. There is **no worst_case/additive distinction to maintain** — with no positive credit to protect, "partial defense" simply means each missed target adds its slop. Catastrophic categories (SQLi, auth bypass) carry **large per-probe penalties** so a single failure dominates the score; that calibration does the work the old worst_case mode used to, without a separate aggregation rule.
 
 ### N/A and reporting honesty
 
-`not_applicable` applies to provable tests whose surface is absent (structural, from the discovery profile + `applicability.requires`). Failure-only tests do not distinguish N/A from defended — both are **clear (0)** — so their result never claims "defended": it reports **"exploited" (−Y)** or **"no exploit found" (0)**. Defense Rate (format_spec §4.2) is computed over **provable tests only**, since failure-only tests have no `defended` outcome to rate.
+A category never claims "defended." It reports slop found (with penalty) or **no slop found**. `not_applicable` (surface absent, structural from the discovery profile + `applicability.requires`) and `clean` (surface present, no slop) both score 0 but are tracked separately. **Clean Rate** = clean / (clean + slop_detected) over applicable probes; **Attack Surface Coverage** derives from the applicable count.
 
-Authoring consequence: a `failure_only` test has a `broken_if` (the oracle) and **no** `defended_if`. A `provable_defense` test has a `defended_if` that asserts positively observed handling (not mere absence of breakage), plus `broken_if`. CI enforces that `points_defended` is null exactly when `evidence_model` is `failure_only`.
+Authoring consequence: every test has a single `slop_if` (the oracle conditions). There is no `defended_if` — absence of slop is simply 0, never positive credit.
 
 ## Runner as a Sandboxed, Deployable Service
 
@@ -115,7 +114,7 @@ The runner is a **standalone deployable component, separate from the hackletleag
 1. The platform stores the submission zip at code freeze (portal upload, TIER_C_OPERATIONS §6).
 2. The platform enqueues a run: `{submission_id, artifact_ref, catalog_version}`.
 3. The runner pulls the artifact, deploys it to an ephemeral container, and runs the five phases.
-4. The runner returns a structured **resilience report** (per-test outcomes + points + metadata).
+4. The runner returns a structured **slop report** (per-probe outcomes + penalties + metadata).
 5. The platform persists `FuzzResult` rows; the scoring engine (separate, see Scoring Integration) folds the result into the composite.
 
 The platform **never executes submission code in-process**.
@@ -143,13 +142,12 @@ category: <category-name>          # human-readable category
 subcategory: <subcategory>         # optional, for variant grouping
 difficulty_tier: <1 | 2 | 3 | 4 | 5>
 pool: <public | hidden>
-attack_type: <adversarial | non_adversarial>        # non_adversarial may award gracefully_handled
-evidence_model: <provable_defense | failure_only>   # failure_only = hidden-sink injection (SQLi, cmd,
-                                                    #   SSTI): defense unobservable, scored penalty-only
+attack_type: <adversarial | non_adversarial>        # informational
+evidence_model: <provable | oracle>                  # DETECTION hint only, not scoring: provable = slop
+                                                    #   visible in the response; oracle = differential/
+                                                    #   timing/error signal for a hidden sink
 description: <text description of what the test does>
-points_defended: <positive integer or null>          # null iff evidence_model is failure_only
-points_gracefully_handled: <positive integer or null>  # only if non_adversarial AND provable_defense
-points_broken: <negative integer>
+penalty: <positive integer>                          # slop added when slop_if fires; 0 otherwise
 variant_group_id: <UUID or null>  # if part of a syntactic variant group
 
 applicability:
@@ -165,13 +163,9 @@ probe:
   variants:                       # additional payloads to test
     - <variant_1>
 
-assertion:
-  defended_if:
-    - <assertion_condition>
-  gracefully_handled_if:           # only if non-adversarial
-    - <assertion_condition>
-  broken_if:
-    - <assertion_condition>
+slop_if:                           # slop detected (penalty applied) when ALL conditions match; else 0
+  - <assertion_condition>
+  - <assertion_condition>
 ```
 
 ### Applicability Conditions
@@ -205,41 +199,38 @@ Targets identify which endpoints in the submission a probe should hit:
 
 ### Assertion Conditions
 
-Assertions are expressed as structured conditions, with common patterns:
+A probe's `slop_if` lists structured conditions describing **when slop is present** (all must match for the probe to fire and add its penalty). Common patterns:
 
 **Response status conditions:**
 - `response_status_in: [<list_of_codes>]`
 - `response_status_equals: <code>`
-- `response_status_500_with_db_error`
+- `response_status_500_with_db_error` — a 500 leaking a DB error is itself slop
 
-**Response content conditions:**
-- `response_does_not_contain: <pattern>`
+**Response content conditions** (slop = the bad thing is present):
+- `response_contains: <pattern>`
 - `response_contains_unauthorized_records`
 - `response_contains_credentials`
-- `response_does_not_leak_db_error`
-- `response_does_not_leak_stack_trace`
+- `response_leaks_db_error`
+- `response_leaks_stack_trace`
 
 **Timing conditions:**
-- `response_received_within: <duration>`
-- `response_received_after: <duration>`
+- `response_received_after: <duration>` — e.g. a time-based injection oracle firing
 
-**Speed-gate conditions** (performance bundle; browser-measured ones apply only when `submission_serves_html_document`):
-- `ttfb_under: <duration>`   # server-side; gate fails at >= 3s
-- `fcp_under: <duration>`    # headless browser; gate fails at >= 5s
-- `inp_under: <duration>`    # headless browser (TBT proxy / scripted interaction); gate fails at >= 5s
+**Speed-gate conditions** (performance bundle; browser-measured ones apply only when `submission_serves_html_document`) — slop when the threshold is breached:
+- `ttfb_at_least: <duration>`   # server-side; slop at >= 3s
+- `fcp_at_least: <duration>`    # headless browser; slop at >= 5s
+- `inp_at_least: <duration>`    # headless browser (TBT proxy / scripted interaction); slop at >= 5s
 
-**Behavioral conditions:**
-- `upload_rejected: true`
+**Behavioral conditions** (slop = the attack succeeded):
 - `upload_succeeds_and_executes: true`
 - `auth_bypassed: true`
-- `feature_existed_before_attack: true`
+- `boolean_differential_diverges: true` — injection oracle: the TRUE/FALSE payloads differ in the attacker's favor
 
-**Complex conditions** that require code can reference named predicates:
+**Complex conditions** that require code reference named predicates that return true **when slop is present**:
 
 ```yaml
-assertion:
-  defended_if:
-    - predicate: csrf_token_validated
+slop_if:
+  - predicate: csrf_unprotected
 ```
 
 These named predicates live in the `predicates/` directory and are reviewed alongside test additions.
@@ -281,7 +272,7 @@ Applicable tests execute in parallel up to a concurrency limit (default: 20 conc
 2. Send requests with configured timeout
 3. Collect responses
 4. Evaluate assertion conditions against responses
-5. Determine outcome: defended / gracefully_handled / not_applicable / broken
+5. Determine outcome: slop_detected / clean / not_applicable
 6. Record outcome, response data, and timing
 
 Some tests may require sequential execution (e.g., session-dependent tests). The test definition can declare `requires_sequential: true` to opt out of parallel execution.
@@ -291,9 +282,9 @@ Some tests may require sequential execution (e.g., session-dependent tests). The
 After all tests complete:
 
 1. Tally outcomes per test
-2. Compute total fuzz score from per-test point values
+2. Compute the slop score by summing fired probes' penalties
 3. Compute attack surface coverage (narrow / moderate / broad) from applicable count
-4. Compute defense rate (defended / applicable)
+4. Compute clean rate (clean / applicable)
 5. Generate per-category summaries
 
 ### Phase 5: Reporting
@@ -307,7 +298,7 @@ Results are persisted via different paths depending on runner mode:
 
 **Central runner** (at code freeze):
 - Records to FuzzResult table (authoritative)
-- Triggers the scoring engine when the run completes — under universal-only the resilience score is fully automated, with no per-test judge override
+- Triggers the scoring engine when the run completes — under universal-only the slop score is fully automated, with no per-probe override
 - Tester judges may spot-check for false positives out of band, but that does not gate scoring; judges' scored role is the communication axis (clickaround, pitch, cross-examination)
 
 ## Execution Architecture
@@ -332,7 +323,7 @@ Runs as a standalone, containerized service on league infrastructure, separate f
 - Container exposes the submission's port to the runner only
 - Runner executes the full catalog (both pools) against the deployed container
 - After completion, the container is destroyed
-- Returns the resilience report to the platform, which persists FuzzResult rows
+- Returns the slop report to the platform, which persists FuzzResult rows
 
 The central runner runs in a queue model — 12 submissions arrive at freeze, workers process them in parallel up to infrastructure capacity. Target: complete all submissions within the 12-minute evaluation window.
 
@@ -456,18 +447,18 @@ New tests are added to the catalog through this process:
 5. PR merged to main triggers catalog version bump
 6. Chapter platforms pull updated catalog at next sync
 
-**Three-way reference calibration.** Reference submissions are curated apps in the catalog repository. Before a test merges, it must resolve correctly against all three: **broken** on a known-vulnerable app, **defended** on a known-good app that has the real live surface, and **not_applicable** on an app that lacks the surface. A test that cannot cleanly separate those three (in particular, one that reads `defended` where it should read `not_applicable`) is not ready — that separation is the proof the oracle works.
+**Three-way reference calibration.** Reference submissions are curated apps in the catalog repository. Before a test merges, it must resolve correctly against all three: **slop_detected** on a known-vulnerable app, **clean** on a known-good app that has the real live surface, and **not_applicable** on an app that lacks the surface. A test whose oracle fires on the good app (false positive) or misses the vulnerable one (false negative) is not ready — that separation is the proof the oracle works.
 
 ## Scoring Integration
 
 After runner completes, scoring integration follows:
 
-1. Runner writes FuzzResult records per test outcome
+1. Runner writes FuzzResult records per probe outcome (slop_detected / clean / not_applicable)
 2. Scoring engine reads FuzzResult records for a submission
-3. Sums points per test outcome
-4. Applies variant-group scoring rules where applicable
-5. Computes final fuzz score for submission
-6. Generates result metadata (status, attack surface coverage, defense rate)
+3. Sums the penalties of every probe that detected slop
+4. Applies variant-group rules where applicable (each missed variant adds its slop)
+5. Computes the final slop score for the submission
+6. Generates result metadata (status, attack surface coverage, clean rate)
 7. Submission is ready for composite ranking
 
 The scoring engine is separate from the runner — runner produces structured outcomes, scoring engine interprets them into final scores.
