@@ -22,6 +22,39 @@ uv run python -m hacklet_runner.cli --app references/vulnerable/app.py   # print
 uv run python -m hacklet_runner.cli --app references/hardened/app.py     # slop_score 0
 ```
 
+## Engaging the runner (a submission)
+
+Submissions arrive as a zip containing a `Dockerfile`. The runner unzips it safely (zip-slip and
+size-capped), locates the Dockerfile (archive root or a single top-level folder), builds it, runs
+the image in the sandbox, fuzzes it, and prints the slop report:
+
+```sh
+# a real submission, built + run in Docker:
+uv run python -m hacklet_runner.cli --submission team.zip
+
+# production sandbox (read-only rootfs + egress-blocked network):
+docker network create --internal hacklet-fuzz-net          # one-time
+uv run python -m hacklet_runner.cli --submission team.zip --harden
+```
+
+A submission that won't unzip, has no Dockerfile, won't build, or never answers `$PORT` prints
+`{"status": "DNF", ...}` and exits 1 — never a runner crash. (Extraction → build context lives in
+`hacklet_runner/ingest.py`; the deploy/fuzz path is identical to the reference apps below.)
+
+### Dogfooding — aim at any live URL
+
+The same catalog can fuzz an **already-running** endpoint with no Docker (runs on any box, including
+this dev machine) — point it at the league's own site:
+
+```sh
+uv run python -m hacklet_runner.cli --target https://hackletleague.com
+```
+
+Only test targets you own or are authorized to test. The runner deploys nothing and never tears the
+target down. (Today's catalog targets reference-app paths, so most path-specific probes read
+clean/N-A against a real site; the universal probes — e.g. security headers — apply immediately.
+Discovery-driven fan-out across a target's real endpoints is the next step that makes this bite.)
+
 ## Hosting model
 
 The pipeline depends only on a `Deployer` (`hacklet_runner/deploy.py`):
@@ -33,6 +66,8 @@ The pipeline depends only on a `Deployer` (`hacklet_runner/deploy.py`):
   `--security-opt=no-new-privileges`, `$PORT` injected. Everything downstream of "container answers
   `$PORT`" is identical and stack-blind. The three-way calibration runs through it and scores
   identically — that equivalence is the test (`tests/test_docker_deploy.py`).
+- **`RemoteDeployer`** (dogfooding) targets an already-running URL you own or are authorized to
+  test. Deploys nothing, needs no Docker, and never tears the target down.
 
 ### Hardened sandbox (production)
 

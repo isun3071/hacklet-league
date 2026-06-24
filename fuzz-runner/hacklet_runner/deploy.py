@@ -223,3 +223,28 @@ class DockerDeployer(Deployer):
     def _logs(self) -> str:
         proc = _docker("logs", "--tail", "50", self.container_id or "")
         return (proc.stdout + proc.stderr)[-2000:]
+
+
+class RemoteDeployer(Deployer):
+    """Targets an already-running HTTP endpoint — dogfooding the league's own site, or any URL you
+    own or are authorized to test. 'Deploys' nothing, so it needs no Docker and runs on any box
+    (including the dev machine). The pipeline (discover -> probe -> aggregate) is identical to a
+    submission; only deploy/teardown differ. teardown is a no-op — the target is not ours to stop.
+    """
+
+    def __init__(self, base_url: str, health_timeout: float = 10.0):
+        self.base_url = base_url.rstrip("/")
+        self.health_timeout = health_timeout
+
+    def deploy(self) -> DeployHandle:
+        deadline = time.time() + self.health_timeout
+        while time.time() < deadline:
+            try:
+                httpx.get(self.base_url + "/", timeout=3.0, follow_redirects=True)
+                return DeployHandle(self.base_url)  # any HTTP response means it is up
+            except httpx.HTTPError:
+                time.sleep(0.3)
+        raise RuntimeError(f"target did not respond: {self.base_url}")
+
+    def teardown(self) -> None:
+        pass  # never tear down a target we did not deploy
