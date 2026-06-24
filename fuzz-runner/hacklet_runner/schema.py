@@ -28,12 +28,24 @@ class Probe(BaseModel):
 
 
 @dataclass
+class Form:
+    """A discovered HTML form: where it submits, how, and its input field names."""
+    action: str
+    method: str = "get"
+    fields: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Profile:
     """The stack-agnostic surface map produced by discovery."""
     base_url: str
-    endpoints: list[str] = field(default_factory=list)
-    form_endpoints: list[str] = field(default_factory=list)
+    routes: list[str] = field(default_factory=list)        # discovered paths (incl "/")
+    forms: list[Form] = field(default_factory=list)         # discovered forms with their fields
     capabilities: dict[str, bool] = field(default_factory=dict)
+
+    @property
+    def form_endpoints(self) -> list[str]:  # back-compat for predicates that target form actions
+        return [f.action for f in self.forms]
 
 
 @dataclass
