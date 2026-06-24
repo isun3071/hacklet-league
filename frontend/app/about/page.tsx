@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { NewsletterSignup } from "@/components/NewsletterSignup";
 
 export const metadata = {
@@ -42,7 +43,10 @@ export default function AboutPage() {
 
       <h2 className="h2">## how to engage</h2>
       <p className="body">{`If you want notification when there's a HackLet to sign up for, the newsletter form is below.`}</p>
-      <p className="body">{`If you want to run a chapter, judge, sponsor, or contribute to the catalog, reach out.`}</p>
+      <p className="body">
+        If you want to run a chapter, judge, sponsor, or contribute to the catalog,{" "}
+        <Link href="/contact">reach out</Link>.
+      </p>
       <p className="body">{`Or if you just want to watch the project evolve, the platform operates publicly.`}</p>
       <NewsletterSignup />
       <p className="body">{`Happy vibecoding!`}</p>

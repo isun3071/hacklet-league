@@ -9,6 +9,7 @@ export function SiteFooter() {
         </span>
         <span className="nav-links">
           <Link href="/about">about</Link>
+          <Link href="/contact">contact</Link>
           <Link href="/scoring">how scoring works</Link>
         </span>
         <span className="muted">in development &middot; 2026</span>
