@@ -32,11 +32,14 @@ def test_vulnerable_app_accrues_slop():
     o = report.by_id
     for probe in ALL_PROBES:
         assert o[probe] == "slop_detected", f"{probe} should fire on the vulnerable app"
-    # SQLi: 3 variants fire but the group collapses to one penalty (40, not 120).
-    # crash-resistance: 3 fire, diminished: 6 + 6*0.6 + 6*0.36 = 11.76.
-    # xss 30 + headers 3 + errhyg 8 + ttfb 5. Total 40+30+3+8+5+11.76 = 97.76 -> 98.
-    # (Raw, undamped, would be 184; this single number proves both dampers fired.)
-    assert report.slop_score == 98
+    # sec-headers-001 fans across every discovered route (/, /login, /search, /crash, /heavy):
+    header_hits = [x for x in report.outcomes if x.probe_id == "sec-headers-001"]
+    assert len(header_hits) == 5 and all(x.outcome == "slop_detected" for x in header_hits)
+    # SQLi: 3 variants fire, group collapses to one penalty (40, not 120).
+    # security-headers: 5 fan-out fires, diminished: 3 + 3*.6 + 3*.36 + 3*.216 + 3*.1296 = 6.92.
+    # crash-resistance: 3 fire, diminished: 6 + 6*.6 + 6*.36 = 11.76. xss 30 + errhyg 8 + ttfb 5.
+    # Total 40 + 30 + 6.92 + 8 + 5 + 11.76 = 101.68 -> 102.
+    assert report.slop_score == 102
 
 
 def test_hardened_app_is_clean():

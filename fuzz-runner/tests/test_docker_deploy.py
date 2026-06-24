@@ -1,5 +1,5 @@
 """Docker calibration: the same three-way reference suite, deployed via DockerDeployer instead of
-SubprocessDeployer, must produce identical slop scores (vulnerable 98, hardened 0, minimal 0).
+SubprocessDeployer, must produce identical slop scores (vulnerable 102, hardened 0, minimal 0).
 
 This is the proof that the production deployer is behavior-equivalent to the dev/CI one — same
 catalog, same probes, same scores — just a sandboxed container instead of a local subprocess.
@@ -30,7 +30,7 @@ def _score(app: str) -> int:
 
 
 def test_docker_vulnerable_matches_subprocess():
-    assert _score("vulnerable") == 98
+    assert _score("vulnerable") == 102
 
 
 def test_docker_hardened_is_clean():

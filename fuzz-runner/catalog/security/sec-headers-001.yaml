@@ -7,7 +7,6 @@ penalty: 3
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:
-  method: GET
-  target: /
+  target: routes   # fan across every discovered route, not just the homepage
 slop_if:
   - response_missing_header: x-content-type-options

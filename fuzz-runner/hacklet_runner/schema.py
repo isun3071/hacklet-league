@@ -56,6 +56,7 @@ class Outcome:
     outcome: str  # slop_detected | clean | not_applicable
     penalty: int
     variant_group_id: str | None = None
+    target: str = ""  # the concrete path/form this outcome ran against (fan-out)
 
 
 @dataclass
@@ -65,4 +66,10 @@ class Report:
 
     @property
     def by_id(self) -> dict[str, str]:
-        return {o.probe_id: o.outcome for o in self.outcomes}
+        # A probe may fan across many targets; collapse to the strongest status seen.
+        rank = {"not_applicable": 0, "clean": 1, "slop_detected": 2}
+        status: dict[str, str] = {}
+        for o in self.outcomes:
+            if o.probe_id not in status or rank[o.outcome] > rank[status[o.probe_id]]:
+                status[o.probe_id] = o.outcome
+        return status

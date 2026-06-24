@@ -51,9 +51,9 @@ uv run python -m hacklet_runner.cli --target https://hackletleague.com
 ```
 
 Only test targets you own or are authorized to test. The runner deploys nothing and never tears the
-target down. (Today's catalog targets reference-app paths, so most path-specific probes read
-clean/N-A against a real site; the universal probes — e.g. security headers — apply immediately.
-Discovery-driven fan-out across a target's real endpoints is the next step that makes this bite.)
+target down. (Discovery crawls the site and security-header checks now fan across every discovered
+route. Injection probes still read N/A against a JS-rendered SPA whose forms a static crawl can't
+see — the browser harness is the next step there.)
 
 ## Hosting model
 

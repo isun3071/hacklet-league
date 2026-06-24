@@ -55,7 +55,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except ValueError:
                 return self._send(500, "Internal Error\n\n" + traceback.format_exc())  # leaks trace
         if self.path.startswith("/heavy"):
-            time.sleep(3.5)  # slow: blows past the TTFB gate
+            time.sleep(1.5)  # slow: over the TTFB gate, but small enough to keep the suite fast
             return self._send(200, "done")
         return self._send(404, "not found")
 
