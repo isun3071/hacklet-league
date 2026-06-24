@@ -95,9 +95,9 @@ Never a single payload against a single response — a matched set that fires on
 
 If none fire → clean (0). Egress is locked, so oracles are **in-band only** (differential / timing / error / observed output); out-of-band callbacks are unavailable (see threat model), which bounds detection of fully-blind injections and OOB-only SSRF.
 
-### Aggregation: plain summation
+### Aggregation
 
-The slop score is the sum of every fired probe's penalty across its applicable targets. There is **no worst_case/additive distinction to maintain** — with no positive credit to protect, "partial defense" simply means each missed target adds its slop. Catastrophic categories (SQLi, auth bypass) carry **large per-probe penalties** so a single failure dominates the score; that calibration does the work the old worst_case mode used to, without a separate aggregation rule.
+The slop score sums fired-probe penalties, with two dampers (canonical in format_spec §4.2): a **variant group fires once** — its syntactic variants are detection robustness, not multipliers, so any variant firing applies the group's single penalty — and **within a category, repeated instances across endpoints have diminishing marginal penalty** (the tenth endpoint missing a header adds far less than the second). Across bundles, penalties are scaled **security ≫ qa > performance**. There is no worst_case/additive mode to maintain: with no positive credit to protect, the dampers plus per-bundle scale do the work, and a single catastrophic failure still dominates because its penalty is large.
 
 ### N/A and reporting honesty
 
