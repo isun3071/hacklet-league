@@ -1,8 +1,8 @@
 """The five-phase run: deploy -> discover -> applicability -> execute -> aggregate (+report).
 
-Aggregation here is a plain penalty sum (slice scope). The composition dampers from the spec
-(variant-group-once, diminishing-returns-within-category, per-bundle scale) land as the catalog
-grows; with three single probes there is nothing yet to dampen.
+Aggregation applies the spec's composition dampers (variant-group-once and
+diminishing-returns-within-category) via aggregate.compute_slop_score; per-bundle ordering is
+encoded in the penalty magnitudes, not a runtime multiplier.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from .aggregate import compute_slop_score
 from .deploy import Deployer
 from .discovery import discover
 from .probes import MATCHERS, PREDICATES
@@ -51,20 +52,26 @@ def run(deployer: Deployer, catalog: list[Probe]) -> Report:
             ctx = _Ctx(handle.base_url, client, profile)
             for probe in catalog:
                 if not _applicable(probe, profile):
-                    outcomes.append(Outcome(probe.id, probe.bundle, "not_applicable", 0))
+                    outcomes.append(_outcome(probe, "not_applicable", 0))
                     continue
                 if "predicate" in probe.probe:
                     slop = PREDICATES[probe.probe["predicate"]](ctx)
                 else:
                     slop = _run_declarative(probe, client)
                 outcomes.append(
-                    Outcome(
-                        probe.id,
-                        probe.bundle,
-                        "slop_detected" if slop else "clean",
-                        probe.penalty if slop else 0,
-                    )
+                    _outcome(probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0)
                 )
-        return Report(slop_score=sum(o.penalty for o in outcomes), outcomes=outcomes)
+        return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes)
     finally:
         deployer.teardown()
+
+
+def _outcome(probe: Probe, outcome: str, penalty: int) -> Outcome:
+    return Outcome(
+        probe_id=probe.id,
+        bundle=probe.bundle,
+        category=probe.category,
+        outcome=outcome,
+        penalty=penalty,
+        variant_group_id=probe.variant_group_id,
+    )

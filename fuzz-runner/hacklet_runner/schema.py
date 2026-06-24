@@ -16,6 +16,7 @@ class Probe(BaseModel):
     id: str
     bundle: str  # security | qa | performance
     category: str = ""
+    variant_group_id: str | None = None  # probes sharing one fire once (same logical flaw)
     pool: str = "public"  # public | hidden
     evidence_model: str = "provable"  # provable | oracle (detection hint only)
     penalty: int  # slop added when the probe fires; deduction-only, so always positive
@@ -39,8 +40,10 @@ class Profile:
 class Outcome:
     probe_id: str
     bundle: str
+    category: str
     outcome: str  # slop_detected | clean | not_applicable
     penalty: int
+    variant_group_id: str | None = None
 
 
 @dataclass

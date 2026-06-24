@@ -36,5 +36,8 @@ The pipeline depends only on a `Deployer` (`hacklet_runner/deploy.py`):
 ## Not yet in the slice (tracked in the spec)
 
 Browser-driven discovery (Playwright) for SPAs + FCP/INP; the hidden pool; stochastic sampling
-(median-of-N); the composition dampers (variant-group-once, diminishing returns, per-bundle
-scale); the minimal / no-surface reference app; container orchestration + throughput.
+(median-of-N); container orchestration + throughput (the real `DockerDeployer`).
+
+Already wired: the composition dampers (`aggregate.py` — variant-group-once +
+diminishing-returns-within-category; per-bundle ordering lives in the penalty magnitudes) and the
+vuln/hardened/minimal reference triad.
