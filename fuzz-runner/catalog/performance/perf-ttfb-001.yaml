@@ -1,0 +1,13 @@
+id: perf-ttfb-001
+bundle: performance
+category: speed
+pool: public
+evidence_model: provable
+penalty: 5
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  method: GET
+  target: /heavy
+slop_if:
+  - ttfb_at_least: 3.0

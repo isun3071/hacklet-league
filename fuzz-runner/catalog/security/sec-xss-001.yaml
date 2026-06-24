@@ -1,0 +1,15 @@
+id: sec-xss-001
+bundle: security
+category: xss
+pool: public
+evidence_model: provable
+penalty: 30
+applicability:
+  requires: [any_endpoint_accepts_text_input]
+probe:
+  method: GET
+  target: /search
+  query:
+    q: "<script>hl-xss-7f3c</script>"
+slop_if:
+  - response_contains: "<script>hl-xss-7f3c</script>"

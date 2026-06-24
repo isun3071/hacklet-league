@@ -117,6 +117,8 @@ The split *method* matters more than the ratio:
 - **Scoring is pool-agnostic.** A probe's penalty is its penalty regardless of pool; "hidden" means *unpublished*, not *weighted differently*.
 - **Rotation per version.** The split is per catalog version: burned hidden probes graduate to public the next quarter and fresh probes replace them (see Catalog Organization).
 
+**Repository boundary (hidden pool secrecy).** The `hacklet-league` repo is **public**, so hidden-pool probes must never live in it. The hidden pool belongs in a **separate private `fuzz-catalog` repo**; the runner host pulls it at run time with a read-only deploy token, and merges it with the public pool in memory. The public pool may live in the public repo (it is published by design). A `.gitignore` excluding `**/hidden/` is only a backstop — the boundary is the separate private repo, because a single accidental commit to a public repo is an irreversible leak (git history, clones, scrapers). This split is deferred until the first hidden probe is authored; until then the catalog is public-only.
+
 ## Runner as a Sandboxed, Deployable Service
 
 The runner is a **standalone deployable component, separate from the hackletleague.com platform process**. It executes untrusted contestant code, so it must not share a trust domain with the platform's database, secrets, or session store. It is deployed isolated (separate host/VM, restricted egress). This separation also makes **dogfooding (LEAGUE_OPERATIONS §12) first-class**: the runner points at any deployed HTTP target, so the league's own production code is just another target.

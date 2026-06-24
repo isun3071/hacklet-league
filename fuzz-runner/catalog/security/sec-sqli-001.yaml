@@ -1,0 +1,10 @@
+id: sec-sqli-001
+bundle: security
+category: sql-injection
+pool: public
+evidence_model: oracle
+penalty: 40
+applicability:
+  requires: [any_endpoint_accepts_text_input]
+probe:
+  predicate: sqli_auth_bypass
