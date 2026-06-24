@@ -1,17 +1,7 @@
-"""Run the catalog against a submission, a live URL, or a trusted reference app; print the report.
+"""Deploy/target an app, probe it over HTTP, and report a slop score (lower is better).
 
-    # a real submission zip — unzip -> build Dockerfile -> sandboxed run -> fuzz (Docker host):
-    uv run python -m hacklet_runner.cli --submission team.zip
-    uv run python -m hacklet_runner.cli --submission team.zip --harden   # production sandbox
-
-    # an already-running URL — dogfooding; no Docker (only test targets you own/are authorized to):
-    uv run python -m hacklet_runner.cli --target https://hackletleague.com
-
-    # a trusted reference app via subprocess, no Docker (dev/CI):
-    uv run python -m hacklet_runner.cli --app references/vulnerable/app.py
-
-Any submission that won't unzip, lacks a Dockerfile, won't build, or never answers $PORT emits
-{"status": "DNF", ...} and exits 1 — never a runner crash.
+Default output is a human-readable summary; --failed lists the probes that detected slop; --json
+prints the full machine-readable report. See --help for all options.
 """
 from __future__ import annotations
 
@@ -19,6 +9,8 @@ import argparse
 import json
 import pathlib
 import subprocess
+import textwrap
+from collections import Counter
 from dataclasses import asdict
 
 from .catalog import load_catalog
@@ -32,33 +24,108 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent
 _DEPLOY_FAILURES = (RuntimeError, TimeoutError, subprocess.SubprocessError, OSError)
 
 
-def _emit(payload: dict) -> None:
-    print(json.dumps(payload, indent=2))
-
+# ---- output renderers (pure: build text, caller prints) -------------------------------------
 
 def _report_payload(report) -> dict:
     return {"slop_score": report.slop_score, "outcomes": [asdict(o) for o in report.outcomes]}
 
 
+def _summary_text(report, source: str) -> str:
+    outs = report.outcomes
+    slop = [o for o in outs if o.outcome == "slop_detected"]
+    clean = sum(1 for o in outs if o.outcome == "clean")
+    na = sum(1 for o in outs if o.outcome == "not_applicable")
+    lines = [
+        "",
+        f"  {source}",
+        "",
+        f"  Slop score: {report.slop_score}        lower is better — 0 is clean",
+        "",
+        f"  {len(slop)} slop · {clean} clean · {na} n/a        ({len(outs)} probe runs)",
+        "",
+    ]
+    if slop:
+        by_cat = Counter(f"{o.bundle}/{o.category}" for o in slop)
+        lines.append("  where the slop is:")
+        for cat, n in sorted(by_cat.items(), key=lambda kv: (-kv[1], kv[0])):
+            lines.append(f"    {cat:<28} {n}")
+        lines += ["", "  → --failed lists each one · --json for the full report"]
+    else:
+        lines.append("  clean — no slop detected.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _failed_text(report, source: str) -> str:
+    slop = sorted(
+        (o for o in report.outcomes if o.outcome == "slop_detected"),
+        key=lambda o: (o.bundle, o.category, o.probe_id, o.target),
+    )
+    lines = ["", f"  {source} — {len(slop)} slop (score {report.slop_score})", ""]
+    if not slop:
+        return "\n".join(lines + ["  clean — no slop detected.", ""])
+    lines.append(f"  {'PROBE':<16} {'CATEGORY':<20} {'PEN':>3}  TARGET")
+    for o in slop:
+        lines.append(f"  {o.probe_id:<16} {o.category:<20} {o.penalty:>3}  {o.target or '—'}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _print_report(report, source: str, args) -> None:
+    if args.json:
+        print(json.dumps(_report_payload(report), indent=2))
+    elif args.failed:
+        print(_failed_text(report, source))
+    else:
+        print(_summary_text(report, source))
+
+
+def _fail(args, status: str, reason: str):
+    if args.json:
+        print(json.dumps({"status": status, "reason": reason}, indent=2))
+    else:
+        print(f"\n  {status}: {reason}\n")
+    raise SystemExit(1)
+
+
+# ---- entry point ----------------------------------------------------------------------------
+
 def main() -> None:
-    ap = argparse.ArgumentParser(description="HackLet fuzz runner")
+    ap = argparse.ArgumentParser(
+        prog="hacklet-runner",
+        description="Deploy/target an app, probe it over HTTP, and report a slop score (lower is better).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(
+            """\
+            examples:
+              %(prog)s --app references/vulnerable/app.py     # trusted ref, no Docker
+              %(prog)s --submission team.zip --harden         # untrusted zip, sandboxed (Docker host)
+              %(prog)s --target https://example.com --failed  # an already-running URL
+
+            Only fuzz targets you own or are authorized to test.
+            """
+        ),
+    )
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--submission", help="path to a submission .zip (built + sandboxed via Docker)")
-    src.add_argument("--target", help="fuzz an already-running URL — dogfooding; no Docker. Only "
-                                      "test targets you own or are authorized to test.")
-    src.add_argument("--app", help="path to a trusted reference app.py (subprocess deployer; dev/CI)")
-    ap.add_argument("--catalog", default=str(_ROOT / "catalog"))
+    src.add_argument("--submission", metavar="ZIP", help="a submission .zip (built + sandboxed via Docker)")
+    src.add_argument("--target", metavar="URL", help="an already-running URL (dogfooding; no Docker)")
+    src.add_argument("--app", metavar="PATH", help="a trusted reference app.py (subprocess; dev/CI)")
+    ap.add_argument("--catalog", metavar="DIR", default=str(_ROOT / "catalog"), help="probe catalog dir")
     ap.add_argument("--harden", action="store_true",
-                    help="production sandbox: read-only rootfs + egress-blocked --network")
-    ap.add_argument("--network", default="hacklet-fuzz-net",
-                    help="docker network for --harden (create once: docker network create --internal <name>)")
+                    help="production sandbox for --submission: read-only rootfs + egress-blocked network")
+    ap.add_argument("--network", metavar="NET", default="hacklet-fuzz-net",
+                    help="docker network for --harden (create once: docker network create --internal NET)")
+    out = ap.add_argument_group("output")
+    out.add_argument("--json", action="store_true", help="print the full machine-readable JSON report")
+    out.add_argument("--failed", action="store_true", help="list only the probes that detected slop")
     args = ap.parse_args()
 
     catalog = load_catalog(args.catalog)
+    source = args.app or args.target or args.submission
 
     # Trusted reference app: subprocess, no Docker.
     if args.app:
-        _emit(_report_payload(run(SubprocessDeployer(args.app), catalog)))
+        _print_report(run(SubprocessDeployer(args.app), catalog), source, args)
         return
 
     # Already-running URL: dogfooding, no Docker, no teardown of the target.
@@ -66,17 +133,15 @@ def main() -> None:
         try:
             report = run(RemoteDeployer(args.target), catalog)
         except _DEPLOY_FAILURES as e:
-            _emit({"status": "unreachable", "reason": str(e)[:500]})
-            raise SystemExit(1)
-        _emit(_report_payload(report))
+            _fail(args, "unreachable", str(e)[:500])
+        _print_report(report, source, args)
         return
 
     # Untrusted submission: unzip -> build -> sandboxed run -> fuzz.
     try:
         sub = extract_submission(args.submission)
     except SubmissionError as e:
-        _emit({"status": "DNF", "reason": str(e)})
-        raise SystemExit(1)
+        _fail(args, "DNF", str(e))
     try:
         deployer = DockerDeployer(
             str(sub.context_dir),
@@ -85,11 +150,10 @@ def main() -> None:
         )
         report = run(deployer, catalog)
     except _DEPLOY_FAILURES as e:
-        _emit({"status": "DNF", "reason": str(e)[:500]})
-        raise SystemExit(1)
+        _fail(args, "DNF", str(e)[:500])
     finally:
         sub.cleanup()
-    _emit(_report_payload(report))
+    _print_report(report, source, args)
 
 
 if __name__ == "__main__":
