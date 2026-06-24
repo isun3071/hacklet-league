@@ -28,15 +28,30 @@ The pipeline depends only on a `Deployer` (`hacklet_runner/deploy.py`):
 
 - **`SubprocessDeployer`** (dev/CI) launches a **trusted reference app** as a local subprocess on
   an injected `$PORT`. No Docker required. **Never** used for untrusted submissions.
-- **`DockerDeployer`** (production, stubbed here) builds the submission's `Dockerfile` and runs it
-  in the sandbox — unprivileged, no network egress, fixed CPU/RAM/PID/disk quotas, ephemeral —
-  on the runner host where Docker exists. Everything downstream of "container answers `$PORT`" is
-  identical and stack-blind.
+- **`DockerDeployer`** (production) builds the submission's `Dockerfile` and runs it in the sandbox
+  on the runner host where Docker exists: ephemeral, fixed CPU/RAM/PID quotas, `--cap-drop=ALL`,
+  `--security-opt=no-new-privileges`, `$PORT` injected. Everything downstream of "container answers
+  `$PORT`" is identical and stack-blind. The three-way calibration runs through it and scores
+  identically — that equivalence is the test (`tests/test_docker_deploy.py`).
+
+### Hardened sandbox (production)
+
+For untrusted submissions, enable the hardening toggles:
+
+```py
+DockerDeployer(ctx, read_only=True, network="hacklet-fuzz-net", runtime="runsc")
+```
+
+Create the egress-blocked network once (`docker network create --internal hacklet-fuzz-net`) and
+install gVisor for `runtime="runsc"`. `tests/test_docker_hardened.py` verifies that hardening
+preserves the 98/0/0 calibration and that the `--internal` network actually blocks egress; it
+manages its own throwaway network, so it needs no setup.
 
 ## Not yet in the slice (tracked in the spec)
 
 Browser-driven discovery (Playwright) for SPAs + FCP/INP; the hidden pool; stochastic sampling
-(median-of-N); container orchestration + throughput (the real `DockerDeployer`).
+(median-of-N); container orchestration + throughput across many submissions; gVisor/Firecracker
+runtime install on the runner host.
 
 Already wired: the composition dampers (`aggregate.py` — variant-group-once +
 diminishing-returns-within-category; per-bundle ordering lives in the penalty magnitudes) and the
