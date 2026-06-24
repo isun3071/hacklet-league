@@ -13,6 +13,16 @@ The fuzz runner is responsible for executing standardized tests against player s
 
 Both modes share the same test format and execution semantics. They differ in what catalog content they have access to and where results are persisted.
 
+## Project identity & scope philosophy
+
+The fuzz runner is **its own project** — a universal, stack-blind, zero-config black-box resilience grader — that the league *plugs into*. The competition is its primary consumer (enqueue a submission → slop report → scoring); dogfooding any owned or authorized URL is a second. The boundary is the report contract, so the catalog and harness evolve independently of the platform (and could extract to their own repo).
+
+**Comprehensiveness is the goal**, scoped precisely: ~95% of the **intent-independent, HTTP-observable** surface the average web app faces — the OWASP-aligned security classes, universal correctness, and speed/resilience the catalog scope below maps (130–200 probes). The aim is *depth within the common classes*, not the exotic long tail (steganographic uploads, deserialization gadget chains, blind SSRF); that ~5% is where effort re-fights mature scanners for diminishing returns.
+
+**Division of labor.** The runner owns what is automatable and intent-free. Intent-*dependent* quality — access-control semantics, business logic, idempotency — is the **humans' axis** (judges + pitch + cross-examination, per the intent-independence litmus), not the runner's. The runner alone is comprehensive on the automatable surface; the *competition* is comprehensive because humans carry the intent the runner refuses to guess.
+
+**The moat is the score, not the check count.** Against ZAP / Nuclei / Observatory / Lighthouse, the differentiator is the comparable, universal, zero-config resilience score and the fairness harness — not catalog size. The runner curates for determinism and calibration; where breadth helps, it can *stand on* existing corpora (e.g. Nuclei templates, Lighthouse for the speed axis) under our scoring layer rather than re-authoring everything.
+
 ## v1 Catalog Design (Universal-Only)
 
 ### Universal-only principle
