@@ -85,4 +85,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    http.server.HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    # Bind 0.0.0.0: reachable as a dev/CI subprocess AND via the published port inside the
+    # DockerDeployer container (a 127.0.0.1 binding is unreachable through Docker's port forward).
+    http.server.HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

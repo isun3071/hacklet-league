@@ -46,8 +46,8 @@ def _run_declarative(probe: Probe, client: httpx.Client) -> bool:
 
 
 def run(deployer: Deployer, catalog: list[Probe]) -> Report:
-    handle = deployer.deploy()
     try:
+        handle = deployer.deploy()  # inside try so teardown runs even if deploy/health fails
         profile = discover(handle.base_url)
         outcomes: list[Outcome] = []
         with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True) as client:

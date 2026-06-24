@@ -39,6 +39,12 @@ def _free_port() -> int:
     return port
 
 
+def _docker(*args: str, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a docker CLI command, capturing output. Never raises on nonzero exit — callers inspect
+    returncode so a build/run failure becomes a DNF, not a runner crash."""
+    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
+
+
 class SubprocessDeployer(Deployer):
     """Dev/CI deployer for TRUSTED reference apps only. Launches the app as a local subprocess
     on an injected $PORT and waits for the health gate.
@@ -85,18 +91,118 @@ class SubprocessDeployer(Deployer):
 
 
 class DockerDeployer(Deployer):
-    """Production deployer (runner host). Builds the submission's Dockerfile and runs it in the
-    sandbox: unprivileged, no network egress, fixed CPU/RAM/PID/disk quotas, wall-clock bound,
-    injecting $PORT (+ optional $DATABASE_URL sidecar). Stubbed here; wired where Docker exists.
+    """Production deployer: builds the submission's Dockerfile and runs the image in a sandboxed
+    container, injecting ONLY ``$PORT`` (self-containment policy, format_spec §5.7). Safe for
+    untrusted code; requires Docker on the host.
+
+    Always-on: ephemeral container, fixed CPU/RAM/PID quotas, ``--cap-drop=ALL``,
+    ``--security-opt=no-new-privileges``. Hardening toggles default OFF so the reference
+    calibration runs on a stock daemon, and are flipped ON for untrusted production:
+
+    * ``read_only=True`` — read-only root filesystem (+ a writable ``/tmp`` tmpfs)
+    * ``network="<net>"`` — egress block via a docker network created with ``--internal``
+    * ``runtime="runsc"`` — gVisor (or a Firecracker microVM) for container-escape defense
+
+    See FUZZ_RUNNER_SPEC "Production deploy (DockerDeployer)". The reference Dockerfiles let the
+    calibration suite run through this deployer unchanged and produce identical scores; see
+    tests/test_docker_deploy.py.
     """
 
-    def __init__(self, artifact_dir: str):
-        self.artifact_dir = artifact_dir
+    def __init__(
+        self,
+        context_dir: str,
+        *,
+        image_tag: str | None = None,
+        health_timeout: float = 60.0,
+        build_timeout: float = 300.0,
+        memory: str = "512m",
+        cpus: str = "1.0",
+        pids_limit: int = 256,
+        read_only: bool = False,
+        network: str | None = None,
+        runtime: str | None = None,
+        remove_image: bool = True,
+    ):
+        self.context_dir = os.path.abspath(context_dir)
+        self.image_tag = (image_tag or "hacklet-sub-" + os.path.basename(self.context_dir)).lower()
+        self.health_timeout = health_timeout
+        self.build_timeout = build_timeout
+        self.memory = memory
+        self.cpus = cpus
+        self.pids_limit = pids_limit
+        self.read_only = read_only
+        self.network = network
+        self.runtime = runtime
+        self.remove_image = remove_image
+        self.container_id: str | None = None
 
     def deploy(self) -> DeployHandle:
-        raise NotImplementedError(
-            "DockerDeployer runs on the runner host (Docker required); see FUZZ_RUNNER_SPEC"
-        )
+        self._build()
+        port = _free_port()
+        self.container_id = self._run_container(port)
+        base = f"http://127.0.0.1:{port}"
+        self._await_health(base)
+        return DeployHandle(base)
 
     def teardown(self) -> None:
-        pass
+        if self.container_id:
+            _docker("rm", "-f", self.container_id)
+            self.container_id = None
+        if self.remove_image:
+            _docker("rmi", "-f", self.image_tag)
+
+    # -- internals ------------------------------------------------------------
+    def _build(self) -> None:
+        proc = _docker(
+            "build", "-t", self.image_tag,
+            "-f", os.path.join(self.context_dir, "Dockerfile"),
+            self.context_dir,
+            timeout=self.build_timeout,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"docker build failed (DNF):\n{proc.stderr[-2000:]}")
+
+    def _run_container(self, port: int) -> str:
+        args = [
+            "run", "-d",
+            "-e", f"PORT={port}",
+            "-p", f"127.0.0.1:{port}:{port}",
+            "--memory", self.memory,
+            "--cpus", self.cpus,
+            "--pids-limit", str(self.pids_limit),
+            "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges",
+            "--label", "hacklet-runner=1",
+        ]
+        if self.read_only:
+            args += ["--read-only", "--tmpfs", "/tmp"]
+        if self.network:
+            args += ["--network", self.network]
+        if self.runtime:
+            args += ["--runtime", self.runtime]
+        args.append(self.image_tag)
+        proc = _docker(*args)
+        if proc.returncode != 0:
+            raise RuntimeError(f"docker run failed:\n{proc.stderr[-2000:]}")
+        return proc.stdout.strip()
+
+    def _await_health(self, base: str) -> None:
+        deadline = time.time() + self.health_timeout
+        while time.time() < deadline:
+            if not self._container_running():
+                raise RuntimeError(f"container exited during startup (DNF):\n{self._logs()}")
+            try:
+                if httpx.get(base + "/", timeout=1.0).status_code < 500:
+                    return
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.2)
+        raise TimeoutError("health gate failed: container did not respond in time (DNF)")
+
+    def _container_running(self) -> bool:
+        proc = _docker("inspect", "-f", "{{.State.Running}}", self.container_id or "")
+        return proc.returncode == 0 and proc.stdout.strip() == "true"
+
+    def _logs(self) -> str:
+        proc = _docker("logs", "--tail", "50", self.container_id or "")
+        return (proc.stdout + proc.stderr)[-2000:]
