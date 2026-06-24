@@ -105,6 +105,18 @@ A category never claims "defended." It reports slop found (with penalty) or **no
 
 Authoring consequence: every test has a single `slop_if` (the oracle conditions). There is no `defended_if` — absence of slop is simply 0, never positive credit.
 
+### Pool composition (public / hidden)
+
+The catalog splits roughly **75% public / 25% hidden** per version. Public probes are published — players study them and self-test via the local runner during build; hidden probes are the anti-gaming reserve, run only by the central runner at freeze. The gap between visible (public) slop and revealed (hidden) slop is the format's central suspense (format_spec §4.2).
+
+The split *method* matters more than the ratio:
+
+- **Distribute the hidden 25% across every category — never hide whole categories.** A fully-hidden category is arbitrary noise, not skill measurement; every category keeps some hidden depth, so defending only the published probes still leaves exposure.
+- **Favor hidden variants and fresh payloads.** Within a variant group, mixing public and hidden variants catches blocklist-style partial defense: a player who neutralizes exactly the published payloads still trips an unanticipated hidden variant, while genuine architectural defense (parameterization, output encoding) clears public and hidden alike.
+- **Split by weight, not just count.** The hidden 25% must carry real penalty weight (hidden high-severity probes), or gaming the public set leaves little slop exposed and the deterrent is toothless.
+- **Scoring is pool-agnostic.** A probe's penalty is its penalty regardless of pool; "hidden" means *unpublished*, not *weighted differently*.
+- **Rotation per version.** The split is per catalog version: burned hidden probes graduate to public the next quarter and fresh probes replace them (see Catalog Organization).
+
 ## Runner as a Sandboxed, Deployable Service
 
 The runner is a **standalone deployable component, separate from the hackletleague.com platform process**. It executes untrusted contestant code, so it must not share a trust domain with the platform's database, secrets, or session store. It is deployed isolated (separate host/VM, restricted egress). This separation also makes **dogfooding (LEAGUE_OPERATIONS §12) first-class**: the runner points at any deployed HTTP target, so the league's own production code is just another target.
@@ -149,6 +161,7 @@ evidence_model: <provable | oracle>                  # DETECTION hint only, not 
 description: <text description of what the test does>
 penalty: <positive integer>                          # slop added when slop_if fires; 0 otherwise
 variant_group_id: <UUID or null>  # if part of a syntactic variant group
+sampling: <null | object>          # null = deterministic single run; else {runs, rule, margin} — see Phase 3
 
 applicability:
   requires:
@@ -276,6 +289,13 @@ Applicable tests execute in parallel up to a concurrency limit (default: 20 conc
 6. Record outcome, response data, and timing
 
 Some tests may require sequential execution (e.g., session-dependent tests). The test definition can declare `requires_sequential: true` to opt out of parallel execution.
+
+**Stochastic probes.** Timing, load, and concurrency probes are non-deterministic, so they declare a `sampling` block and run N times; the aggregation rule depends on the failure shape:
+
+- **Timing / speed / load gates** → **median of N breaches the threshold** (plus a small margin). Robust to a single jittery run in either direction: chronic slowness fires, a one-off blip does not.
+- **Race / concurrency** → **slop if the bad state occurs in *any* of N batches.** A race that manifests even intermittently is a real, exploitable bug.
+
+The FuzzResult records **all N raw measurements** and the rule is fixed, so the decision stays transparent and re-runnable for appeals even though sampling introduces variance. Probes with no `sampling` block are deterministic and run once. All timing/load is measured inside the fixed container resource envelope, so cross-submission comparison stays fair.
 
 ### Phase 4: Result Aggregation
 
@@ -447,7 +467,15 @@ New tests are added to the catalog through this process:
 5. PR merged to main triggers catalog version bump
 6. Chapter platforms pull updated catalog at next sync
 
-**Three-way reference calibration.** Reference submissions are curated apps in the catalog repository. Before a test merges, it must resolve correctly against all three: **slop_detected** on a known-vulnerable app, **clean** on a known-good app that has the real live surface, and **not_applicable** on an app that lacks the surface. A test whose oracle fires on the good app (false positive) or misses the vulnerable one (false negative) is not ready — that separation is the proof the oracle works.
+**Reference-submission matrix.** Reference submissions are curated apps in the catalog repository (versioned with the catalog) that serve double duty: the **calibration anchor** for every probe and the runner's **regression suite**. They don't need three apps per probe — a small curated set whose cells cover every probe's three states. The core is a matched triad:
+
+- **Vulnerable** — exhibits every slop class (SQLi, XSS, missing headers, insecure upload, IDOR, crashers, slow endpoints). The `slop_detected` anchor for most probes at once.
+- **Hardened** — the *same feature surface* (login, search, upload, multi-user resources, forms) but correctly defended. The `clean` anchor, and the critical **false-positive guard**: every probe must read clean here despite the surface being present.
+- **Minimal** — a trivial app (~2 endpoints, no upload/auth/DB). The `not_applicable` anchor; also exercises the Limited-Engagement floor.
+
+The vulnerable/hardened pair must have **matched surfaces** — that is what proves a probe distinguishes *defended* from *broken* rather than *present* from *absent*. Two additions beyond the triad: **stack-diversity clones** of the hardened app (e.g., Flask + Express + Go, same surface) — the catalog must yield identical outcomes across all three, the empirical proof of universal-only — and an **SPA reference** to validate that browser-driven discovery finds the API surface link-crawling misses.
+
+CI deploys each reference app, runs the full catalog, and asserts the expected outcome per (probe × app) cell: a new probe must fire on vulnerable, stay clean on hardened, and read N/A on minimal, or it does not merge; a probe that starts false-positiving on the hardened app fails CI. The matrix manifest is both the calibration spec and the assertion source. Build the vulnerable/hardened pair **early** — the vertical slice needs them on day one, and the hardened app is the "0 slop" gold standard, grown as each category's probes land.
 
 ## Scoring Integration
 
