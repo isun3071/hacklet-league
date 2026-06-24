@@ -73,6 +73,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if row:
                 return self._send(200, "welcome " + row[0])
             return self._send(401, "invalid credentials")
+        if self.path == "/profile":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+                age = int(form["age"][0])  # KeyError if missing, ValueError if non-numeric
+                return self._send(200, "age is " + str(age))
+            except Exception:
+                return self._send(500, traceback.format_exc())  # unhandled -> 500 + leaks trace
         return self._send(404, "not found")
 
 

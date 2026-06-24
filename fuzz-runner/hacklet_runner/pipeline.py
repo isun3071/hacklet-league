@@ -31,7 +31,9 @@ def _applicable(probe: Probe, profile: Profile) -> bool:
 def _run_declarative(probe: Probe, client: httpx.Client) -> bool:
     method = probe.probe.get("method", "GET").upper()
     target = probe.probe.get("target", "/")
-    resp = client.request(method, target, params=probe.probe.get("query"))
+    resp = client.request(
+        method, target, params=probe.probe.get("query"), data=probe.probe.get("data")
+    )
     for cond in probe.slop_if:  # ALL conditions must match -> slop present
         if isinstance(cond, str):
             if not MATCHERS[cond](resp):
@@ -55,7 +57,7 @@ def run(deployer: Deployer, catalog: list[Probe]) -> Report:
                     outcomes.append(_outcome(probe, "not_applicable", 0))
                     continue
                 if "predicate" in probe.probe:
-                    slop = PREDICATES[probe.probe["predicate"]](ctx)
+                    slop = PREDICATES[probe.probe["predicate"]](ctx, probe)
                 else:
                     slop = _run_declarative(probe, client)
                 outcomes.append(

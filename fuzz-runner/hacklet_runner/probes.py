@@ -36,11 +36,17 @@ def response_missing_header(resp, arg) -> bool:
     return str(arg) not in resp.headers  # httpx headers are case-insensitive
 
 
+def response_server_error(resp, arg=None) -> bool:
+    # A crash is a 5xx the app caused, not 501 (method not implemented) or 405.
+    return resp.status_code in (500, 502, 503, 504)
+
+
 MATCHERS = {
     "response_leaks_stack_trace": response_leaks_stack_trace,
     "ttfb_at_least": ttfb_at_least,
     "response_contains": response_contains,
     "response_missing_header": response_missing_header,
+    "response_server_error": response_server_error,
 }
 
 
@@ -50,16 +56,17 @@ def _authed(resp) -> bool:
     return resp.status_code == 200 and "welcome" in resp.text.lower()
 
 
-def sqli_auth_bypass(ctx) -> bool:
+def sqli_auth_bypass(ctx, probe) -> bool:
     """Boolean/auth-bypass oracle: a benign login fails, an injection payload succeeds. The
-    divergence (only possible if the input reaches a live, unparameterized query) is the slop."""
+    divergence (only possible if the input reaches a live, unparameterized query) is the slop.
+    The payload comes from the probe, so variant-group members reuse one oracle with different
+    syntaxes."""
+    payload = probe.probe.get("payload", "' OR '1'='1' -- ")
     for endpoint in ctx.profile.form_endpoints or ["/login"]:
         baseline = ctx.client.post(
             endpoint, data={"username": "zzz_no_such_user", "password": "x"}
         )
-        attack = ctx.client.post(
-            endpoint, data={"username": "' OR '1'='1' -- ", "password": "x"}
-        )
+        attack = ctx.client.post(endpoint, data={"username": payload, "password": "x"})
         if _authed(attack) and not _authed(baseline):
             return True
     return False

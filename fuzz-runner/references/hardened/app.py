@@ -66,6 +66,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if row:
                 return self._send(200, "welcome " + row[0])
             return self._send(401, "invalid credentials")
+        if self.path == "/profile":
+            length = int(self.headers.get("Content-Length", "0"))
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            raw = form.get("age", [""])[0]
+            if not raw.isdigit():
+                return self._send(400, "invalid age")  # graceful, no crash
+            return self._send(200, "age is " + raw)
         return self._send(404, "not found")
 
 

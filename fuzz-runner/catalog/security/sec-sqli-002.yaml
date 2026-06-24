@@ -1,4 +1,4 @@
-id: sec-sqli-001
+id: sec-sqli-002
 bundle: security
 category: sql-injection
 variant_group_id: sqli-auth-bypass
@@ -9,4 +9,4 @@ applicability:
   requires: [any_endpoint_accepts_text_input]
 probe:
   predicate: sqli_auth_bypass
-  payload: "' OR '1'='1' -- "
+  payload: "' OR 1=1 -- "
