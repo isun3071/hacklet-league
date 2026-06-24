@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AsciiRule } from "@/components/AsciiRule";
 import { FuzzWave } from "@/components/FuzzWave";
 import { Icon } from "@/components/Icon";
@@ -68,6 +69,9 @@ export default function Home() {
           HackLet League runs two formats. Both compress engineering into 24 minutes with AI,
           both run the same QA catalog at time expiry, both score across slop and
           communication. They differ in what you do during the build phase.
+        </p>
+        <p className="note">
+          <Link href="/scoring">see exactly how scoring works &rarr;</Link>
         </p>
         <pre className="codeblock">{`$ ./hacklet --formats
   vibe     build a working web app from scratch
