@@ -25,6 +25,10 @@ HOME = b"""<!doctype html><html><body>
   <input name="password" type="password" placeholder="pw">
   <button type="submit">log in</button>
 </form>
+<form action="/search" method="get">
+  <input name="q" placeholder="search">
+  <button type="submit">search</button>
+</form>
 </body></html>"""
 
 

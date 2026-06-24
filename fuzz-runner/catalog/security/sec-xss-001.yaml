@@ -7,9 +7,7 @@ penalty: 30
 applicability:
   requires: [any_endpoint_accepts_text_input]
 probe:
-  method: GET
-  target: /search
-  query:
-    q: "<script>hl-xss-7f3c</script>"
+  target: forms   # fan across every discovered form, filling each field with the payload
+  fill: "<script>hl-xss-7f3c</script>"
 slop_if:
   - response_contains: "<script>hl-xss-7f3c</script>"

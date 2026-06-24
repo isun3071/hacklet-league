@@ -33,8 +33,10 @@ def test_discovers_routes_and_login_form(serve):
     assert logins, "should discover the /login form"
     assert logins[0].method == "post"
     assert set(logins[0].fields) == {"username", "password"}
+    searches = [f for f in profile.forms if f.action == "/search"]
+    assert searches and searches[0].method == "get" and searches[0].fields == ["q"]
     assert profile.capabilities["any_endpoint_accepts_text_input"] is True
-    assert profile.form_endpoints == ["/login"]  # back-compat property
+    assert {"/login", "/search"} <= set(profile.form_endpoints)  # back-compat property
 
 
 def test_minimal_has_no_forms(serve):

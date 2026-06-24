@@ -15,7 +15,7 @@ from .aggregate import compute_slop_score
 from .deploy import Deployer
 from .discovery import discover
 from .probes import MATCHERS, PREDICATES
-from .schema import Outcome, Probe, Profile, Report
+from .schema import Form, Outcome, Probe, Profile, Report
 
 
 @dataclass
@@ -34,12 +34,22 @@ def _fetch_path(probe: Probe, client: httpx.Client, path: str) -> httpx.Response
     return client.request(method, path, params=probe.probe.get("query"), data=probe.probe.get("data"))
 
 
+def _fetch_form(probe: Probe, client: httpx.Client, form: Form) -> httpx.Response:
+    # Fill every field with the probe's payload, then submit the form the way it declares.
+    payload = {field: probe.probe.get("fill", "") for field in form.fields}
+    if (form.method or "get").upper() == "GET":
+        return client.request("GET", form.action, params=payload)
+    return client.request(form.method.upper(), form.action, data=payload)
+
+
 def _expand(probe: Probe, profile: Profile):
     """Concrete (label, fetch) targets for a declarative probe: a selector fans across discovered
     surface; a literal path is a single target."""
     target = probe.probe.get("target", "/")
     if target == "routes":
         return [(r, lambda c, r=r: _fetch_path(probe, c, r)) for r in profile.routes]
+    if target == "forms":
+        return [(f.action, lambda c, f=f: _fetch_form(probe, c, f)) for f in profile.forms]
     return [(target, lambda c: _fetch_path(probe, c, target))]
 
 

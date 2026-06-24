@@ -35,6 +35,10 @@ def test_vulnerable_app_accrues_slop():
     # sec-headers-001 fans across every discovered route (/, /login, /search, /crash, /heavy):
     header_hits = [x for x in report.outcomes if x.probe_id == "sec-headers-001"]
     assert len(header_hits) == 5 and all(x.outcome == "slop_detected" for x in header_hits)
+    # sec-xss-001 fans across discovered forms (/login, /search); only /search reflects unescaped:
+    xss_hits = [x for x in report.outcomes if x.probe_id == "sec-xss-001"]
+    assert {x.target for x in xss_hits} == {"/login", "/search"}
+    assert any(x.outcome == "slop_detected" and x.target == "/search" for x in xss_hits)
     # SQLi: 3 variants fire, group collapses to one penalty (40, not 120).
     # security-headers: 5 fan-out fires, diminished: 3 + 3*.6 + 3*.36 + 3*.216 + 3*.1296 = 6.92.
     # crash-resistance: 3 fire, diminished: 6 + 6*.6 + 6*.36 = 11.76. xss 30 + errhyg 8 + ttfb 5.
