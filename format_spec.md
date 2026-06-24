@@ -319,9 +319,28 @@ The README may be written by the AI. Players who use the AI to draft documentati
 
 **Failure modes are scored distinctly:**
 
-- *Submission does not compile or fails to deploy at all*: Automatic zero on all fuzz tests. The submission may still proceed through pitch and cross-examination, where the player may discuss what they attempted.
+- *Submission does not compile or fails to deploy at all*: Marked **DNF** (did not deploy) — the worst outcome, ranked below every submission that runs (not a clean zero, under lower-is-better slop; see §4.2). The submission may still proceed through pitch and cross-examination, where the player may discuss what they attempted.
 - *Submission deploys but specific features error during testing*: Each broken feature scores per the relevant test catalog entry — a feature that exists but crashes when used is "Broken," not "Not Applicable." The player is penalized for shipping broken features in proportion to which features were affected.
 - *Submission deploys and behaves consistently*: Standard fuzz scoring applies across all applicable test categories.
+
+### 5.7 Application Self-Containment
+
+Submissions must run as **self-contained applications**. The fuzz runner provides no external service credentials, API keys, or third-party network egress. Code that requires secrets to function fails at runtime, and the runner scores the resulting failures as slop — it does not detect or reject such code; the consequence is natural at the fuzz layer.
+
+**Permitted persistence:**
+
+- SQLite files committed to the submission repository
+- Client-side browser storage (localStorage, sessionStorage, IndexedDB)
+- In-memory state within the application process
+
+**Not supported at current operational maturity:**
+
+- External databases (Supabase, MongoDB Atlas, cloud-hosted Postgres, etc.)
+- Third-party API integrations requiring keys (Stripe, OpenAI, Auth0, etc.)
+- External auth providers
+- Cloud storage services
+
+The 24-minute format makes serious external integration impractical even with AI assistance; the constraint reflects format reality, not arbitrary limitation. Players keep full freedom to write integration code, but the runner does not provide the environment for it to function, so such code fails its relevant probes. The policy relaxes as the league builds integration-testing infrastructure at higher tiers (Phase 3 — see IDEAS_FOR_LATER.md).
 
 ## 6. Tier Structure
 

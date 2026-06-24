@@ -117,7 +117,55 @@ The split *method* matters more than the ratio:
 - **Scoring is pool-agnostic.** A probe's penalty is its penalty regardless of pool; "hidden" means *unpublished*, not *weighted differently*.
 - **Rotation per version.** The split is per catalog version: burned hidden probes graduate to public the next quarter and fresh probes replace them (see Catalog Organization).
 
+**What belongs in the hidden pool.** Edge-case payloads and simple derivatives of *existing public categories* (a different SQLi syntax, an attribute-context XSS, an encoded path traversal), plus the same public probe types applied to surfaces the public pool did not advertise testing — never new exotic vulnerability classes. The litmus: **a hidden probe must be defeated by the same correct defense as its public sibling.** If genuine architectural defense (parameterized queries, output encoding, input canonicalization, real access checks) clears both the public and the hidden version, it is a good hidden probe — it catches only the player who blocklisted the published payloads, never the competent engineer. If a hidden probe would need a *new* defense the player could not anticipate, it is niche-of-niche and is rejected as an unfair surprise. The hidden pool tests **depth within known classes, not breadth into obscure ones.**
+
 **Repository boundary (hidden pool secrecy).** The `hacklet-league` repo is **public**, so hidden-pool probes must never live in it. The hidden pool belongs in a **separate private `fuzz-catalog` repo**; the runner host pulls it at run time with a read-only deploy token, and merges it with the public pool in memory. The public pool may live in the public repo (it is published by design). A `.gitignore` excluding `**/hidden/` is only a backstop — the boundary is the separate private repo, because a single accidental commit to a public repo is an irreversible leak (git history, clones, scrapers). This split is deferred until the first hidden probe is authored; until then the catalog is public-only.
+
+### Catalog scope (target)
+
+The universal arsenal at full scope is roughly **130–200 probes** across the three v1 bundles, built incrementally: the pilot ships the high-frequency core (~25–40 probes) first, each landing with its three-way reference calibration, and the catalog grows over seasons. Rough per-category targets:
+
+**security (~40–70)** — OWASP-aligned, universal web surface:
+
+| Category | Probes | Type |
+| --- | --- | --- |
+| Injection: SQL, NoSQL, command, SSTI, header/CRLF | ~20–35 | oracle (boolean / error / time, eval-reflection); variant groups |
+| XSS: reflected, stored, DOM (HTML / attribute / JS / URL contexts) | ~8–15 | declarative reflection + browser |
+| Access control: horizontal & vertical IDOR, forced browsing, path traversal | ~6–12 | observed |
+| Auth & session: missing auth, weak/predictable session, cookie flags, fixation, default creds, login rate-limit | ~6–10 | mixed |
+| CSRF | ~2–4 | observed |
+| File upload: content-type spoof, extension, magic-byte / polyglot, SVG-script | ~5–8 | observed (variant group) |
+| Security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy | ~6 | declarative |
+| Exposure: `.env` / `.git` / `admin` / `actuator` / `swagger`, backups, directory listing, default files | ~10–20 | declarative path sweep |
+| Secrets-in-response, CORS misconfiguration, open redirect | ~5–8 | declarative |
+| SSRF (in-band reflection only) | ~2–3 | oracle |
+
+**qa (~50–90)** — universal correctness (format_spec §4.2):
+
+| Category | Probes | Type |
+| --- | --- | --- |
+| Crash resistance: malformed-input battery (empty / oversized / null-byte / unicode / numeric-overflow / malformed-JSON / missing-field / wrong-type / wrong-content-type / deep-nesting), **per endpoint** | ~25–50 | declarative (no 5xx / crash) |
+| Error hygiene: no traces / DB errors / paths / env vars / secrets | ~5–10 | declarative |
+| HTTP semantics: status codes (404/405/401/403/400), methods, GET-is-safe, Content-Type | ~10–20 | declarative |
+| Encoding: UTF-8 / emoji / CJK / RTL round-trip | ~5–10 | declarative |
+| Size limits: oversized body / URL / headers rejected, not crashed | ~5–8 | declarative |
+
+**performance (~25–45)** — speed + resilience under load:
+
+| Category | Probes | Type |
+| --- | --- | --- |
+| Speed gates: TTFB / FCP / INP | ~3–6 | sampled (median-of-N) |
+| Load / spike: concurrent burst, error-rate + latency degradation | ~5–10 | sampled (any-of-N) |
+| DoS resistance: oversized, decompression bombs, unbounded pagination, slow-loris, ReDoS, nested-JSON parser bombs | ~15–30 | mixed |
+
+**Deliberately out of scope:**
+
+- **Not HTTP-observable** — memory safety, internal code quality, logging, dependency-version CVEs.
+- **Out-of-band dependent** — blind SSRF and fully-blind injection with no in-band signal (egress is locked; oracles are in-band only).
+- **Intent-dependent** — business-logic authorization, idempotency / duplicate semantics, mass assignment (excluded by the intent-independence litmus).
+- **Framework-specific** — per-stack exploits (universal-only).
+- **Later bundles** — race conditions and behavioral consistency become their own bundles post-v1 (the six-axis roadmap), not crammed into v1.
+- **Client-side storage probing** — localStorage / sessionStorage / IndexedDB fuzzing via the browser context is deferred to later catalog work (it adds browser-harness complexity to Stage 5).
 
 ## Runner as a Sandboxed, Deployable Service
 
@@ -139,7 +187,7 @@ Getting an arbitrary BYOD submission to a running HTTP service is the **only sta
 
 - **A `Dockerfile`.** The submission includes one; the runner builds it and runs the image. This is the one mechanism universal across every stack, and it puts the build environment fully in the player's hands. The league ships per-stack starter Dockerfiles (Flask, FastAPI, Express, Go, …) so players barely touch it. (A lighter `hacklet.yaml` manifest is a possible future convenience; v1 is Dockerfile-only to avoid the runner maintaining per-stack base images.)
 - **Listen on `$PORT`.** The runner injects `$PORT`; the app must bind it (the Heroku / Cloud Run convention, shown in every template). No port guessing.
-- **Optional `$DATABASE_URL`.** If the app needs persistence, the league provides an ephemeral database sidecar reachable at `$DATABASE_URL`. The **fuzzed target stays a single HTTP container**; the DB is a sidecar, not part of the attack surface. Multi-service apps beyond app-plus-DB are out of v1 scope.
+- **Self-contained — no external services, no secrets.** The runner injects **only `$PORT`**: no `$DATABASE_URL`, no API keys, no credentials, and no third-party network egress (format_spec §5.7). Apps persist via SQLite committed to the submission, in-memory state, or client-side browser storage; the submission directory is mounted so committed SQLite files are readable. Code that needs secrets or external services simply fails at runtime and scores slop on the relevant probes — the runner neither provides the environment nor rejects the code. The fuzzed target is a single HTTP container; multi-service apps are out of v1 scope.
 
 **Health gate.** After build + run, the runner polls `$PORT` for any HTTP response within a fixed window (~60s). A response → Discovery (Phase 1) begins. No response within the window → **DNF** (did not deploy), the worst outcome: ranked below every completed submission regardless of its trivially-low raw slop, because under lower-is-better a non-deploying app is never a clean zero (format_spec §4.2). A submission that deploys but exposes almost no surface is still scored — the "Limited Engagement" status covers the sub-threshold case.
 
