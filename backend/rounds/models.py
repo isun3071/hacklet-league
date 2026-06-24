@@ -129,7 +129,7 @@ class Submission(models.Model):
 class Score(models.Model):
     """A single judge's score on one dimension of a submission. Judges are EventParticipants
     with role=judge (judge_participant). In Stage 3 every score is entered by hand — the fuzz
-    runner that automates the resilience half arrives in Stage 5. See format_spec.md §4."""
+    runner that produces the automated Slop Score arrives in Stage 5. See format_spec.md §4."""
 
     class ScoreType(models.TextChoices):
         PITCH_QUALITY = "pitch_quality", "Pitch quality"

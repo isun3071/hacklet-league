@@ -66,7 +66,7 @@ export default function Home() {
         <h2 className="h2"># how it works</h2>
         <p className="body">
           HackLet League runs two formats. Both compress engineering into 24 minutes with AI,
-          both run the same QA catalog at time expiry, both score across resilience and
+          both run the same QA catalog at time expiry, both score across slop and
           communication. They differ in what you do during the build phase.
         </p>
         <pre className="codeblock">{`$ ./hacklet --formats

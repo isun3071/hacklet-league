@@ -7,8 +7,10 @@ collapse into two axes:
   - engineering_score   = mean of the engineering/product dimensions
 
 In Stage 3 there is no fuzz runner, so the **engineering axis is the manual stand-in for the
-Fuzz Score** — judges score it by hand. When the Stage 5 fuzz runner lands, the real Fuzz
-Score replaces this axis; the rank-sum math below is unchanged.
+Slop Score** — judges score it by hand (higher = better here, as a judge-entered placeholder).
+When the Stage 5 fuzz runner lands, the real Slop Score replaces this axis (deduction-only,
+lower = better, [0, +∞)); the rank-sum math below is unchanged because ranking is direction-
+agnostic — only the slop ranking direction flips to ascending.
 
 Best Overall is the rank-sum composite (§4.3): rank players on each axis (standard
 competition / "1224" ranking), sum the two ranks, lowest wins, then progressive tiebreakers

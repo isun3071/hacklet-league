@@ -105,7 +105,7 @@ export function RoundResults({ roundId, refreshKey = 0 }: { roundId: string; ref
             </table>
           </div>
           <p className="note">
-            // engineering = judge stand-in for the Fuzz Score until the Stage 5 runner lands.
+            // engineering = judge stand-in for the Slop Score until the Stage 5 runner lands.
           </p>
         </>
       )}
