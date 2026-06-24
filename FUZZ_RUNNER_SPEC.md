@@ -19,7 +19,17 @@ The fuzz runner is **its own project** — a universal, stack-blind, zero-config
 
 **Comprehensiveness is the goal**, scoped precisely: ~95% of the **intent-independent, HTTP-observable** surface the average web app faces — the OWASP-aligned security classes, universal correctness, and speed/resilience the catalog scope below maps (130–200 probes). The aim is *depth within the common classes*, not the exotic long tail (steganographic uploads, deserialization gadget chains, blind SSRF); that ~5% is where effort re-fights mature scanners for diminishing returns.
 
-**Division of labor.** The runner owns what is automatable and intent-free. Intent-*dependent* quality — access-control semantics, business logic, idempotency — is the **humans' axis** (judges + pitch + cross-examination, per the intent-independence litmus), not the runner's. The runner alone is comprehensive on the automatable surface; the *competition* is comprehensive because humans carry the intent the runner refuses to guess.
+**Division of labor (the intent boundary).** The runner owns what is automatable and intent-free; humans own intent. The line is sharper than "security = runner": the two *biggest* real-world slop classes — broken access control and secrets/crypto failures — each split, and the intent-free halves are ours:
+
+- **Unauthenticated exposure** — no credentials needed: an anonymous request that returns sensitive or bulk data, an exposed datastore, a reachable `/admin` / `.env` / `.git` / backup. "Handed secret data to nobody" is a flaw regardless of intent.
+- **Secrets in the open** — API keys, tokens, private keys, Firebase/Supabase configs in responses or client JS. Observable, never intended.
+- **Auth *mechanics* via self-as-oracle** — session/cookie hygiene (Secure/HttpOnly/SameSite, predictable tokens, `alg:none` JWTs), logout actually invalidating a session, login rate-limiting, user enumeration, and horizontal IDOR between two accounts the runner created itself. These have a *universal correct behavior* independent of the app's purpose.
+
+Intent-*dependent* quality stays the **humans' axis** (judges + pitch + cross-examination): authorization **semantics** (should role X do action Y, per this app's design), business logic, idempotency / duplicate semantics, mass assignment. The runner refuses to guess intent. So the runner alone is comprehensive on the automatable surface; the *competition* is comprehensive because humans carry the intent.
+
+**Self-as-oracle.** Where an app offers self-service registration, the runner creates its own accounts (typically two) and becomes an *authenticated* black-box tester — no league-supplied credentials — unlocking the authenticated surface for the intent-free auth probes above plus deeper discovery/injection behind login. It works cleanly in the competition (self-contained apps → instant registration, ephemeral per-run state) and degrades gracefully elsewhere (email verification or CAPTCHA simply blocks it → those probes go N/A, never a crash).
+
+**Calibration follows the data.** Penalty magnitudes track real-world frequency × severity (format_spec §4.2): empirically, access control (~36% of vibe-coded-app vulnerabilities), secrets/crypto (~21%), and injection (~18%) dominate real slop — so they anchor the top of the scale, ahead of headers and perf.
 
 **The moat is the score, not the check count.** Against ZAP / Nuclei / Observatory / Lighthouse, the differentiator is the comparable, universal, zero-config resilience score and the fairness harness — not catalog size. The runner curates for determinism and calibration; where breadth helps, it can *stand on* existing corpora (e.g. Nuclei templates, Lighthouse for the speed axis) under our scoring layer rather than re-authoring everything.
 
@@ -172,7 +182,7 @@ The universal arsenal at full scope is roughly **130–200 probes** across the t
 
 - **Not HTTP-observable** — memory safety, internal code quality, logging, dependency-version CVEs.
 - **Out-of-band dependent** — blind SSRF and fully-blind injection with no in-band signal (egress is locked; oracles are in-band only).
-- **Intent-dependent** — business-logic authorization, idempotency / duplicate semantics, mass assignment (excluded by the intent-independence litmus).
+- **Intent-dependent *semantics*** — business-logic authorization (should role X do action Y), idempotency / duplicate semantics, mass assignment. The *intent-independent* slices of access control and auth — unauthenticated exposure, secrets-in-the-open, and auth mechanics via self-created accounts (self-as-oracle) — are **in** scope; see Project identity & scope philosophy.
 - **Framework-specific** — per-stack exploits (universal-only).
 - **Later bundles** — race conditions and behavioral consistency become their own bundles post-v1 (the six-axis roadmap), not crammed into v1.
 - **Client-side storage probing** — localStorage / sessionStorage / IndexedDB fuzzing via the browser context is deferred to later catalog work (it adds browser-harness complexity to Stage 5).
