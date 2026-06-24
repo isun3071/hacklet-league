@@ -61,6 +61,17 @@ def test_hardened_calibration_preserves_scores(internal_net):
     assert score("minimal") == 0
 
 
+def test_read_only_preserves_scores():
+    """Isolate read-only from the network change: on the default bridge (known-good reachability),
+    a read-only root filesystem must not change any score."""
+    def score(app: str) -> int:
+        return run(DockerDeployer(str(REFS / app), read_only=True), load_catalog(CATALOG)).slop_score
+
+    assert score("vulnerable") == 98
+    assert score("hardened") == 0
+    assert score("minimal") == 0
+
+
 def test_internal_network_blocks_egress(internal_net):
     """A container on the internal network cannot reach the internet."""
     proc = _docker(

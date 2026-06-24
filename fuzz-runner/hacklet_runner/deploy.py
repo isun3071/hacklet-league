@@ -100,7 +100,9 @@ class DockerDeployer(Deployer):
     calibration runs on a stock daemon, and are flipped ON for untrusted production:
 
     * ``read_only=True`` — read-only root filesystem (+ a writable ``/tmp`` tmpfs)
-    * ``network="<net>"`` — egress block via a docker network created with ``--internal``
+    * ``network="<net>"`` — egress block via a docker network created with ``--internal``; on a
+      custom network the runner reaches the container by its address there (host port-publishing
+      does not route on an internal network)
     * ``runtime="runsc"`` — gVisor (or a Firecracker microVM) for container-escape defense
 
     See FUZZ_RUNNER_SPEC "Production deploy (DockerDeployer)". The reference Dockerfiles let the
@@ -140,7 +142,10 @@ class DockerDeployer(Deployer):
         self._build()
         port = _free_port()
         self.container_id = self._run_container(port)
-        base = f"http://127.0.0.1:{port}"
+        # On a custom (e.g. --internal) network, host port-publishing does not route; reach the
+        # container by its address on that network. On the default bridge, use the loopback port.
+        host = self._container_ip() if self.network else "127.0.0.1"
+        base = f"http://{host}:{port}"
         self._await_health(base)
         return DeployHandle(base)
 
@@ -166,7 +171,6 @@ class DockerDeployer(Deployer):
         args = [
             "run", "-d",
             "-e", f"PORT={port}",
-            "-p", f"127.0.0.1:{port}:{port}",
             "--memory", self.memory,
             "--cpus", self.cpus,
             "--pids-limit", str(self.pids_limit),
@@ -174,10 +178,12 @@ class DockerDeployer(Deployer):
             "--security-opt", "no-new-privileges",
             "--label", "hacklet-runner=1",
         ]
+        if self.network:
+            args += ["--network", self.network]  # reached by container IP, not a published port
+        else:
+            args += ["-p", f"127.0.0.1:{port}:{port}"]
         if self.read_only:
             args += ["--read-only", "--tmpfs", "/tmp"]
-        if self.network:
-            args += ["--network", self.network]
         if self.runtime:
             args += ["--runtime", self.runtime]
         args.append(self.image_tag)
@@ -202,6 +208,17 @@ class DockerDeployer(Deployer):
     def _container_running(self) -> bool:
         proc = _docker("inspect", "-f", "{{.State.Running}}", self.container_id or "")
         return proc.returncode == 0 and proc.stdout.strip() == "true"
+
+    def _container_ip(self) -> str:
+        # The per-network address; the top-level .IPAddress is empty for custom networks.
+        proc = _docker(
+            "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+            self.container_id or "",
+        )
+        ip = proc.stdout.strip()
+        if not ip:
+            raise RuntimeError(f"could not resolve container IP on '{self.network}':\n{proc.stderr}")
+        return ip
 
     def _logs(self) -> str:
         proc = _docker("logs", "--tail", "50", self.container_id or "")
