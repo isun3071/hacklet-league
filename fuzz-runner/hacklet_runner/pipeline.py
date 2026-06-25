@@ -23,6 +23,7 @@ class _Ctx:
     base_url: str
     client: httpx.Client
     profile: Profile
+    headers: dict | None = None
 
 
 def _applicable(probe: Probe, profile: Profile) -> bool:
@@ -71,13 +72,14 @@ def _matches(probe: Probe, resp: httpx.Response) -> bool:
     return bool(probe.slop_if)
 
 
-def run(deployer: Deployer, catalog: list[Probe], render=None) -> Report:
+def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None) -> Report:
     try:
         handle = deployer.deploy()  # inside try so teardown runs even if deploy/health fails
-        profile = discover(handle.base_url, render=render)
+        profile = discover(handle.base_url, render=render, headers=headers)
         outcomes: list[Outcome] = []
-        with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True) as client:
-            ctx = _Ctx(handle.base_url, client, profile)
+        with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True,
+                          headers=headers) as client:
+            ctx = _Ctx(handle.base_url, client, profile, headers)
             for probe in catalog:
                 client.cookies.clear()  # each probe starts from a clean session (no cross-probe leak)
                 target = probe.probe.get("target", "")

@@ -80,6 +80,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        try:
+            urllib.parse.unquote(self.path, errors="strict")  # naive router strict-decodes the raw path
+        except Exception:
+            return self._send(500, "decode error")  # and 500s on malformed %-encoding (no 400 guard)
         if self.path == "/":
             return self._send(200, HOME)
         if self.path == "/config.js":  # leaks a (fake) AWS key in client JS — classic slop

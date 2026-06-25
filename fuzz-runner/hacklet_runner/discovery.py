@@ -55,7 +55,8 @@ def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
     return forms
 
 
-def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH) -> Profile:
+def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH,
+             headers=None) -> Profile:
     routes: dict[str, None] = {}      # insertion-ordered set
     forms: list[Form] = []
     seen_forms: set[tuple] = set()
@@ -63,7 +64,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     queue: list[tuple[str, int]] = [("/", 0)]
     any_response = False
 
-    with httpx.Client(base_url=base_url, timeout=5.0, follow_redirects=True) as c:
+    with httpx.Client(base_url=base_url, timeout=5.0, follow_redirects=True, headers=headers) as c:
         while queue and len(visited) < max_pages:
             path, depth = queue.pop(0)
             if path in visited:
@@ -98,7 +99,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
 
     browser_ok = False
     if render is not None:  # browser-rendered DOM: client-rendered forms/routes a static crawl misses
-        dom = render(base_url.rstrip("/") + "/")
+        dom = render(base_url.rstrip("/") + "/", headers=headers)
         if dom:
             browser_ok = True  # a real render returned HTML -> the browser actually launched/works
             any_response = True

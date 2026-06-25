@@ -26,8 +26,10 @@ ALL_PROBES = [
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
     "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance: /profile (form)
     "qa-crash-004", "qa-crash-005", "qa-crash-006",  # crash-resistance: /api/items (JSON gauntlet)
+    "qa-crash-007",  # crash-resistance: 5xx on a malformed-encoding path (routing)
     "qa-race-001",  # race condition: concurrent creates collide on the same id
     "perf-load-001",  # load resilience: 5xx under a concurrent burst
+    "perf-compress-001",  # no gzip on a sizeable text response
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -74,17 +76,21 @@ def test_vulnerable_app_accrues_slop():
     assert o["qa-race-001"] == "slop_detected"
     # perf-load-001: /report 5xx's under a concurrent burst (unsynchronized shared state):
     assert o["perf-load-001"] == "slop_detected"
+    # perf-compress-001: the homepage HTML is served uncompressed (no Content-Encoding):
+    assert o["perf-compress-001"] == "slop_detected"
+    # qa-crash-007: a malformed-encoding path 500s instead of a graceful 404:
+    assert o["qa-crash-007"] == "slop_detected"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # sec-exposure-* find the served .env and .git files (.git config+HEAD share a variant group):
     exposure_hits = {x.target for x in report.outcomes
                      if x.probe_id.startswith("sec-exposure") and x.outcome == "slop_detected"}
     assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
-    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10.
+    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10 + compress 5.
     # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
     # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2, sorted-desc decay -> 13.68.
-    # crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53. -> total 373.
-    assert report.slop_score == 373
+    # crash-resistance: 7 fires -> 14.58. exposure: 35 + 30*.6 = 53. -> total 379.
+    assert report.slop_score == 379
 
 
 def test_hardened_app_is_clean():
@@ -111,6 +117,8 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-csrf-001"] == "not_applicable"
     assert o["sec-ratelimit-001"] == "not_applicable"  # no password form -> no login to brute-force
     assert o["sec-cors-001"] == "clean"  # applies (any endpoint) but minimal doesn't reflect Origin
+    assert o["perf-compress-001"] == "clean"  # 84-byte homepage -> too small to need compression
+    assert o["qa-crash-007"] == "clean"       # robust 404 on the malformed-encoding path
     assert o["sec-idor-001"] == "not_applicable"      # same gate
     assert o["sec-domxss-001"] == "not_applicable"    # browser-gated
     assert o["qa-race-001"] == "not_applicable"       # no password form -> can't self-register

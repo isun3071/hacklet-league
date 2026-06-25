@@ -1,0 +1,13 @@
+id: qa-crash-007
+bundle: qa
+category: crash-resistance
+pool: public
+evidence_model: provable
+penalty: 6
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  method: GET
+  target: "/%ff%fe"   # malformed-encoding path -> a robust router 404s; a naive one 500s (decode crash)
+slop_if:
+  - response_server_error

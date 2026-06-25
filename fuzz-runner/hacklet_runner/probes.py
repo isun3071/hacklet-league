@@ -65,6 +65,19 @@ def response_server_error(resp, arg=None) -> bool:
     return resp.status_code in (500, 502, 503, 504)
 
 
+def response_uncompressed(resp, arg=1024) -> bool:
+    # Slop: a sizeable TEXT response served with no Content-Encoding (gzip/br/deflate) -> wasted
+    # bandwidth and slower loads. Gate on size — small bodies don't benefit from compression, so a
+    # server that skips them is correct, not slop. httpx always sends Accept-Encoding and keeps the
+    # Content-Encoding header, so its presence means the server compressed.
+    ctype = resp.headers.get("content-type", "").lower()
+    if not any(t in ctype for t in ("text/", "javascript", "json", "xml", "svg")):
+        return False
+    if "content-encoding" in resp.headers:
+        return False
+    return len(resp.content) > int(arg)
+
+
 # High-confidence server secrets that must never reach a client. Precision over recall: we skip
 # public-by-design values (Firebase apiKey AIza..., Stripe publishable pk_..., generic JWT session
 # tokens), because a false positive wrongly penalizes a non-flaw.
@@ -109,6 +122,7 @@ MATCHERS = {
     "response_missing_clickjacking_defense": response_missing_clickjacking_defense,
     "response_cors_misconfigured": response_cors_misconfigured,
     "response_server_error": response_server_error,
+    "response_uncompressed": response_uncompressed,
     "response_leaks_secret": response_leaks_secret,
     "response_is_dotenv": response_is_dotenv,
     "response_is_git_config": response_is_git_config,
@@ -225,7 +239,7 @@ def dom_xss(ctx, probe) -> bool:
     """Browser oracle: inject an executing payload across discovered routes and render — fires when
     it runs in the DOM, catching reflected-that-executes and DOM-sink XSS a source check misses.
     Gated on the `browser` capability, so it's N/A unless the run enabled rendering."""
-    return browser.dom_xss_executes(ctx.base_url, ctx.profile.routes)
+    return browser.dom_xss_executes(ctx.base_url, ctx.profile.routes, headers=ctx.headers)
 
 
 def _served(ctx, path: str) -> bool:
@@ -248,7 +262,7 @@ def slow_first_paint(ctx, probe) -> bool:
     # median of N renders, not one sample: FCP is wall-clock timing (JIT warmup, CPU/network jitter),
     # so a single sample near the gate flips between runs -> non-deterministic score. The isinstance
     # filter also drops any non-numeric value a hostile page could inject (would raise TypeError).
-    samples = [browser.first_contentful_paint(url) for _ in range(3)]
+    samples = [browser.first_contentful_paint(url, headers=ctx.headers) for _ in range(3)]
     vals = [s for s in samples if isinstance(s, (int, float))]
     if not vals:
         return False
@@ -324,10 +338,10 @@ def race_resource_ids(ctx, probe) -> bool:
         account.client.close()
 
 
-def _concurrent_get(base_url, path, n: int = 20):
+def _concurrent_get(base_url, path, n: int = 20, headers=None):
     def get():
         try:
-            with httpx.Client(base_url=base_url, timeout=15.0) as c:
+            with httpx.Client(base_url=base_url, timeout=15.0, headers=headers) as c:
                 return c.get(path).status_code
         except Exception:
             return None
@@ -345,7 +359,7 @@ def load_resilience(ctx, probe) -> bool:
         target = "/"
     ratios = []
     for _ in range(3):  # median of N bursts, not one: a target near the 10% gate flips between runs
-        statuses = _concurrent_get(ctx.base_url, target)
+        statuses = _concurrent_get(ctx.base_url, target, headers=ctx.headers)
         if statuses:
             # None = connection refused/dropped/timeout — a HARDER fall-over than a 500, counted over
             # the whole burst so an app that crashes the connection can't read cleaner than one that 500s.

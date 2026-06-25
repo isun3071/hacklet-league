@@ -114,6 +114,10 @@ def main() -> None:
     ap.add_argument("--catalog", metavar="DIR", default=str(_ROOT / "catalog"), help="probe catalog dir")
     ap.add_argument("--browser", action="store_true",
                     help="render pages with a headless browser (finds SPA/client-rendered forms)")
+    ap.add_argument("--header", action="append", metavar="H", default=[],
+                    help="auth header sent on EVERY request, e.g. --header 'Cookie: session=...' or "
+                         "'Authorization: Bearer ...' — probes the authenticated surface as that user "
+                         "(repeatable; note: state-changing probes then act AS that user)")
     ap.add_argument("--harden", action="store_true",
                     help="production sandbox for --submission: read-only rootfs + egress-blocked network")
     ap.add_argument("--network", metavar="NET", default="hacklet-fuzz-net",
@@ -126,16 +130,23 @@ def main() -> None:
     catalog = load_catalog(args.catalog)
     render = browser.render_html if args.browser else None
     source = args.app or args.target or args.submission
+    auth_headers = {}
+    for h in args.header:
+        name, sep, value = h.partition(":")
+        if not sep:
+            _fail(args, "bad-arg", f"--header must be 'Name: Value', got: {h!r}")
+        auth_headers[name.strip()] = value.strip()
 
     # Trusted reference app: subprocess, no Docker.
     if args.app:
-        _print_report(run(SubprocessDeployer(args.app), catalog, render=render), source, args)
+        _print_report(run(SubprocessDeployer(args.app), catalog, render=render, headers=auth_headers),
+                      source, args)
         return
 
     # Already-running URL: dogfooding, no Docker, no teardown of the target.
     if args.target:
         try:
-            report = run(RemoteDeployer(args.target), catalog, render=render)
+            report = run(RemoteDeployer(args.target), catalog, render=render, headers=auth_headers)
         except _DEPLOY_FAILURES as e:
             _fail(args, "unreachable", str(e)[:500])
         _print_report(report, source, args)
@@ -152,7 +163,7 @@ def main() -> None:
             read_only=args.harden,
             network=args.network if args.harden else None,
         )
-        report = run(deployer, catalog, render=render)
+        report = run(deployer, catalog, render=render, headers=auth_headers)
     except _DEPLOY_FAILURES as e:
         _fail(args, "DNF", str(e)[:500])
     finally:

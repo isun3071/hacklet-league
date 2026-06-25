@@ -39,7 +39,28 @@ def _launch(p):
     return None
 
 
-def render_html(url: str, timeout: float = 15.0) -> str | None:
+def _apply_auth(page, url: str, headers) -> None:
+    """Send caller-supplied auth on browser requests so the browser probes reach a session/SSO-gated
+    authenticated surface: a Cookie header -> the browser cookie jar, everything else (e.g. a Bearer
+    Authorization) -> extra HTTP headers."""
+    if not headers:
+        return
+    extra = {k: v for k, v in headers.items() if k.lower() != "cookie"}
+    if extra:
+        page.set_extra_http_headers(extra)
+    cookie = next((v for k, v in headers.items() if k.lower() == "cookie"), None)
+    if cookie:
+        host = urllib.parse.urlparse(url).hostname
+        jar = []
+        for part in cookie.split(";"):
+            if "=" in part:
+                name, _, val = part.strip().partition("=")
+                jar.append({"name": name, "value": val, "domain": host, "path": "/"})
+        if jar:
+            page.context.add_cookies(jar)
+
+
+def render_html(url: str, headers=None, timeout: float = 15.0) -> str | None:
     """Load url in a headless browser and return the rendered DOM. None if no browser is available
     or rendering fails (the caller falls back to the static crawl)."""
     try:
@@ -53,6 +74,7 @@ def render_html(url: str, timeout: float = 15.0) -> str | None:
                 return None
             try:
                 page = browser.new_page()
+                _apply_auth(page, url, headers)
                 page.goto(url, timeout=timeout * 1000, wait_until="load")
                 page.wait_for_timeout(300)  # let client JS settle
                 return page.content()
@@ -62,7 +84,7 @@ def render_html(url: str, timeout: float = 15.0) -> str | None:
         return None
 
 
-def first_contentful_paint(url: str, timeout: float = 12.0) -> float | None:
+def first_contentful_paint(url: str, headers=None, timeout: float = 12.0) -> float | None:
     """Render url and return First Contentful Paint in milliseconds (the user-facing 'time to see
     something' metric). None if no browser, render fails, or nothing ever paints."""
     try:
@@ -76,6 +98,7 @@ def first_contentful_paint(url: str, timeout: float = 12.0) -> float | None:
                 return None
             try:
                 page = b.new_page()
+                _apply_auth(page, url, headers)
                 page.goto(url, timeout=timeout * 1000, wait_until="load")
                 page.wait_for_timeout(2500)  # allow delayed/contentful paint to occur
                 return page.evaluate(
@@ -89,7 +112,7 @@ def first_contentful_paint(url: str, timeout: float = 12.0) -> float | None:
 
 
 def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24,
-                     total_timeout: float = 45.0) -> bool:
+                     total_timeout: float = 45.0, headers=None) -> bool:
     """Inject an executing payload into candidate query params of each path, render, and return True
     if it ran (the payload's JS set a window global) — i.e. XSS that *executes* in the DOM, which a
     source-only reflection check misses (reflected-that-executes and DOM-sink XSS). False if no
@@ -105,6 +128,7 @@ def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24
                 return False
             try:
                 page = b.new_page()
+                _apply_auth(page, base_url, headers)
                 attempts = 0
                 deadline = time.monotonic() + total_timeout  # overall wall-clock cap: a slow-loris
                 for path in paths:                            # target that stalls each goto can't tie
