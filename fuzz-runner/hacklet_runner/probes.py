@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+import httpx
+
 from . import auth
 
 _TRACE = re.compile(
@@ -127,7 +129,36 @@ def session_cookie_insecure(ctx, probe) -> bool:
         account.client.close()
 
 
+def idor_horizontal(ctx, probe) -> bool:
+    """Self-as-oracle: register A and B, A creates a resource, B fetches it by URL. If B can read
+    A's content, object-level access control is broken (horizontal IDOR)."""
+    form = auth.create_form(ctx.profile.forms)
+    if form is None:
+        return False
+    a = auth.register_account(ctx.base_url, ctx.profile, suffix="_a")
+    b = auth.register_account(ctx.base_url, ctx.profile, suffix="_b")
+    if a is None or b is None:
+        for acct in (a, b):
+            if acct:
+                acct.client.close()
+        return False
+    try:
+        marker = "hl-idor-7a3f9c"
+        created = a.client.request("POST", form.action, data={n: marker for n in form.fields})
+        resource = created.url.path
+        if not resource or resource == form.action:  # no redirect to a distinct resource -> N/A
+            return False
+        leaked = b.client.get(resource)
+        return leaked.status_code == 200 and marker in leaked.text
+    except httpx.HTTPError:
+        return False
+    finally:
+        a.client.close()
+        b.client.close()
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "session_cookie_insecure": session_cookie_insecure,
+    "idor_horizontal": idor_horizontal,
 }

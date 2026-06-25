@@ -50,6 +50,24 @@ def _fill(form: Form, username: str, password: str) -> dict[str, str]:
     return data
 
 
+_CREATE_HINTS = ("note", "post", "item", "todo", "comment", "message", "create", "add", "new")
+_NON_CREATE = ("login", "signin", "sign-in", "register", "signup", "sign-up", "search", "query", "logout")
+
+
+def create_form(forms: list[Form]) -> Form | None:
+    """A content-creation form: a POST form with a non-password field that isn't auth/search."""
+    cands = [
+        f for f in forms
+        if (f.method or "post").lower() == "post"
+        and f.fields
+        and not any(h in f.action.lower() for h in _NON_CREATE)
+        and not all("pass" in n.lower() for n in f.fields)
+    ]
+    if not cands:
+        return None
+    return next((f for f in cands if any(h in f.action.lower() for h in _CREATE_HINTS)), cands[0])
+
+
 def register_account(base_url: str, profile: Profile, suffix: str = "") -> Account | None:
     """Create a fresh account via the discovered registration form. Returns None when there's no
     usable form or registration fails (email verification / CAPTCHA), so the caller treats it as N/A."""

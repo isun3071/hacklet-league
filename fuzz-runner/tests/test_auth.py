@@ -1,7 +1,7 @@
 """Self-as-oracle auth helpers — pure functions, no server."""
 import httpx
 
-from hacklet_runner.auth import _fill, _password_form, parse_set_cookies, session_cookie
+from hacklet_runner.auth import _fill, _password_form, create_form, parse_set_cookies, session_cookie
 from hacklet_runner.schema import Form
 
 
@@ -38,3 +38,21 @@ def test_fill_maps_fields_by_name():
     data = _fill(Form(action="/register", method="post", fields=["username", "email", "password"]),
                  "bob", "pw")
     assert data == {"username": "bob", "email": "bob@example.com", "password": "pw"}
+
+
+def test_create_form_picks_content_form():
+    forms = [
+        Form(action="/login", method="post", fields=["username", "password"]),
+        Form(action="/register", method="post", fields=["username", "password"]),
+        Form(action="/search", method="get", fields=["q"]),
+        Form(action="/notes", method="post", fields=["text"]),
+    ]
+    assert create_form(forms).action == "/notes"
+
+
+def test_create_form_none_when_only_auth_and_search():
+    forms = [
+        Form(action="/login", method="post", fields=["username", "password"]),
+        Form(action="/search", method="get", fields=["q"]),
+    ]
+    assert create_form(forms) is None

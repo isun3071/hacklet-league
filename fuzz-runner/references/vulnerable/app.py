@@ -19,6 +19,19 @@ _db.execute("CREATE TABLE users (name TEXT, pw TEXT)")
 _db.execute("INSERT INTO users VALUES ('alice', 's3cret')")
 _db.commit()
 
+_SESSIONS = {}     # session token -> username
+_NOTES = {}        # note id -> {"owner", "text"}
+_NEXT_NOTE = [1]   # sequential note ids (mutable holder)
+
+
+def _user_of(handler):
+    for part in handler.headers.get("Cookie", "").split(";"):
+        part = part.strip()
+        if part.startswith("session="):
+            return _SESSIONS.get(part[len("session="):])
+    return None
+
+
 HOME = b"""<!doctype html><html><body>
 <h1>demo app</h1>
 <a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a>
@@ -36,6 +49,10 @@ HOME = b"""<!doctype html><html><body>
   <input name="email" placeholder="email">
   <input name="password" type="password" placeholder="pw">
   <button type="submit">register</button>
+</form>
+<form action="/notes" method="post">
+  <input name="text" placeholder="note">
+  <button type="submit">add note</button>
 </form>
 <script src="/config.js"></script>
 </body></html>"""
@@ -73,6 +90,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
         if self.path == "/.git/HEAD":
             return self._send(200, "ref: refs/heads/main\n", "text/plain")
+        if self.path.startswith("/notes/"):
+            try:
+                note_id = int(self.path.rsplit("/", 1)[1])
+            except ValueError:
+                return self._send(404, "not found")
+            note = _NOTES.get(note_id)
+            if note is None:
+                return self._send(404, "not found")
+            if _user_of(self):  # vulnerable: ANY logged-in user, no owner check -> horizontal IDOR
+                return self._send(200, "note: " + note["text"])
+            return self._send(401, "login required")
         if self.path.startswith("/search"):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", [""])[0]
             return self._send(200, "<p>results for: " + q + "</p>")  # reflects raw -> XSS
@@ -91,8 +119,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())
             user = form.get("username", ["anon"])[0] or "anon"
-            # vulnerable: session cookie with NO HttpOnly/SameSite/Secure (and a guessable value)
+            _SESSIONS[user] = user  # vulnerable: session token == username (guessable)
             return self._send(200, "account created", cookie="session=" + user)
+        if self.path == "/notes":  # create a note owned by the current session's user
+            length = int(self.headers.get("Content-Length", "0"))
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            user = _user_of(self)
+            if not user:
+                return self._send(401, "login required")
+            note_id = _NEXT_NOTE[0]
+            _NEXT_NOTE[0] += 1
+            _NOTES[note_id] = {"owner": user, "text": form.get("text", [""])[0]}
+            self.send_response(302)
+            self.send_header("Location", "/notes/%d" % note_id)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path == "/login":
             length = int(self.headers.get("Content-Length", "0"))
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())

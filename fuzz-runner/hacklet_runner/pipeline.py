@@ -73,6 +73,7 @@ def run(deployer: Deployer, catalog: list[Probe]) -> Report:
         with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True) as client:
             ctx = _Ctx(handle.base_url, client, profile)
             for probe in catalog:
+                client.cookies.clear()  # each probe starts from a clean session (no cross-probe leak)
                 target = probe.probe.get("target", "")
                 if not _applicable(probe, profile):
                     outcomes.append(_outcome(probe, "not_applicable", 0, target))
@@ -89,6 +90,7 @@ def run(deployer: Deployer, catalog: list[Probe]) -> Report:
                         resp = fetch(client)
                     except httpx.HTTPError:
                         continue  # unreachable target -> try the next
+                    client.cookies.clear()  # form-fan submissions stay independent (no session leak)
                     produced = True
                     slop = _matches(probe, resp)
                     outcomes.append(_outcome(

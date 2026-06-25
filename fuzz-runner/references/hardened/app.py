@@ -18,6 +18,19 @@ _db.execute("CREATE TABLE users (name TEXT, pw TEXT)")
 _db.execute("INSERT INTO users VALUES ('alice', 's3cret')")
 _db.commit()
 
+_SESSIONS = {}     # session token -> username
+_NOTES = {}        # note id -> {"owner", "text"}
+_NEXT_NOTE = [1]   # sequential note ids (mutable holder)
+
+
+def _user_of(handler):
+    for part in handler.headers.get("Cookie", "").split(";"):
+        part = part.strip()
+        if part.startswith("session="):
+            return _SESSIONS.get(part[len("session="):])
+    return None
+
+
 HOME = b"""<!doctype html><html><body>
 <h1>demo app</h1>
 <a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a>
@@ -35,6 +48,10 @@ HOME = b"""<!doctype html><html><body>
   <input name="email" placeholder="email">
   <input name="password" type="password" placeholder="pw">
   <button type="submit">register</button>
+</form>
+<form action="/notes" method="post">
+  <input name="text" placeholder="note">
+  <button type="submit">add note</button>
 </form>
 <script src="/config.js"></script>
 </body></html>"""
@@ -61,6 +78,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, HOME)
         if self.path == "/config.js":  # same surface, no secret in client code
             return self._send(200, 'const CONFIG = { api: "/api" };\n', "application/javascript")
+        if self.path.startswith("/notes/"):
+            try:
+                note_id = int(self.path.rsplit("/", 1)[1])
+            except ValueError:
+                return self._send(404, "not found")
+            note = _NOTES.get(note_id)
+            if note is None:
+                return self._send(404, "not found")
+            if _user_of(self) == note["owner"]:  # hardened: owner only -> no IDOR
+                return self._send(200, "note: " + html.escape(note["text"]))
+            return self._send(403, "forbidden")
         if self.path.startswith("/search"):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", [""])[0]
             return self._send(200, "<p>results for: " + html.escape(q) + "</p>")  # escaped
@@ -73,10 +101,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/register":
             length = int(self.headers.get("Content-Length", "0"))
-            self.rfile.read(length)  # consume body
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            user = form.get("username", ["anon"])[0] or "anon"
             sid = secrets.token_hex(16)
+            _SESSIONS[sid] = user
             return self._send(200, "account created",
                               cookie="session=" + sid + "; HttpOnly; SameSite=Lax; Path=/")
+        if self.path == "/notes":  # create a note owned by the current session's user
+            length = int(self.headers.get("Content-Length", "0"))
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            user = _user_of(self)
+            if not user:
+                return self._send(401, "login required")
+            note_id = _NEXT_NOTE[0]
+            _NEXT_NOTE[0] += 1
+            _NOTES[note_id] = {"owner": user, "text": form.get("text", [""])[0]}
+            self.send_response(302)
+            self.send_header("Location", "/notes/%d" % note_id)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path == "/login":
             length = int(self.headers.get("Content-Length", "0"))
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())
