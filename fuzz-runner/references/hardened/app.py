@@ -10,6 +10,7 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
 import urllib.parse
 
 PORT = int(os.environ.get("PORT", "8080"))
@@ -22,6 +23,7 @@ _db.commit()
 _SESSIONS = {}     # session token -> username
 _NOTES = {}        # note id -> {"owner", "text"}
 _NEXT_NOTE = [1]   # sequential note ids (mutable holder)
+_LOCK = threading.Lock()
 
 
 def _user_of(handler):
@@ -118,8 +120,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user = _user_of(self)
             if not user:
                 return self._send(401, "login required")
-            note_id = _NEXT_NOTE[0]
-            _NEXT_NOTE[0] += 1
+            with _LOCK:  # atomic id allocation -> no collision under concurrency
+                note_id = _NEXT_NOTE[0]
+                _NEXT_NOTE[0] += 1
             _NOTES[note_id] = {"owner": user, "text": form.get("text", [""])[0]}
             self.send_response(302)
             self.send_header("Location", "/notes/%d" % note_id)
@@ -160,4 +163,4 @@ class Handler(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     # Bind 0.0.0.0: reachable as a dev/CI subprocess AND via the published port inside the
     # DockerDeployer container (a 127.0.0.1 binding is unreachable through Docker's port forward).
-    http.server.HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # concurrent, but locked

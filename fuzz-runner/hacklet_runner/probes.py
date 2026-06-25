@@ -9,6 +9,7 @@ means the probe fires and adds its penalty.
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
@@ -192,10 +193,40 @@ def idor_horizontal(ctx, probe) -> bool:
         b.client.close()
 
 
+def _concurrent_creates(base_url, path, cookies, n: int = 12):
+    def create():
+        try:
+            with httpx.Client(base_url=base_url, timeout=10.0, follow_redirects=True, cookies=cookies) as c:
+                return c.post(path, data={"text": "race"}).url.path
+        except Exception:
+            return None
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        return [f.result() for f in [ex.submit(create) for _ in range(n)]]
+
+
+def race_resource_ids(ctx, probe) -> bool:
+    """Self-as-oracle: register, fire N concurrent resource creates, and inspect the assigned IDs.
+    Duplicate IDs mean id allocation isn't atomic under concurrency — a race condition. N distinct
+    creates must yield N distinct ids, so a collision is provable without knowing the app's intent."""
+    form = auth.create_form(ctx.profile.forms)
+    if form is None:
+        return False
+    account = auth.register_account(ctx.base_url, ctx.profile, suffix="_race")
+    if account is None:
+        return False
+    try:
+        urls = _concurrent_creates(ctx.base_url, form.action, dict(account.client.cookies))
+        created = [u for u in urls if u and u != form.action]
+        return len(created) >= 2 and len(set(created)) < len(created)
+    finally:
+        account.client.close()
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "csrf_missing": csrf_missing,
     "idor_horizontal": idor_horizontal,
     "dom_xss": dom_xss,
+    "race_resource_ids": race_resource_ids,
 }

@@ -23,6 +23,7 @@ ALL_PROBES = [
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
     "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance: /profile (form)
     "qa-crash-004", "qa-crash-005", "qa-crash-006",  # crash-resistance: /api/items (JSON gauntlet)
+    "qa-race-001",  # race condition: concurrent creates collide on the same id
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -54,15 +55,17 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-idor-001"] == "slop_detected"
     # sec-domxss-001 is browser-only -> N/A in this (no-browser) run; the browser run is in test_browser:
     assert o["sec-domxss-001"] == "not_applicable"
+    # qa-race-001 (self-as-oracle): N concurrent creates collide on one id -> non-atomic allocation:
+    assert o["qa-race-001"] == "slop_detected"
     # sec-exposure-* find the served .env and .git files (.git config+HEAD share a variant group):
     exposure_hits = {x.target for x in report.outcomes
                      if x.probe_id.startswith("sec-exposure") and x.outcome == "slop_detected"}
     assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
-    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + errhyg 8 + ttfb 5.
+    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + race 25 + errhyg 8 + ttfb 5.
     # session: httponly 20 + samesite 15 diminished -> 20 + 15*.6 = 29.
     # security-headers: 9 fires -> 7.42. crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53.
-    # Total 40+35+30+40+25+29+8+5+7.42+14.30+53 = 286.72 -> 287.
-    assert report.slop_score == 287
+    # Total 40+35+30+40+25+25+29+8+5+7.42+14.30+53 = 311.72 -> 312.
+    assert report.slop_score == 312
 
 
 def test_hardened_app_is_clean():
@@ -84,4 +87,5 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-csrf-001"] == "not_applicable"
     assert o["sec-idor-001"] == "not_applicable"      # same gate
     assert o["sec-domxss-001"] == "not_applicable"    # browser-gated
+    assert o["qa-race-001"] == "not_applicable"       # no password form -> can't self-register
     assert report.slop_score == 0

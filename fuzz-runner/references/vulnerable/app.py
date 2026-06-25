@@ -133,6 +133,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not user:
                 return self._send(401, "login required")
             note_id = _NEXT_NOTE[0]
+            time.sleep(0.1)  # widen the read-then-increment window -> ID collision under concurrency
             _NEXT_NOTE[0] += 1
             _NOTES[note_id] = {"owner": user, "text": form.get("text", [""])[0]}
             self.send_response(302)
@@ -175,4 +176,4 @@ class Handler(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     # Bind 0.0.0.0: reachable as a dev/CI subprocess AND via the published port inside the
     # DockerDeployer container (a 127.0.0.1 binding is unreachable through Docker's port forward).
-    http.server.HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # concurrent -> races surface
