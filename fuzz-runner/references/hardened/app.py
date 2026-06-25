@@ -124,7 +124,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             sid = secrets.token_hex(16)
             _SESSIONS[sid] = user
             return self._send(200, "account created",
-                              cookie="session=" + sid + "; HttpOnly; SameSite=Lax; Path=/")
+                              cookie="session=" + sid + "; HttpOnly; SameSite=Lax; Secure; Path=/")
         if self.path == "/notes":  # create a note owned by the current session's user
             length = int(self.headers.get("Content-Length", "0"))
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())

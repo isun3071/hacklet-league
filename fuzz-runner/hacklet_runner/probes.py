@@ -50,6 +50,16 @@ def response_missing_clickjacking_defense(resp, arg=None) -> bool:
     return "frame-ancestors" not in resp.headers.get("content-security-policy", "").lower()
 
 
+def response_cors_misconfigured(resp, arg=None) -> bool:
+    # Slop when the app reflects the request Origin into Access-Control-Allow-Origin AND allows
+    # credentials: any site can then make credentialed cross-origin reads. Bare ACAO:* is excluded
+    # (browsers refuse credentials with *), so this flags only the genuinely exploitable case.
+    sent_origin = resp.request.headers.get("origin", "")
+    acao = resp.headers.get("access-control-allow-origin", "")
+    creds = resp.headers.get("access-control-allow-credentials", "").lower() == "true"
+    return bool(sent_origin) and acao == sent_origin and creds
+
+
 def response_server_error(resp, arg=None) -> bool:
     # A crash is a 5xx the app caused, not 501 (method not implemented) or 405.
     return resp.status_code in (500, 502, 503, 504)
@@ -97,6 +107,7 @@ MATCHERS = {
     "response_contains": response_contains,
     "response_missing_header": response_missing_header,
     "response_missing_clickjacking_defense": response_missing_clickjacking_defense,
+    "response_cors_misconfigured": response_cors_misconfigured,
     "response_server_error": response_server_error,
     "response_leaks_secret": response_leaks_secret,
     "response_is_dotenv": response_is_dotenv,
