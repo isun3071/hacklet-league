@@ -31,6 +31,7 @@ HOME = b"""<!doctype html><html><body>
   <input name="q" placeholder="search">
   <button type="submit">search</button>
 </form>
+<script src="/config.js"></script>
 </body></html>"""
 
 
@@ -50,6 +51,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/":
             return self._send(200, HOME)
+        if self.path == "/config.js":  # leaks a (fake) AWS key in client JS — classic slop
+            return self._send(200, 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n', "application/javascript")
         if self.path.startswith("/search"):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", [""])[0]
             return self._send(200, "<p>results for: " + q + "</p>")  # reflects raw -> XSS

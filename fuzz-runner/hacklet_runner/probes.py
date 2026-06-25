@@ -41,12 +41,31 @@ def response_server_error(resp, arg=None) -> bool:
     return resp.status_code in (500, 502, 503, 504)
 
 
+# High-confidence server secrets that must never reach a client. Precision over recall: we skip
+# public-by-design values (Firebase apiKey AIza..., Stripe publishable pk_..., generic JWT session
+# tokens), because a false positive wrongly penalizes a non-flaw.
+_SECRET_PATTERNS = [
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),               # AWS access key id
+    re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{16,}"),  # Stripe live secret / restricted key
+    re.compile(r"\bsk_test_[0-9A-Za-z]{16,}"),         # Stripe test secret key
+    re.compile(r"\bghp_[0-9A-Za-z]{36}\b"),            # GitHub personal access token
+    re.compile(r"\bgithub_pat_[0-9A-Za-z_]{20,}"),     # GitHub fine-grained PAT
+    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}"),     # Slack token
+]
+
+
+def response_leaks_secret(resp, arg=None) -> bool:
+    return any(p.search(resp.text) for p in _SECRET_PATTERNS)
+
+
 MATCHERS = {
     "response_leaks_stack_trace": response_leaks_stack_trace,
     "ttfb_at_least": ttfb_at_least,
     "response_contains": response_contains,
     "response_missing_header": response_missing_header,
     "response_server_error": response_server_error,
+    "response_leaks_secret": response_leaks_secret,
 }
 
 

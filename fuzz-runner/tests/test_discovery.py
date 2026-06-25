@@ -28,7 +28,7 @@ def serve():
 
 def test_discovers_routes_and_login_form(serve):
     profile = discover(serve("vulnerable"))
-    assert {"/", "/login", "/search", "/crash", "/heavy"} <= set(profile.routes)
+    assert {"/", "/login", "/search", "/crash", "/heavy", "/config.js"} <= set(profile.routes)
     logins = [f for f in profile.forms if f.action == "/login"]
     assert logins, "should discover the /login form"
     assert logins[0].method == "post"

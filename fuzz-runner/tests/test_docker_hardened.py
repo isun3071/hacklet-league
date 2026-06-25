@@ -56,7 +56,7 @@ def test_hardened_calibration_preserves_scores(internal_net):
         d = DockerDeployer(str(REFS / app), read_only=True, network=internal_net)
         return run(d, load_catalog(CATALOG)).slop_score
 
-    assert score("vulnerable") == 102
+    assert score("vulnerable") == 137
     assert score("hardened") == 0
     assert score("minimal") == 0
 
@@ -67,7 +67,7 @@ def test_read_only_preserves_scores():
     def score(app: str) -> int:
         return run(DockerDeployer(str(REFS / app), read_only=True), load_catalog(CATALOG)).slop_score
 
-    assert score("vulnerable") == 102
+    assert score("vulnerable") == 137
     assert score("hardened") == 0
     assert score("minimal") == 0
 

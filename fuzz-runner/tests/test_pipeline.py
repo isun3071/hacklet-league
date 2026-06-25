@@ -17,7 +17,7 @@ REFS = ROOT / "references"
 
 ALL_PROBES = [
     "sec-sqli-001", "sec-sqli-002", "sec-sqli-003",  # variant group
-    "sec-xss-001", "sec-headers-001", "qa-errhyg-001", "perf-ttfb-001",
+    "sec-xss-001", "sec-secrets-001", "sec-headers-001", "qa-errhyg-001", "perf-ttfb-001",
     "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance category
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
@@ -32,18 +32,20 @@ def test_vulnerable_app_accrues_slop():
     o = report.by_id
     for probe in ALL_PROBES:
         assert o[probe] == "slop_detected", f"{probe} should fire on the vulnerable app"
-    # sec-headers-001 fans across every discovered route (/, /login, /search, /crash, /heavy):
+    # sec-headers-001 fans across every discovered route (/, /login, /search, /crash, /heavy, /config.js):
     header_hits = [x for x in report.outcomes if x.probe_id == "sec-headers-001"]
-    assert len(header_hits) == 5 and all(x.outcome == "slop_detected" for x in header_hits)
+    assert len(header_hits) == 6 and all(x.outcome == "slop_detected" for x in header_hits)
     # sec-xss-001 fans across discovered forms (/login, /search); only /search reflects unescaped:
     xss_hits = [x for x in report.outcomes if x.probe_id == "sec-xss-001"]
     assert {x.target for x in xss_hits} == {"/login", "/search"}
     assert any(x.outcome == "slop_detected" and x.target == "/search" for x in xss_hits)
-    # SQLi: 3 variants fire, group collapses to one penalty (40, not 120).
-    # security-headers: 5 fan-out fires, diminished: 3 + 3*.6 + 3*.36 + 3*.216 + 3*.1296 = 6.92.
-    # crash-resistance: 3 fire, diminished: 6 + 6*.6 + 6*.36 = 11.76. xss 30 + errhyg 8 + ttfb 5.
-    # Total 40 + 30 + 6.92 + 8 + 5 + 11.76 = 101.68 -> 102.
-    assert report.slop_score == 102
+    # sec-secrets-001 finds the leaked AWS key in /config.js (variant-grouped -> one penalty):
+    assert any(x.outcome == "slop_detected" and x.target == "/config.js"
+               for x in report.outcomes if x.probe_id == "sec-secrets-001")
+    # SQLi 40 (group) + secrets 35 (group) + xss 30 + errhyg 8 + ttfb 5.
+    # security-headers: 6 fan-out fires, diminished -> 7.15. crash: 3 fire, diminished -> 11.76.
+    # Total 40 + 35 + 30 + 7.15 + 8 + 5 + 11.76 = 136.91 -> 137.
+    assert report.slop_score == 137
 
 
 def test_hardened_app_is_clean():

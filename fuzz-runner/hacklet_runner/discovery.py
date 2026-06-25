@@ -15,6 +15,7 @@ import httpx
 from .schema import Form, Profile
 
 _LINK = re.compile(r'href=["\']([^"\']+)["\']', re.I)
+_SCRIPT = re.compile(r'<script\b[^>]+\bsrc=["\']([^"\']+)["\']', re.I)
 _FORM = re.compile(r"<form\b([^>]*)>(.*?)</form>", re.I | re.S)
 _ACTION = re.compile(r'action=["\']([^"\']*)["\']', re.I)
 _METHOD = re.compile(r'method=["\']([^"\']*)["\']', re.I)
@@ -83,6 +84,10 @@ def discover(base_url: str, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEP
                     seen_forms.add(key)
                     forms.append(form)
                     routes.setdefault(form.action, None)
+            for src in _SCRIPT.findall(html):  # JS assets are scan targets (secrets), not crawl targets
+                p = _same_origin_path(src, base_url, path)
+                if p:
+                    routes.setdefault(p, None)
             if depth < max_depth:
                 for href in _LINK.findall(html):
                     p = _same_origin_path(href, base_url, path)
