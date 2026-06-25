@@ -30,8 +30,14 @@ def _applicable(probe: Probe, profile: Profile) -> bool:
 
 
 def _fetch_path(probe: Probe, client: httpx.Client, path: str) -> httpx.Response:
-    method = probe.probe.get("method", "GET").upper()
-    return client.request(method, path, params=probe.probe.get("query"), data=probe.probe.get("data"))
+    p = probe.probe
+    method = p.get("method", "GET").upper()
+    kwargs = {"params": p.get("query"), "headers": p.get("headers")}
+    if "body" in p:
+        kwargs["content"] = p["body"]   # raw request body (e.g. a malformed-JSON crash probe)
+    else:
+        kwargs["data"] = p.get("data")  # form-encoded
+    return client.request(method, path, **kwargs)
 
 
 def _fetch_form(probe: Probe, client: httpx.Client, form: Form) -> httpx.Response:

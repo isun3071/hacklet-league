@@ -6,6 +6,7 @@ Trusted code we wrote, safe to run as a local subprocess; real submissions are u
 only ever run in the sandboxed container.
 """
 import http.server
+import json
 import os
 import sqlite3
 import time
@@ -160,6 +161,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, "age is " + str(age))
             except Exception:
                 return self._send(500, traceback.format_exc())  # unhandled -> 500 + leaks trace
+        if self.path == "/api/items":  # naive JSON: crashes (500) on bad JSON / wrong type / missing key
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length).decode()
+            try:
+                data = json.loads(body)
+                return self._send(200, "item: " + data["name"].upper())
+            except Exception:
+                return self._send(500, traceback.format_exc())
         return self._send(404, "not found")
 
 

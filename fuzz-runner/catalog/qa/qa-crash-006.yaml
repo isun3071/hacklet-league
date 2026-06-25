@@ -1,0 +1,16 @@
+id: qa-crash-006
+bundle: qa
+category: crash-resistance
+pool: public
+evidence_model: provable
+penalty: 6
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  method: POST
+  target: /api/items
+  headers:
+    content-type: application/json
+  body: "{}"   # missing required field -> should be 400, not a 500 crash
+slop_if:
+  - response_server_error

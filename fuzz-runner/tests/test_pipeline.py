@@ -21,7 +21,8 @@ ALL_PROBES = [
     "sec-headers-001", "qa-errhyg-001", "perf-ttfb-001",
     "sec-exposure-001", "sec-exposure-002", "sec-exposure-003",  # .env + .git
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
-    "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance category
+    "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance: /profile (form)
+    "qa-crash-004", "qa-crash-005", "qa-crash-006",  # crash-resistance: /api/items (JSON gauntlet)
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -59,9 +60,9 @@ def test_vulnerable_app_accrues_slop():
     assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
     # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + errhyg 8 + ttfb 5.
     # session: httponly 20 + samesite 15 diminished -> 20 + 15*.6 = 29.
-    # security-headers: 9 fires -> 7.42. crash: 3 fires -> 11.76. exposure: 35 + 30*.6 = 53.
-    # Total 40+35+30+40+25+29+8+5+7.42+11.76+53 = 284.18 -> 284.
-    assert report.slop_score == 284
+    # security-headers: 9 fires -> 7.42. crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53.
+    # Total 40+35+30+40+25+29+8+5+7.42+14.30+53 = 286.72 -> 287.
+    assert report.slop_score == 287
 
 
 def test_hardened_app_is_clean():

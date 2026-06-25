@@ -29,7 +29,7 @@ def running_vulnerable():
 
 def test_remote_fuzzes_running_target(running_vulnerable):
     report = run(RemoteDeployer(running_vulnerable), load_catalog(CATALOG))
-    assert report.slop_score == 284  # same app, same catalog -> same score as SubprocessDeployer
+    assert report.slop_score == 287  # same app, same catalog -> same score as SubprocessDeployer
 
 
 def test_remote_teardown_does_not_stop_target(running_vulnerable):

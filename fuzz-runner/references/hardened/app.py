@@ -6,6 +6,7 @@ must read clean here.
 """
 import html
 import http.server
+import json
 import os
 import secrets
 import sqlite3
@@ -143,6 +144,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not raw.isdigit():
                 return self._send(400, "invalid age")  # graceful, no crash
             return self._send(200, "age is " + raw)
+        if self.path == "/api/items":  # validates -> graceful 400 on bad JSON / wrong type / missing key
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length).decode()
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                return self._send(400, "invalid json")
+            if not isinstance(data, dict) or not isinstance(data.get("name"), str):
+                return self._send(400, "invalid item")
+            return self._send(200, "item: " + data["name"].upper())
         return self._send(404, "not found")
 
 
