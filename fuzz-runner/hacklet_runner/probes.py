@@ -179,10 +179,23 @@ def dom_xss(ctx, probe) -> bool:
     return browser.dom_xss_executes(ctx.base_url, ctx.profile.routes)
 
 
+def _served(ctx, path: str) -> bool:
+    """Does the target path exist (not 404)? Lets a probe fall back from a declared endpoint a real
+    target doesn't serve to a representative one (the homepage), instead of silently no-opping."""
+    try:
+        return ctx.client.get(path).status_code != 404
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return False
+
+
 def slow_first_paint(ctx, probe) -> bool:
     """Browser oracle: render and read First Contentful Paint; slop if it exceeds the gate — the
-    user-facing 'slow app' signal (client render delay, distinct from server TTFB). Browser-gated."""
-    url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
+    user-facing 'slow app' signal (client render delay, distinct from server TTFB). Browser-gated.
+    Measures the declared page if served, else the homepage (real apps don't serve the reference path)."""
+    target = probe.probe.get("target", "/")
+    if not _served(ctx, target):
+        target = "/"
+    url = ctx.base_url.rstrip("/") + target
     # median of N renders, not one sample: FCP is wall-clock timing (JIT warmup, CPU/network jitter),
     # so a single sample near the gate flips between runs -> non-deterministic score. The isinstance
     # filter also drops any non-numeric value a hostile page could inject (would raise TypeError).
@@ -221,6 +234,13 @@ def idor_horizontal(ctx, probe) -> bool:
         b.client.close()
 
 
+def _fanout(work, n: int):
+    """Run `work` (a no-arg callable) n times concurrently; return the n results in submit order.
+    The shared concurrency primitive for the self-as-oracle race/load probes."""
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        return [f.result() for f in [ex.submit(work) for _ in range(n)]]
+
+
 def _concurrent_creates(base_url, path, cookies, data, n: int = 12):
     def create():
         try:
@@ -228,8 +248,7 @@ def _concurrent_creates(base_url, path, cookies, data, n: int = 12):
                 return c.post(path, data=data).url.path
         except Exception:
             return None
-    with ThreadPoolExecutor(max_workers=n) as ex:
-        return [f.result() for f in [ex.submit(create) for _ in range(n)]]
+    return _fanout(create, n)
 
 
 def race_resource_ids(ctx, probe) -> bool:
@@ -263,14 +282,18 @@ def _concurrent_get(base_url, path, n: int = 20):
                 return c.get(path).status_code
         except Exception:
             return None
-    with ThreadPoolExecutor(max_workers=n) as ex:
-        return [f.result() for f in [ex.submit(get) for _ in range(n)]]
+    return _fanout(get, n)
 
 
 def load_resilience(ctx, probe) -> bool:
     """Fire a concurrent burst at an endpoint; slop if it falls over (>10% 5xx) under load — the
     resource-exhaustion / unsynchronized-shared-state failure that only surfaces under concurrency."""
     target = probe.probe.get("target", "/")
+    if not _served(ctx, target):
+        # declared endpoint not served (real app) -> burst the homepage, the representative
+        # always-present endpoint. NEVER fan across all routes: concurrent bursts at every endpoint
+        # of a live target is a DoS.
+        target = "/"
     ratios = []
     for _ in range(3):  # median of N bursts, not one: a target near the 10% gate flips between runs
         statuses = _concurrent_get(ctx.base_url, target)
