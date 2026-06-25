@@ -25,6 +25,7 @@ _NOTES = {}        # note id -> {"owner", "text"}
 _NEXT_NOTE = [1]   # sequential note ids (mutable holder)
 _LOCK = threading.Lock()
 _HITS = {}         # shared dict for the /report load probe
+_LOGIN_FAILS = {}  # username -> failed login count, for brute-force lockout
 
 
 def _user_of(handler):
@@ -145,11 +146,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())
             user = form.get("username", [""])[0]
             pw = form.get("password", [""])[0]
+            with _LOCK:  # per-username brute-force lockout -> rate-limited after repeated failures
+                if _LOGIN_FAILS.get(user, 0) >= 5:
+                    return self._send(429, "too many attempts; try later")
             row = _db.execute(
                 "SELECT name FROM users WHERE name=? AND pw=?", (user, pw)  # parameterized
             ).fetchone()
             if row:
+                with _LOCK:
+                    _LOGIN_FAILS.pop(user, None)  # reset on success
                 return self._send(200, "welcome " + row[0])
+            with _LOCK:
+                _LOGIN_FAILS[user] = _LOGIN_FAILS.get(user, 0) + 1
             return self._send(401, "invalid credentials")
         if self.path == "/profile":
             length = int(self.headers.get("Content-Length", "0"))

@@ -19,7 +19,7 @@ ALL_PROBES = [
     "sec-sqli-001", "sec-sqli-002", "sec-sqli-003",  # variant group
     "sec-xss-001", "sec-secrets-001",
     "sec-session-001", "sec-session-002", "sec-session-003",  # cookie hygiene: HttpOnly / SameSite / Secure
-    "sec-csrf-001", "sec-cors-001",
+    "sec-csrf-001", "sec-cors-001", "sec-ratelimit-001",
     "sec-headers-001", "sec-headers-002", "sec-headers-004", "sec-headers-005",  # header depth (003=HSTS is https-only)
     "qa-errhyg-001", "perf-ttfb-001",
     "sec-exposure-001", "sec-exposure-002", "sec-exposure-003",  # .env + .git
@@ -64,6 +64,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-cors-001"] == "slop_detected"
     # sec-session-003: the session cookie lacks Secure -> can transit in cleartext:
     assert o["sec-session-003"] == "slop_detected"
+    # sec-ratelimit-001: N wrong-password logins, none throttled -> no brute-force protection:
+    assert o["sec-ratelimit-001"] == "slop_detected"
     # sec-idor-001 (self-as-oracle, 2 accounts): B can read A's note -> broken access control:
     assert o["sec-idor-001"] == "slop_detected"
     # sec-domxss-001 is browser-only -> N/A in this (no-browser) run; the browser run is in test_browser:
@@ -78,11 +80,11 @@ def test_vulnerable_app_accrues_slop():
     exposure_hits = {x.target for x in report.outcomes
                      if x.probe_id.startswith("sec-exposure") and x.outcome == "slop_detected"}
     assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
-    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + race 25 + errhyg 8 + ttfb 5 + load 10.
+    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10.
     # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
     # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2, sorted-desc decay -> 13.68.
-    # crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53. -> total 358.
-    assert report.slop_score == 358
+    # crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53. -> total 373.
+    assert report.slop_score == 373
 
 
 def test_hardened_app_is_clean():
@@ -107,6 +109,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-session-002"] == "not_applicable"
     assert o["sec-session-003"] == "not_applicable"
     assert o["sec-csrf-001"] == "not_applicable"
+    assert o["sec-ratelimit-001"] == "not_applicable"  # no password form -> no login to brute-force
     assert o["sec-cors-001"] == "clean"  # applies (any endpoint) but minimal doesn't reflect Origin
     assert o["sec-idor-001"] == "not_applicable"      # same gate
     assert o["sec-domxss-001"] == "not_applicable"    # browser-gated

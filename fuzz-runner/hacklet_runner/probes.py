@@ -152,6 +152,35 @@ def session_cookie_missing_flag(ctx, probe) -> bool:
         account.client.close()
 
 
+def login_no_rate_limit(ctx, probe) -> bool:
+    """Self-as-oracle: fire N wrong-password logins at the login form; slop if NONE is throttled
+    (HTTP 429/423). With no brute-force protection every attempt returns the same auth-failure status,
+    enabling credential stuffing / password spraying. Uses its own username so a per-account lockout
+    can't collide with other probes that hit /login (e.g. sqli_auth_bypass)."""
+    form = auth.login_form(ctx.profile.forms)
+    if form is None:
+        return False
+    data = {}
+    for name in form.fields:
+        low = name.lower()
+        if "pass" in low:
+            data[name] = "hl-wrong-password"
+        elif "email" in low or "mail" in low:
+            data[name] = "hacklet_probe_rl@example.com"
+        else:
+            data[name] = "hacklet_probe_rl"
+    attempts = probe.probe.get("attempts", 10)
+    with httpx.Client(base_url=ctx.base_url, timeout=15.0, follow_redirects=False) as c:
+        for _ in range(attempts):
+            try:
+                resp = c.request((form.method or "post").upper(), form.action, data=data)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                return False  # login endpoint unreachable -> can't prove a missing control
+            if resp.status_code in (429, 423):
+                return False  # throttled -> brute-force protection present -> clean
+    return True  # N attempts, never throttled -> no rate limiting -> slop
+
+
 # Redirect destinations that signal a CSRF REJECTION (request not honored) rather than acceptance.
 _CSRF_REJECT_HINTS = ("login", "signin", "sign-in", "sign_in", "auth", "error",
                       "denied", "forbidden", "unauthorized")
@@ -330,6 +359,7 @@ def load_resilience(ctx, probe) -> bool:
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "session_cookie_missing_flag": session_cookie_missing_flag,
+    "login_no_rate_limit": login_no_rate_limit,
     "csrf_missing": csrf_missing,
     "idor_horizontal": idor_horizontal,
     "dom_xss": dom_xss,

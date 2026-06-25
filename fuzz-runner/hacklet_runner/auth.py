@@ -77,6 +77,22 @@ def is_csrf_field(name: str) -> bool:
     return any(h in low for h in _CSRF_FIELD_HINTS)
 
 
+_LOGIN_HINTS = ("login", "signin", "sign-in", "sign_in", "log-in", "authenticate")
+
+
+def login_form(forms: list[Form]) -> Form | None:
+    """A password form for authenticating (not registering) — prefers a login-hinted action, else any
+    password form that isn't the registration form."""
+    pw = [f for f in forms if any("pass" in name.lower() for name in f.fields)]
+    if not pw:
+        return None
+    hinted = next((f for f in pw if any(h in f.action.lower() for h in _LOGIN_HINTS)), None)
+    if hinted is not None:
+        return hinted
+    non_register = [f for f in pw if not any(h in f.action.lower() for h in _REGISTER_HINTS)]
+    return non_register[0] if non_register else None
+
+
 def register_account(base_url: str, profile: Profile, suffix: str = "") -> Account | None:
     """Create a fresh account via the discovered registration form. Returns None when there's no
     usable form or registration fails (email verification / CAPTCHA), so the caller treats it as N/A."""
