@@ -1,11 +1,11 @@
-id: sec-session-001
+id: sec-session-002
 bundle: security
 category: session
 pool: public
 evidence_model: oracle
-penalty: 20   # a session cookie without HttpOnly is stealable by any XSS
+penalty: 15   # a session cookie without SameSite is sendable cross-site (CSRF surface)
 applicability:
   requires: [any_form_has_password]
 probe:
   predicate: session_cookie_missing_flag
-  flag: httponly
+  flag: samesite

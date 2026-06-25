@@ -1,7 +1,14 @@
 """Self-as-oracle auth helpers — pure functions, no server."""
 import httpx
 
-from hacklet_runner.auth import _fill, _password_form, create_form, parse_set_cookies, session_cookie
+from hacklet_runner.auth import (
+    _fill,
+    _password_form,
+    create_form,
+    is_csrf_field,
+    parse_set_cookies,
+    session_cookie,
+)
 from hacklet_runner.schema import Form
 
 
@@ -56,3 +63,8 @@ def test_create_form_none_when_only_auth_and_search():
         Form(action="/search", method="get", fields=["q"]),
     ]
     assert create_form(forms) is None
+
+
+def test_is_csrf_field():
+    assert is_csrf_field("csrf_token") and is_csrf_field("authenticity_token") and is_csrf_field("_token")
+    assert not is_csrf_field("username") and not is_csrf_field("text")

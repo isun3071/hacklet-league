@@ -116,15 +116,43 @@ def sqli_auth_bypass(ctx, probe) -> bool:
     return False
 
 
-def session_cookie_insecure(ctx, probe) -> bool:
-    """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if that
-    cookie lacks HttpOnly — an XSS could then steal the session."""
+def session_cookie_missing_flag(ctx, probe) -> bool:
+    """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if it
+    lacks the hardening flag named in the probe (httponly | samesite)."""
+    flag = probe.probe.get("flag", "httponly")
     account = auth.register_account(ctx.base_url, ctx.profile)
     if account is None:
         return False  # registration not possible (applicability gates this) -> treat as clean
     try:
         cookie = auth.session_cookie(account.register_response)
-        return cookie is not None and not cookie["httponly"]
+        return cookie is not None and not cookie[flag]
+    finally:
+        account.client.close()
+
+
+def csrf_missing(ctx, probe) -> bool:
+    """Self-as-oracle: a state-changing POST that succeeds cross-site with no CSRF token and no
+    SameSite cookie -> no CSRF defense. Skips when the form carries a token or the session cookie is
+    SameSite (both valid defenses), so only genuinely cross-site-exploitable requests are flagged."""
+    form = auth.create_form(ctx.profile.forms)
+    if form is None:
+        return False
+    if any(auth.is_csrf_field(f) for f in form.fields):
+        return False
+    account = auth.register_account(ctx.base_url, ctx.profile, suffix="_csrf")
+    if account is None:
+        return False
+    try:
+        cookie = auth.session_cookie(account.register_response)
+        if cookie is None or cookie["samesite"]:
+            return False  # a SameSite cookie blocks cross-site sending -> already defended
+        resp = account.client.request(
+            "POST", form.action,
+            data={n: "hl-csrf" for n in form.fields},
+            headers={"Origin": "https://evil.example"},
+            follow_redirects=False,
+        )
+        return resp.status_code < 400  # accepted cross-site, no token, no SameSite -> CSRF
     finally:
         account.client.close()
 
@@ -159,6 +187,7 @@ def idor_horizontal(ctx, probe) -> bool:
 
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
-    "session_cookie_insecure": session_cookie_insecure,
+    "session_cookie_missing_flag": session_cookie_missing_flag,
+    "csrf_missing": csrf_missing,
     "idor_horizontal": idor_horizontal,
 }

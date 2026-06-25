@@ -68,6 +68,14 @@ def create_form(forms: list[Form]) -> Form | None:
     return next((f for f in cands if any(h in f.action.lower() for h in _CREATE_HINTS)), cands[0])
 
 
+_CSRF_FIELD_HINTS = ("csrf", "xsrf", "authenticity_token", "_token", "csrfmiddleware")
+
+
+def is_csrf_field(name: str) -> bool:
+    low = name.lower()
+    return any(h in low for h in _CSRF_FIELD_HINTS)
+
+
 def register_account(base_url: str, profile: Profile, suffix: str = "") -> Account | None:
     """Create a fresh account via the discovered registration form. Returns None when there's no
     usable form or registration fails (email verification / CAPTCHA), so the caller treats it as N/A."""
