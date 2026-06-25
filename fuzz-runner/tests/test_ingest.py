@@ -52,6 +52,17 @@ def test_zip_slip_is_rejected(tmp_path):
         extract_submission(z)
 
 
+def test_rejects_zip_bomb(tmp_path, monkeypatch):
+    import hacklet_runner.ingest as ingest
+    monkeypatch.setattr(ingest, "MAX_TOTAL_BYTES", 1000)  # tiny cap for the test
+    z = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("Dockerfile", "FROM scratch\n")
+        zf.writestr("big.txt", "A" * 100_000)  # ~100 KB decompressed, far over the patched cap
+    with pytest.raises(SubmissionError):
+        extract_submission(z)
+
+
 def test_not_a_zip_is_error(tmp_path):
     bad = tmp_path / "notazip.zip"
     bad.write_text("i am not a zip")

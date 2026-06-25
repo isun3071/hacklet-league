@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 MAX_FILES = 10_000
 MAX_TOTAL_BYTES = 500 * 1024 * 1024  # 500 MB uncompressed (zip-bomb guard)
+_CHUNK = 1 << 16  # 64 KiB streaming-extract chunk
 
 
 class SubmissionError(Exception):
@@ -35,16 +36,24 @@ def _safe_extract(zf: zipfile.ZipFile, dest: pathlib.Path) -> None:
     infos = zf.infolist()
     if len(infos) > MAX_FILES:
         raise SubmissionError(f"too many entries ({len(infos)} > {MAX_FILES})")
-    total = 0
+    written = 0
     for info in infos:
         # zip-slip guard: every member must resolve to a path under dest (absolute or `..` escapes).
         target = (dest / info.filename).resolve()
         if target != dest and dest not in target.parents:
             raise SubmissionError(f"unsafe path in archive: {info.filename!r}")
-        total += info.file_size
-        if total > MAX_TOTAL_BYTES:
-            raise SubmissionError("archive too large uncompressed (zip-bomb guard)")
-    zf.extractall(dest)  # safe: all members validated above
+        if info.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Stream-extract, capping ACTUAL decompressed bytes. Never trust info.file_size — a zip
+        # bomb forges it small; counting real bytes aborts before GBs hit disk.
+        with zf.open(info) as src, open(target, "wb") as out:
+            while chunk := src.read(_CHUNK):
+                written += len(chunk)
+                if written > MAX_TOTAL_BYTES:
+                    raise SubmissionError("archive too large uncompressed (zip-bomb guard)")
+                out.write(chunk)
 
 
 def _find_context(root: pathlib.Path) -> pathlib.Path:
