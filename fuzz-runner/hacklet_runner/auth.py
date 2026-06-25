@@ -6,6 +6,7 @@ fill it heuristically, submit, and hold the resulting session. Reusable by the a
 """
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 
 import httpx
@@ -82,7 +83,10 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
     form = _password_form(profile.forms)
     if form is None:
         return None
-    username = "hacklet_probe" + suffix
+    # per-call random username: a real app with a unique-username constraint rejects a FIXED name on
+    # re-grade (run 2+), silently nulling the authed session and flipping the auth probes to clean.
+    # The score depends on the cookie's flags, not the username value, so this stays deterministic.
+    username = "hl_" + secrets.token_hex(5) + suffix
     password = "Hl-Probe-Passw0rd!"
     client = httpx.Client(base_url=base_url, timeout=15.0, follow_redirects=True)
     try:
@@ -97,22 +101,54 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
 
 def parse_set_cookies(resp: httpx.Response) -> list[dict]:
     """Each Set-Cookie header -> {name, httponly, secure, samesite}. Flags are read from the raw
-    header because cookie jars drop them."""
+    header because cookie jars drop them. samesite is True only for Lax/Strict: SameSite=None is the
+    explicit cross-site OPT-OUT (no CSRF defense), so it must read as undefended."""
     out = []
     for raw in resp.headers.get_list("set-cookie"):
         first, _, rest = raw.partition(";")
         if "=" not in first:
             continue
         name = first.split("=", 1)[0].strip()
-        attrs = {a.split("=", 1)[0].strip().lower() for a in rest.split(";") if a.strip()}
+        attrs = {}
+        for a in rest.split(";"):
+            a = a.strip()
+            if not a:
+                continue
+            k, _, v = a.partition("=")
+            attrs[k.strip().lower()] = v.strip().lower()
         out.append({
             "name": name,
             "httponly": "httponly" in attrs,
             "secure": "secure" in attrs,
-            "samesite": "samesite" in attrs,
+            "samesite": attrs.get("samesite") in ("lax", "strict"),
         })
     return out
 
 
+_SESSION_HINTS = ("session", "sessid")
+
+
+def _is_session_cookie(name: str) -> bool:
+    """Recognize framework-namespaced session cookies (myapp_session, laravel_session, __Host-session,
+    next-auth.session-token, ...), not just the exact known names. CSRF tokens are intentionally
+    JS-readable, so they are never treated as the session cookie."""
+    low = name.lower()
+    if "csrf" in low or "xsrf" in low:
+        return False
+    return low in SESSION_COOKIE_NAMES or any(h in low for h in _SESSION_HINTS)
+
+
+def _all_set_cookies(resp: httpx.Response) -> list[dict]:
+    """Set-Cookie across the whole redirect chain. register_account follows redirects, and the very
+    common POST /register -> 302 -> dashboard sets the session cookie on the 302 (resp.history), not
+    on the final 200 response — reading only the final response would miss it entirely."""
+    out: list[dict] = []
+    for r in (*resp.history, resp):
+        out.extend(parse_set_cookies(r))
+    return out
+
+
 def session_cookie(resp: httpx.Response) -> dict | None:
-    return next((c for c in parse_set_cookies(resp) if c["name"].lower() in SESSION_COOKIE_NAMES), None)
+    # last match across the chain = the cookie's final state (a later Set-Cookie overrides earlier).
+    matches = [c for c in _all_set_cookies(resp) if _is_session_cookie(c["name"])]
+    return matches[-1] if matches else None
