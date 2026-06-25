@@ -124,3 +124,13 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["qa-race-001"] == "not_applicable"       # no password form -> can't self-register
     assert o["perf-cwv-001"] == "not_applicable"      # browser-gated
     assert report.slop_score == 0
+
+
+def test_progress_callback_fires_per_probe():
+    events = []
+    run(SubprocessDeployer(str(REFS / "minimal" / "app.py")), load_catalog(CATALOG),
+        on_progress=lambda done, total, probe, outcomes: events.append((probe.id, outcomes is None)))
+    n = len(load_catalog(CATALOG))
+    starts = sum(1 for _, is_start in events if is_start)   # outcomes is None -> a start event
+    dones = sum(1 for _, is_start in events if not is_start)
+    assert starts == n and dones == n  # one start + one done per probe, none skipped

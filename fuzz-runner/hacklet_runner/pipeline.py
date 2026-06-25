@@ -72,52 +72,61 @@ def _matches(probe: Probe, resp: httpx.Response) -> bool:
     return bool(probe.slop_if)
 
 
-def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None) -> Report:
+def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) -> list[Outcome]:
+    """Resolve one probe to its outcome(s): applicability gate, then an oracle predicate or a
+    declarative fan-out across discovered targets. One Outcome per (probe x target)."""
+    client.cookies.clear()  # each probe starts from a clean session (no cross-probe leak)
+    target = probe.probe.get("target", "")
+    if not _applicable(probe, profile):
+        return [_outcome(probe, "not_applicable", 0, target)]
+    if "predicate" in probe.probe:
+        try:
+            slop = PREDICATES[probe.probe["predicate"]](ctx, probe)
+        except Exception:
+            # a predicate drives an UNTRUSTED target; a hostile/edge-case response must degrade this
+            # one probe to N/A, never crash the whole grade (run must not DNF). Calibration is the
+            # backstop: a predicate that ALWAYS raises fails the suite.
+            return [_outcome(probe, "not_applicable", 0, target)]
+        return [_outcome(probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, target)]
+    na_if_absent = probe.probe.get("na_if_absent", False)
+    produced: list[Outcome] = []
+    for label, fetch in _expand(probe, profile):
+        try:
+            resp = fetch(client)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue  # unreachable / malformed-URL (control-char path) target -> next
+        client.cookies.clear()  # form-fan submissions stay independent (no session leak)
+        # endpoint-specific probe: 404/405/501 means the target endpoint/method isn't served here,
+        # so it's N/A — not a clean pass (a fake "handled gracefully").
+        if na_if_absent and resp.status_code in (404, 405, 501):
+            continue
+        slop = _matches(probe, resp)
+        produced.append(_outcome(
+            probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label
+        ))
+    if not produced:  # no targets, every fetch failed, or endpoint absent -> inconclusive
+        return [_outcome(probe, "not_applicable", 0, target)]
+    return produced
+
+
+def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_progress=None) -> Report:
+    """on_progress(done, total, probe, outcomes): called twice per probe — before it runs with
+    outcomes=None (so a caller can show what's currently testing), and after with its outcomes."""
     try:
         handle = deployer.deploy()  # inside try so teardown runs even if deploy/health fails
         profile = discover(handle.base_url, render=render, headers=headers)
         outcomes: list[Outcome] = []
+        total = len(catalog)
         with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True,
                           headers=headers) as client:
             ctx = _Ctx(handle.base_url, client, profile, headers)
-            for probe in catalog:
-                client.cookies.clear()  # each probe starts from a clean session (no cross-probe leak)
-                target = probe.probe.get("target", "")
-                if not _applicable(probe, profile):
-                    outcomes.append(_outcome(probe, "not_applicable", 0, target))
-                    continue
-                if "predicate" in probe.probe:
-                    try:
-                        slop = PREDICATES[probe.probe["predicate"]](ctx, probe)
-                    except Exception:
-                        # a predicate drives an UNTRUSTED target; a hostile/edge-case response must
-                        # degrade this one probe to N/A, never crash the whole grade (run must not DNF).
-                        # Calibration is the backstop: a predicate that ALWAYS raises fails the suite.
-                        outcomes.append(_outcome(probe, "not_applicable", 0, target))
-                        continue
-                    outcomes.append(_outcome(
-                        probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, target
-                    ))
-                    continue
-                na_if_absent = probe.probe.get("na_if_absent", False)
-                produced = False
-                for label, fetch in _expand(probe, profile):
-                    try:
-                        resp = fetch(client)
-                    except (httpx.HTTPError, httpx.InvalidURL):
-                        continue  # unreachable / malformed-URL (control-char path) target -> next
-                    client.cookies.clear()  # form-fan submissions stay independent (no session leak)
-                    # endpoint-specific probe: 404/405/501 means the target endpoint/method isn't
-                    # served here, so it's N/A — not a clean pass (a fake "handled gracefully").
-                    if na_if_absent and resp.status_code in (404, 405, 501):
-                        continue
-                    produced = True
-                    slop = _matches(probe, resp)
-                    outcomes.append(_outcome(
-                        probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label
-                    ))
-                if not produced:  # no targets, every fetch failed, or endpoint absent -> inconclusive
-                    outcomes.append(_outcome(probe, "not_applicable", 0, target))
+            for i, probe in enumerate(catalog):
+                if on_progress:
+                    on_progress(i, total, probe, None)              # starting probe i (0-indexed)
+                probe_outcomes = _run_probe(probe, ctx, client, profile)
+                outcomes.extend(probe_outcomes)
+                if on_progress:
+                    on_progress(i + 1, total, probe, probe_outcomes)  # done: i+1 probes completed
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes)
     finally:
         deployer.teardown()

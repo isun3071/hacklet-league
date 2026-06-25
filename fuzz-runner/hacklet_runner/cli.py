@@ -9,6 +9,7 @@ import argparse
 import json
 import pathlib
 import subprocess
+import sys
 import textwrap
 from collections import Counter
 from dataclasses import asdict
@@ -89,6 +90,41 @@ def _fail(args, status: str, reason: str):
     raise SystemExit(1)
 
 
+# ---- live progress (stderr, so --json/--failed on stdout stays clean) ------------------------
+
+_MARK = {"slop_detected": "SLOP", "clean": " ok ", "not_applicable": " -- "}
+
+
+def _bar(done: int, total: int, probe) -> None:
+    w = 24
+    filled = int(w * done / total) if total else w
+    sys.stderr.write(f"\r\033[K  [{'█' * filled}{'░' * (w - filled)}] "
+                     f"{done}/{total}  {probe.bundle}/{probe.category}")
+    sys.stderr.flush()
+
+
+def _make_progress(args):
+    """An on_progress callback for run() at the chosen verbosity (or None). All output is on stderr."""
+    if args.verbose:
+        def cb(done, total, probe, outcomes):
+            if outcomes is None:
+                sys.stderr.write(f"\n▸ [{done + 1}/{total}] {probe.id}\n")
+            else:
+                for o in outcomes:
+                    sys.stderr.write(f"    {_MARK[o.outcome]}  {o.category:<18} {o.target or '—'}\n")
+            sys.stderr.flush()
+        return cb
+    if args.quiet or not sys.stderr.isatty():
+        return None  # no animated bar when silenced or piped/non-interactive
+    return lambda done, total, probe, outcomes: _bar(done, total, probe) if outcomes is None else None
+
+
+def _clear_bar(args) -> None:
+    if not args.verbose and not args.quiet and sys.stderr.isatty():
+        sys.stderr.write("\r\033[K")
+        sys.stderr.flush()
+
+
 # ---- entry point ----------------------------------------------------------------------------
 
 def main() -> None:
@@ -125,6 +161,9 @@ def main() -> None:
     out = ap.add_argument_group("output")
     out.add_argument("--json", action="store_true", help="print the full machine-readable JSON report")
     out.add_argument("--failed", action="store_true", help="list only the probes that detected slop")
+    out.add_argument("-v", "--verbose", action="store_true",
+                     help="stream every probe/target outcome as it runs (to stderr)")
+    out.add_argument("-q", "--quiet", action="store_true", help="suppress the live progress bar")
     args = ap.parse_args()
 
     catalog = load_catalog(args.catalog)
@@ -136,19 +175,24 @@ def main() -> None:
         if not sep:
             _fail(args, "bad-arg", f"--header must be 'Name: Value', got: {h!r}")
         auth_headers[name.strip()] = value.strip()
+    progress = _make_progress(args)
 
     # Trusted reference app: subprocess, no Docker.
     if args.app:
-        _print_report(run(SubprocessDeployer(args.app), catalog, render=render, headers=auth_headers),
-                      source, args)
+        report = run(SubprocessDeployer(args.app), catalog, render=render, headers=auth_headers,
+                     on_progress=progress)
+        _clear_bar(args)
+        _print_report(report, source, args)
         return
 
     # Already-running URL: dogfooding, no Docker, no teardown of the target.
     if args.target:
         try:
-            report = run(RemoteDeployer(args.target), catalog, render=render, headers=auth_headers)
+            report = run(RemoteDeployer(args.target), catalog, render=render, headers=auth_headers,
+                         on_progress=progress)
         except _DEPLOY_FAILURES as e:
             _fail(args, "unreachable", str(e)[:500])
+        _clear_bar(args)
         _print_report(report, source, args)
         return
 
@@ -163,11 +207,12 @@ def main() -> None:
             read_only=args.harden,
             network=args.network if args.harden else None,
         )
-        report = run(deployer, catalog, render=render, headers=auth_headers)
+        report = run(deployer, catalog, render=render, headers=auth_headers, on_progress=progress)
     except _DEPLOY_FAILURES as e:
         _fail(args, "DNF", str(e)[:500])
     finally:
         sub.cleanup()
+    _clear_bar(args)
     _print_report(report, source, args)
 
 
