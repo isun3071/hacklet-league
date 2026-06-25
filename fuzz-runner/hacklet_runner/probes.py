@@ -59,6 +59,23 @@ def response_leaks_secret(resp, arg=None) -> bool:
     return any(p.search(resp.text) for p in _SECRET_PATTERNS)
 
 
+# Files that must never be served at the webroot (deploying with .env / .git present is classic
+# slop). Each requires status 200 AND a content signature, so a 404 / redirect reads clean.
+_DOTENV = re.compile(r"(?im)^[A-Z0-9_]*(?:SECRET|PASSWORD|DATABASE_URL|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=")
+
+
+def response_is_dotenv(resp, arg=None) -> bool:
+    return resp.status_code == 200 and bool(_DOTENV.search(resp.text))
+
+
+def response_is_git_config(resp, arg=None) -> bool:
+    return resp.status_code == 200 and "[core]" in resp.text and "repositoryformatversion" in resp.text
+
+
+def response_is_git_head(resp, arg=None) -> bool:
+    return resp.status_code == 200 and resp.text.lstrip().startswith("ref: refs/")
+
+
 MATCHERS = {
     "response_leaks_stack_trace": response_leaks_stack_trace,
     "ttfb_at_least": ttfb_at_least,
@@ -66,6 +83,9 @@ MATCHERS = {
     "response_missing_header": response_missing_header,
     "response_server_error": response_server_error,
     "response_leaks_secret": response_leaks_secret,
+    "response_is_dotenv": response_is_dotenv,
+    "response_is_git_config": response_is_git_config,
+    "response_is_git_head": response_is_git_head,
 }
 
 

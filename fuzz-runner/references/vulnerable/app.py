@@ -53,6 +53,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, HOME)
         if self.path == "/config.js":  # leaks a (fake) AWS key in client JS — classic slop
             return self._send(200, 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n', "application/javascript")
+        if self.path == "/.env":  # secrets file served at the webroot — deployment slop
+            return self._send(
+                200, "DATABASE_URL=postgres://app:hunter2@db/app\nDJANGO_SECRET_KEY=insecure-dev-key\n",
+                "text/plain",
+            )
+        if self.path == "/.git/config":  # exposed source repo
+            return self._send(
+                200, '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = git@github.com:acme/app.git\n',
+                "text/plain",
+            )
+        if self.path == "/.git/HEAD":
+            return self._send(200, "ref: refs/heads/main\n", "text/plain")
         if self.path.startswith("/search"):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", [""])[0]
             return self._send(200, "<p>results for: " + q + "</p>")  # reflects raw -> XSS

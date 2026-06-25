@@ -18,6 +18,7 @@ REFS = ROOT / "references"
 ALL_PROBES = [
     "sec-sqli-001", "sec-sqli-002", "sec-sqli-003",  # variant group
     "sec-xss-001", "sec-secrets-001", "sec-headers-001", "qa-errhyg-001", "perf-ttfb-001",
+    "sec-exposure-001", "sec-exposure-002", "sec-exposure-003",  # .env + .git (variant group)
     "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance category
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
@@ -42,10 +43,15 @@ def test_vulnerable_app_accrues_slop():
     # sec-secrets-001 finds the leaked AWS key in /config.js (variant-grouped -> one penalty):
     assert any(x.outcome == "slop_detected" and x.target == "/config.js"
                for x in report.outcomes if x.probe_id == "sec-secrets-001")
+    # sec-exposure-* find the served .env and .git files (.git config+HEAD share a variant group):
+    exposure_hits = {x.target for x in report.outcomes
+                     if x.probe_id.startswith("sec-exposure") and x.outcome == "slop_detected"}
+    assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
     # SQLi 40 (group) + secrets 35 (group) + xss 30 + errhyg 8 + ttfb 5.
-    # security-headers: 6 fan-out fires, diminished -> 7.15. crash: 3 fire, diminished -> 11.76.
-    # Total 40 + 35 + 30 + 7.15 + 8 + 5 + 11.76 = 136.91 -> 137.
-    assert report.slop_score == 137
+    # security-headers: 6 fires -> 7.15. crash: 3 fires -> 11.76.
+    # exposure: .env 35 + .git (variant group) 30, category diminished -> 35 + 30*.6 = 53.
+    # Total 136.91 + 53 = 189.91 -> 190.
+    assert report.slop_score == 190
 
 
 def test_hardened_app_is_clean():
