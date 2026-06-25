@@ -97,6 +97,7 @@ def run(deployer: Deployer, catalog: list[Probe], render=None) -> Report:
                         probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, target
                     ))
                     continue
+                na_if_absent = probe.probe.get("na_if_absent", False)
                 produced = False
                 for label, fetch in _expand(probe, profile):
                     try:
@@ -104,12 +105,16 @@ def run(deployer: Deployer, catalog: list[Probe], render=None) -> Report:
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue  # unreachable / malformed-URL (control-char path) target -> next
                     client.cookies.clear()  # form-fan submissions stay independent (no session leak)
+                    # endpoint-specific probe: 404/405/501 means the target endpoint/method isn't
+                    # served here, so it's N/A — not a clean pass (a fake "handled gracefully").
+                    if na_if_absent and resp.status_code in (404, 405, 501):
+                        continue
                     produced = True
                     slop = _matches(probe, resp)
                     outcomes.append(_outcome(
                         probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label
                     ))
-                if not produced:  # no targets, or every fetch failed -> inconclusive
+                if not produced:  # no targets, every fetch failed, or endpoint absent -> inconclusive
                     outcomes.append(_outcome(probe, "not_applicable", 0, target))
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes)
     finally:

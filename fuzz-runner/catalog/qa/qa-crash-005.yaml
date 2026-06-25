@@ -9,6 +9,7 @@ applicability:
 probe:
   method: POST
   target: /api/items
+  na_if_absent: true   # if /api/items isn't served (real app), read N/A not a fake clean
   headers:
     content-type: application/json
   body: '{"name": 42}'   # wrong type (number where a string is expected) -> should be 400, not 500

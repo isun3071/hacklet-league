@@ -9,6 +9,7 @@ applicability:
 probe:
   method: POST
   target: /api/items
+  na_if_absent: true   # if /api/items isn't served (real app), read N/A not a fake clean
   headers:
     content-type: application/json
   body: "{not valid json"   # malformed JSON -> should be 400, not a 500 crash
