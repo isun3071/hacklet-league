@@ -6,11 +6,14 @@ import pathlib
 import pytest
 
 from hacklet_runner import browser
+from hacklet_runner.catalog import load_catalog
 from hacklet_runner.deploy import SubprocessDeployer
 from hacklet_runner.discovery import discover
+from hacklet_runner.pipeline import run
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REFS = ROOT / "references"
+CATALOG = ROOT / "catalog"
 
 pytestmark = pytest.mark.skipif(not browser.browser_available(), reason="no headless browser")
 
@@ -62,3 +65,26 @@ def test_cwv_detects_slow_paint(serve):
     assert slow is not None and slow > 1000
     fast = browser.first_contentful_paint(serve("hardened") + "/slow")
     assert fast is not None and fast < 1000
+
+
+# End-to-end: the browser probes through the FULL pipeline (browser capability gate + predicate +
+# scoring), not just the helper primitives above. Closes the gap where run(..., render=...) — and so
+# the browser_ok gate and the median-of-N slow_first_paint predicate — was never exercised.
+_BROWSER_PROBES = ("sec-domxss-001", "perf-cwv-001")
+
+
+def _browser_run(app: str):
+    catalog = [p for p in load_catalog(CATALOG) if p.id in _BROWSER_PROBES]
+    return run(SubprocessDeployer(str(REFS / app / "app.py")), catalog, render=browser.render_html)
+
+
+def test_browser_pipeline_fires_on_vulnerable():
+    o = _browser_run("vulnerable").by_id
+    assert o["sec-domxss-001"] == "slop_detected"  # /dom innerHTMLs q -> the injected payload executes
+    assert o["perf-cwv-001"] == "slop_detected"    # /slow paints late -> median FCP over the gate
+
+
+def test_browser_pipeline_clears_on_hardened():
+    o = _browser_run("hardened").by_id
+    assert o["sec-domxss-001"] == "clean"          # /dom uses textContent -> no execution
+    assert o["perf-cwv-001"] == "clean"            # /slow content in initial HTML -> fast FCP
