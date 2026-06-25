@@ -131,6 +131,11 @@ def session_cookie_missing_flag(ctx, probe) -> bool:
         account.client.close()
 
 
+# Redirect destinations that signal a CSRF REJECTION (request not honored) rather than acceptance.
+_CSRF_REJECT_HINTS = ("login", "signin", "sign-in", "sign_in", "auth", "error",
+                      "denied", "forbidden", "unauthorized")
+
+
 def csrf_missing(ctx, probe) -> bool:
     """Self-as-oracle: a state-changing POST that succeeds cross-site with no CSRF token and no
     SameSite cookie -> no CSRF defense. Skips when the form carries a token or the session cookie is
@@ -149,11 +154,17 @@ def csrf_missing(ctx, probe) -> bool:
             return False  # a SameSite cookie blocks cross-site sending -> already defended
         resp = account.client.request(
             "POST", form.action,
-            data={n: "hl-csrf" for n in form.fields},
+            data={f: "hl-csrf" for f in form.fields},
             headers={"Origin": "https://evil.example"},
             follow_redirects=False,
         )
-        return resp.status_code < 400  # accepted cross-site, no token, no SameSite -> CSRF
+        if resp.is_redirect:
+            # a redirect to a login/auth/error page is a CSRF REJECTION, not an accepted state change
+            # (the vulnerable success path redirects to the created resource instead). Without this,
+            # a defended app that 302s a forged POST to /login is falsely flagged (false-positive 25).
+            dest = resp.headers.get("location", "").lower()
+            return not any(h in dest for h in _CSRF_REJECT_HINTS)
+        return resp.status_code < 400  # 2xx, no token, no SameSite -> accepted cross-site -> CSRF
     except (httpx.HTTPError, httpx.InvalidURL):
         return False  # transport/URL failure mid-POST -> can't prove CSRF (clean), don't crash run()
     finally:
@@ -204,11 +215,11 @@ def idor_horizontal(ctx, probe) -> bool:
         b.client.close()
 
 
-def _concurrent_creates(base_url, path, cookies, n: int = 12):
+def _concurrent_creates(base_url, path, cookies, data, n: int = 12):
     def create():
         try:
             with httpx.Client(base_url=base_url, timeout=10.0, follow_redirects=True, cookies=cookies) as c:
-                return c.post(path, data={"text": "race"}).url.path
+                return c.post(path, data=data).url.path
         except Exception:
             return None
     with ThreadPoolExecutor(max_workers=n) as ex:
@@ -229,7 +240,10 @@ def race_resource_ids(ctx, probe) -> bool:
         # iterate the jar, not dict(cookies) — dict() raises httpx.CookieConflict when the session
         # cookie was set on multiple paths/domains during the register redirect chain.
         cookies = {c.name: c.value for c in account.client.cookies.jar}
-        urls = _concurrent_creates(ctx.base_url, form.action, cookies)
+        # fill the form's ACTUAL fields (was hardcoded {"text": ...}); a real create form named
+        # content/body/title would otherwise get an empty POST and the race would never be detected.
+        data = {f: "hl-race" for f in form.fields}
+        urls = _concurrent_creates(ctx.base_url, form.action, cookies, data)
         created = [u for u in urls if u and u != form.action]
         return len(created) >= 2 and len(set(created)) < len(created)
     finally:
@@ -251,9 +265,12 @@ def load_resilience(ctx, probe) -> bool:
     """Fire a concurrent burst at an endpoint; slop if it falls over (>10% 5xx) under load — the
     resource-exhaustion / unsynchronized-shared-state failure that only surfaces under concurrency."""
     statuses = _concurrent_get(ctx.base_url, probe.probe.get("target", "/"))
-    done = [s for s in statuses if s is not None]
-    errors = sum(1 for s in done if s >= 500)
-    return bool(done) and errors / len(done) > 0.1
+    if not statuses:
+        return False
+    # None = connection refused/dropped/timeout — a HARDER fall-over than a 500, counted over the
+    # whole burst so an app that crashes the connection can't read cleaner than one that honestly 500s.
+    failures = sum(1 for s in statuses if s is None or s >= 500)
+    return failures / len(statuses) > 0.1
 
 
 PREDICATES = {
