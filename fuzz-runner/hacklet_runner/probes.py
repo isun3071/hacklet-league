@@ -12,7 +12,7 @@ import re
 
 import httpx
 
-from . import auth
+from . import auth, browser
 
 _TRACE = re.compile(
     r"Traceback \(most recent call last\)|File \"[^\"]+\", line \d+, in |"
@@ -157,6 +157,13 @@ def csrf_missing(ctx, probe) -> bool:
         account.client.close()
 
 
+def dom_xss(ctx, probe) -> bool:
+    """Browser oracle: inject an executing payload across discovered routes and render — fires when
+    it runs in the DOM, catching reflected-that-executes and DOM-sink XSS a source check misses.
+    Gated on the `browser` capability, so it's N/A unless the run enabled rendering."""
+    return browser.dom_xss_executes(ctx.base_url, ctx.profile.routes)
+
+
 def idor_horizontal(ctx, probe) -> bool:
     """Self-as-oracle: register A and B, A creates a resource, B fetches it by URL. If B can read
     A's content, object-level access control is broken (horizontal IDOR)."""
@@ -190,4 +197,5 @@ PREDICATES = {
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "csrf_missing": csrf_missing,
     "idor_horizontal": idor_horizontal,
+    "dom_xss": dom_xss,
 }

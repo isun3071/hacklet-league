@@ -6,7 +6,7 @@ import pathlib
 import pytest
 
 from hacklet_runner.deploy import SubprocessDeployer
-from hacklet_runner.discovery import _ACTION, _FIELD, _LINK, discover
+from hacklet_runner.discovery import _ACTION, _FIELD, _LINK, _SRC, discover
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REFS = ROOT / "references"
@@ -49,6 +49,12 @@ def test_attribute_regexes_ignore_data_attrs():
     assert _FIELD.findall('<input data-name="phantom" name="real">') == ["real"]
     assert _FIELD.findall('<input data-name="phantom" type="text">') == []
     assert _ACTION.findall('<form data-action="/x" action="/real">') == ["/real"]
+
+
+def test_src_extraction_spans_tags():
+    assert _SRC.findall('<img src="/api/avatar/5"><iframe src="/embed"><script src="/app.js">') == \
+        ["/api/avatar/5", "/embed", "/app.js"]
+    assert _SRC.findall('<img data-src="/lazy">') == []  # data-src guarded (no leading boundary)
 
 
 def test_minimal_has_no_forms(serve):

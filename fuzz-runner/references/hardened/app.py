@@ -33,7 +33,7 @@ def _user_of(handler):
 
 HOME = b"""<!doctype html><html><body>
 <h1>demo app</h1>
-<a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a>
+<a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a> | <a href="/dom">dom</a>
 <form action="/login" method="post">
   <input name="username" placeholder="user">
   <input name="password" type="password" placeholder="pw">
@@ -96,6 +96,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(500, "Internal Server Error")  # generic, no stack trace
         if self.path.startswith("/heavy"):
             return self._send(200, "done")  # fast
+        if self.path.startswith("/dom"):  # same surface, but textContent (no HTML parsing) -> safe
+            return self._send(200, '<div id="out"></div><script>'
+                              'document.getElementById("out").textContent = '
+                              'new URLSearchParams(location.search).get("q") || "";</script>')
         return self._send(404, "not found")
 
     def do_POST(self):

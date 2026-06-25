@@ -34,3 +34,23 @@ def test_browser_discovery_finds_spa_form(spa_url):
     profile = discover(spa_url, render=browser.render_html)
     assert profile.capabilities["any_form_has_password"] is True
     assert any(f.action == "/register" and "password" in f.fields for f in profile.forms)
+
+
+@pytest.fixture
+def serve():
+    deployers = []
+
+    def _serve(app: str) -> str:
+        d = SubprocessDeployer(str(REFS / app / "app.py"))
+        deployers.append(d)
+        return d.deploy().base_url
+
+    yield _serve
+    for d in deployers:
+        d.teardown()
+
+
+def test_dom_xss_detects_sink(serve):
+    # vulnerable /dom innerHTMLs the q param (the payload executes); hardened uses textContent (safe)
+    assert browser.dom_xss_executes(serve("vulnerable"), ["/dom"]) is True
+    assert browser.dom_xss_executes(serve("hardened"), ["/dom"]) is False

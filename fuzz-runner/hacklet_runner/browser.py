@@ -9,6 +9,12 @@ browser (chromium / chrome / msedge channels), so it works wherever one is avail
 from __future__ import annotations
 
 import contextlib
+import urllib.parse
+
+# An <img onerror> payload executes when inserted into the DOM (unlike a bare <script>), so it fires
+# for both reflected-that-executes and DOM-sink XSS. The marker is read back from window.
+_XSS_PAYLOAD = "<img src=x onerror=\"window.__hl_domxss='hl-domxss-9a2b'\">"
+_XSS_MARKER = "hl-domxss-9a2b"
 
 
 def browser_available() -> bool:
@@ -53,3 +59,38 @@ def render_html(url: str, timeout: float = 15.0) -> str | None:
                 browser.close()
     except Exception:
         return None
+
+
+def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24) -> bool:
+    """Inject an executing payload into candidate query params of each path, render, and return True
+    if it ran (the payload's JS set a window global) — i.e. XSS that *executes* in the DOM, which a
+    source-only reflection check misses (reflected-that-executes and DOM-sink XSS). False if no
+    browser or nothing executed."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return False
+            try:
+                page = b.new_page()
+                attempts = 0
+                for path in paths:
+                    for param in params:
+                        if attempts >= max_attempts:
+                            return False
+                        attempts += 1
+                        url = f"{base_url.rstrip('/')}{path}?{param}={urllib.parse.quote(_XSS_PAYLOAD)}"
+                        with contextlib.suppress(Exception):
+                            page.goto(url, timeout=8000, wait_until="load")
+                            page.wait_for_timeout(150)
+                            if page.evaluate("() => window.__hl_domxss") == _XSS_MARKER:
+                                return True  # fresh document each goto, so a hit is this page's
+                return False
+            finally:
+                b.close()
+    except Exception:
+        return False

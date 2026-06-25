@@ -34,7 +34,7 @@ def _user_of(handler):
 
 HOME = b"""<!doctype html><html><body>
 <h1>demo app</h1>
-<a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a>
+<a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a> | <a href="/dom">dom</a>
 <form action="/login" method="post">
   <input name="username" placeholder="user">
   <input name="password" type="password" placeholder="pw">
@@ -90,6 +90,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
         if self.path == "/.git/HEAD":
             return self._send(200, "ref: refs/heads/main\n", "text/plain")
+        if self.path.startswith("/dom"):  # DOM-sink XSS: client JS innerHTMLs a URL param (unescaped)
+            return self._send(200, '<div id="out"></div><script>'
+                              'document.getElementById("out").innerHTML = '
+                              'new URLSearchParams(location.search).get("q") || "";</script>')
         if self.path.startswith("/notes/"):
             try:
                 note_id = int(self.path.rsplit("/", 1)[1])

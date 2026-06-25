@@ -15,7 +15,7 @@ import httpx
 from .schema import Form, Profile
 
 _LINK = re.compile(r'(?<![-\w])href=["\']([^"\']+)["\']', re.I)
-_SCRIPT = re.compile(r'<script\b[^>]+(?<![-\w])src=["\']([^"\']+)["\']', re.I)
+_SRC = re.compile(r'(?<![-\w])src=["\']([^"\']+)["\']', re.I)  # any tag: img / iframe / script / source / ...
 _FORM = re.compile(r"<form\b([^>]*)>(.*?)</form>", re.I | re.S)
 _ACTION = re.compile(r'(?<![-\w])action=["\']([^"\']*)["\']', re.I)
 _METHOD = re.compile(r'(?<![-\w])method=["\']([^"\']*)["\']', re.I)
@@ -84,7 +84,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                     seen_forms.add(key)
                     forms.append(form)
                     routes.setdefault(form.action, None)
-            for src in _SCRIPT.findall(html):  # JS assets are scan targets (secrets), not crawl targets
+            for src in _SRC.findall(html):  # tag srcs (img/iframe/script/...) are scan targets, not crawled
                 p = _same_origin_path(src, base_url, path)
                 if p:
                     routes.setdefault(p, None)
@@ -106,7 +106,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                     seen_forms.add(key)
                     forms.append(form)
                     routes.setdefault(form.action, None)
-            for ref in _SCRIPT.findall(dom) + _LINK.findall(dom):
+            for ref in _SRC.findall(dom) + _LINK.findall(dom):
                 p = _same_origin_path(ref, base_url, "/")
                 if p:
                     routes.setdefault(p, None)
@@ -117,5 +117,6 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         "any_form_has_password": any(
             any("pass" in name.lower() for name in form.fields) for form in forms
         ),
+        "browser": render is not None,  # browser-rendering probes (DOM XSS) gate on this
     }
     return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities)
