@@ -10,6 +10,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+browser = [
+    "playwright>=1.60.0",
+]
 dev = ["pytest>=8"]
 
 [tool.pytest.ini_options]

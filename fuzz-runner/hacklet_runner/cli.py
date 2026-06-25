@@ -13,6 +13,7 @@ import textwrap
 from collections import Counter
 from dataclasses import asdict
 
+from . import browser
 from .catalog import load_catalog
 from .deploy import DockerDeployer, RemoteDeployer, SubprocessDeployer
 from .ingest import SubmissionError, extract_submission
@@ -111,6 +112,8 @@ def main() -> None:
     src.add_argument("--target", metavar="URL", help="an already-running URL (dogfooding; no Docker)")
     src.add_argument("--app", metavar="PATH", help="a trusted reference app.py (subprocess; dev/CI)")
     ap.add_argument("--catalog", metavar="DIR", default=str(_ROOT / "catalog"), help="probe catalog dir")
+    ap.add_argument("--browser", action="store_true",
+                    help="render pages with a headless browser (finds SPA/client-rendered forms)")
     ap.add_argument("--harden", action="store_true",
                     help="production sandbox for --submission: read-only rootfs + egress-blocked network")
     ap.add_argument("--network", metavar="NET", default="hacklet-fuzz-net",
@@ -121,17 +124,18 @@ def main() -> None:
     args = ap.parse_args()
 
     catalog = load_catalog(args.catalog)
+    render = browser.render_html if args.browser else None
     source = args.app or args.target or args.submission
 
     # Trusted reference app: subprocess, no Docker.
     if args.app:
-        _print_report(run(SubprocessDeployer(args.app), catalog), source, args)
+        _print_report(run(SubprocessDeployer(args.app), catalog, render=render), source, args)
         return
 
     # Already-running URL: dogfooding, no Docker, no teardown of the target.
     if args.target:
         try:
-            report = run(RemoteDeployer(args.target), catalog)
+            report = run(RemoteDeployer(args.target), catalog, render=render)
         except _DEPLOY_FAILURES as e:
             _fail(args, "unreachable", str(e)[:500])
         _print_report(report, source, args)
@@ -148,7 +152,7 @@ def main() -> None:
             read_only=args.harden,
             network=args.network if args.harden else None,
         )
-        report = run(deployer, catalog)
+        report = run(deployer, catalog, render=render)
     except _DEPLOY_FAILURES as e:
         _fail(args, "DNF", str(e)[:500])
     finally:

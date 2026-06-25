@@ -55,7 +55,7 @@ def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
     return forms
 
 
-def discover(base_url: str, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH) -> Profile:
+def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH) -> Profile:
     routes: dict[str, None] = {}      # insertion-ordered set
     forms: list[Form] = []
     seen_forms: set[tuple] = set()
@@ -95,6 +95,21 @@ def discover(base_url: str, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEP
                         routes.setdefault(p, None)
                         if p not in visited:
                             queue.append((p, depth + 1))
+
+    if render is not None:  # browser-rendered DOM: client-rendered forms/routes a static crawl misses
+        dom = render(base_url.rstrip("/") + "/")
+        if dom:
+            any_response = True
+            for form in _parse_forms(_FORM.findall(dom), base_url, "/"):
+                key = (form.action, form.method, tuple(form.fields))
+                if key not in seen_forms:
+                    seen_forms.add(key)
+                    forms.append(form)
+                    routes.setdefault(form.action, None)
+            for ref in _SCRIPT.findall(dom) + _LINK.findall(dom):
+                p = _same_origin_path(ref, base_url, "/")
+                if p:
+                    routes.setdefault(p, None)
 
     capabilities = {
         "at_least_one_http_endpoint_exists": any_response,

@@ -65,10 +65,10 @@ def _matches(probe: Probe, resp: httpx.Response) -> bool:
     return bool(probe.slop_if)
 
 
-def run(deployer: Deployer, catalog: list[Probe]) -> Report:
+def run(deployer: Deployer, catalog: list[Probe], render=None) -> Report:
     try:
         handle = deployer.deploy()  # inside try so teardown runs even if deploy/health fails
-        profile = discover(handle.base_url)
+        profile = discover(handle.base_url, render=render)
         outcomes: list[Outcome] = []
         with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True) as client:
             ctx = _Ctx(handle.base_url, client, profile)
