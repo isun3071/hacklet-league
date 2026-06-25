@@ -96,9 +96,11 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                         if p not in visited:
                             queue.append((p, depth + 1))
 
+    browser_ok = False
     if render is not None:  # browser-rendered DOM: client-rendered forms/routes a static crawl misses
         dom = render(base_url.rstrip("/") + "/")
         if dom:
+            browser_ok = True  # a real render returned HTML -> the browser actually launched/works
             any_response = True
             for form in _parse_forms(_FORM.findall(dom), base_url, "/"):
                 key = (form.action, form.method, tuple(form.fields))
@@ -117,6 +119,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         "any_form_has_password": any(
             any("pass" in name.lower() for name in form.fields) for form in forms
         ),
-        "browser": render is not None,  # browser-rendering probes (DOM XSS) gate on this
+        # gate on an ACTUAL successful render, not just --browser: if Playwright/Chrome can't launch,
+        # render returns None and browser probes must read N/A, not silently 'clean' (false negative).
+        "browser": browser_ok,
     }
     return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities)

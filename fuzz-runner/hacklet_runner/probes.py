@@ -9,6 +9,7 @@ means the probe fires and adds its penalty.
 from __future__ import annotations
 
 import re
+import statistics
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
@@ -181,10 +182,15 @@ def dom_xss(ctx, probe) -> bool:
 def slow_first_paint(ctx, probe) -> bool:
     """Browser oracle: render and read First Contentful Paint; slop if it exceeds the gate — the
     user-facing 'slow app' signal (client render delay, distinct from server TTFB). Browser-gated."""
-    fcp = browser.first_contentful_paint(ctx.base_url.rstrip("/") + probe.probe.get("target", "/"))
-    # isinstance guard (not just None): a hostile page can redefine performance.* so FCP marshals
-    # back as a non-numeric value, which would make `fcp > threshold` raise TypeError and DNF the run.
-    return isinstance(fcp, (int, float)) and fcp > probe.probe.get("threshold_ms", 1000)
+    url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
+    # median of N renders, not one sample: FCP is wall-clock timing (JIT warmup, CPU/network jitter),
+    # so a single sample near the gate flips between runs -> non-deterministic score. The isinstance
+    # filter also drops any non-numeric value a hostile page could inject (would raise TypeError).
+    samples = [browser.first_contentful_paint(url) for _ in range(3)]
+    vals = [s for s in samples if isinstance(s, (int, float))]
+    if not vals:
+        return False
+    return statistics.median(vals) > probe.probe.get("threshold_ms", 1000)
 
 
 def idor_horizontal(ctx, probe) -> bool:
@@ -264,13 +270,18 @@ def _concurrent_get(base_url, path, n: int = 20):
 def load_resilience(ctx, probe) -> bool:
     """Fire a concurrent burst at an endpoint; slop if it falls over (>10% 5xx) under load — the
     resource-exhaustion / unsynchronized-shared-state failure that only surfaces under concurrency."""
-    statuses = _concurrent_get(ctx.base_url, probe.probe.get("target", "/"))
-    if not statuses:
+    target = probe.probe.get("target", "/")
+    ratios = []
+    for _ in range(3):  # median of N bursts, not one: a target near the 10% gate flips between runs
+        statuses = _concurrent_get(ctx.base_url, target)
+        if statuses:
+            # None = connection refused/dropped/timeout — a HARDER fall-over than a 500, counted over
+            # the whole burst so an app that crashes the connection can't read cleaner than one that 500s.
+            failures = sum(1 for s in statuses if s is None or s >= 500)
+            ratios.append(failures / len(statuses))
+    if not ratios:
         return False
-    # None = connection refused/dropped/timeout — a HARDER fall-over than a 500, counted over the
-    # whole burst so an app that crashes the connection can't read cleaner than one that honestly 500s.
-    failures = sum(1 for s in statuses if s is None or s >= 500)
-    return failures / len(statuses) > 0.1
+    return statistics.median(ratios) > 0.1
 
 
 PREDICATES = {
