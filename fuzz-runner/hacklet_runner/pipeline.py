@@ -14,7 +14,7 @@ import httpx
 from .aggregate import compute_slop_score
 from .deploy import Deployer
 from .discovery import discover
-from .probes import MATCHERS, PREDICATES
+from .probes import MATCHERS, PREDICATES, describe
 from .schema import Form, Outcome, Probe, Profile, Report
 
 
@@ -87,7 +87,8 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
             # one probe to N/A, never crash the whole grade (run must not DNF). Calibration is the
             # backstop: a predicate that ALWAYS raises fails the suite.
             return [_outcome(probe, "not_applicable", 0, target)]
-        return [_outcome(probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, target)]
+        return [_outcome(probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0,
+                         target, reason=describe(probe) if slop else "")]
     na_if_absent = probe.probe.get("na_if_absent", False)
     produced: list[Outcome] = []
     for label, fetch in _expand(probe, profile):
@@ -102,7 +103,8 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
             continue
         slop = _matches(probe, resp)
         produced.append(_outcome(
-            probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label
+            probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label,
+            reason=describe(probe) if slop else "",
         ))
     if not produced:  # no targets, every fetch failed, or endpoint absent -> inconclusive
         return [_outcome(probe, "not_applicable", 0, target)]
@@ -132,7 +134,7 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         deployer.teardown()
 
 
-def _outcome(probe: Probe, outcome: str, penalty: int, target: str = "") -> Outcome:
+def _outcome(probe: Probe, outcome: str, penalty: int, target: str = "", reason: str = "") -> Outcome:
     return Outcome(
         probe_id=probe.id,
         bundle=probe.bundle,
@@ -141,4 +143,5 @@ def _outcome(probe: Probe, outcome: str, penalty: int, target: str = "") -> Outc
         penalty=penalty,
         variant_group_id=probe.variant_group_id,
         target=target,
+        reason=reason,
     )

@@ -381,3 +381,48 @@ PREDICATES = {
     "load_resilience": load_resilience,
     "slow_first_paint": slow_first_paint,
 }
+
+
+# Human-readable "why it fired" reasons for verbose / --failed output, derived from the probe's check.
+_MATCHER_REASONS = {
+    "response_leaks_stack_trace": "leaked a stack trace",
+    "ttfb_at_least": "slow time-to-first-byte (>{arg}s)",
+    "response_contains": "reflected the probe payload unescaped",
+    "response_missing_header": "missing header: {arg}",
+    "response_missing_clickjacking_defense": "no clickjacking defense (X-Frame-Options / CSP frame-ancestors)",
+    "response_cors_misconfigured": "reflects an arbitrary Origin with credentials (CORS)",
+    "response_server_error": "returned a 5xx server error",
+    "response_uncompressed": "sizeable text served without gzip (no Content-Encoding)",
+    "response_leaks_secret": "leaked a secret (private key / cloud or API token)",
+    "response_is_dotenv": "served a .env secrets file",
+    "response_is_git_config": "served .git/config (source repo exposed)",
+    "response_is_git_head": "served .git/HEAD (source repo exposed)",
+}
+
+_PREDICATE_REASONS = {
+    "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
+    "session_cookie_missing_flag": "session cookie missing the {flag} flag",
+    "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
+    "idor_horizontal": "another account's object was readable by id (broken access control)",
+    "dom_xss": "an injected payload executed in the DOM",
+    "race_resource_ids": "concurrent creates collided on one id (non-atomic allocation)",
+    "load_resilience": "endpoint 5xx'd under a concurrent burst",
+    "slow_first_paint": "First Contentful Paint exceeded the gate",
+    "login_no_rate_limit": "repeated wrong-password logins were never throttled",
+}
+
+
+def describe(probe) -> str:
+    """Short human reason a probe fires (for verbose / --failed), derived from its predicate or
+    slop_if conditions — not live evidence, but enough to know what failed and act on it."""
+    p = probe.probe
+    if "predicate" in p:
+        return _PREDICATE_REASONS.get(p["predicate"], p["predicate"]).format(flag=p.get("flag", ""))
+    parts = []
+    for cond in probe.slop_if:
+        if isinstance(cond, str):
+            parts.append(_MATCHER_REASONS.get(cond, cond))
+        else:
+            ((name, arg),) = cond.items()
+            parts.append(_MATCHER_REASONS.get(name, name).format(arg=arg))
+    return "; ".join(parts)

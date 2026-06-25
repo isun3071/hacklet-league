@@ -66,9 +66,9 @@ def _failed_text(report, source: str) -> str:
     lines = ["", f"  {source} — {len(slop)} slop (score {report.slop_score})", ""]
     if not slop:
         return "\n".join(lines + ["  clean — no slop detected.", ""])
-    lines.append(f"  {'PROBE':<16} {'CATEGORY':<20} {'PEN':>3}  TARGET")
+    lines.append(f"  {'PROBE':<16} {'CATEGORY':<18} {'PEN':>3}  {'TARGET':<14}  WHY")
     for o in slop:
-        lines.append(f"  {o.probe_id:<16} {o.category:<20} {o.penalty:>3}  {o.target or '—'}")
+        lines.append(f"  {o.probe_id:<16} {o.category:<18} {o.penalty:>3}  {(o.target or '—'):<14}  {o.reason}")
     lines.append("")
     return "\n".join(lines)
 
@@ -111,7 +111,9 @@ def _make_progress(args):
                 sys.stderr.write(f"\n▸ [{done + 1}/{total}] {probe.id}\n")
             else:
                 for o in outcomes:
-                    sys.stderr.write(f"    {_MARK[o.outcome]}  {o.category:<18} {o.target or '—'}\n")
+                    tag = f"SLOP -{o.penalty}" if o.outcome == "slop_detected" else _MARK[o.outcome]
+                    why = f"  {o.reason}" if o.reason else ""
+                    sys.stderr.write(f"    {tag:<9} {o.category:<18} {(o.target or '—'):<16}{why}\n")
             sys.stderr.flush()
         return cb
     if args.quiet or not sys.stderr.isatty():

@@ -57,6 +57,7 @@ class Outcome:
     penalty: int
     variant_group_id: str | None = None
     target: str = ""  # the concrete path/form this outcome ran against (fan-out)
+    reason: str = ""  # short human "why it fired" (slop only); derived from the probe's check
 
 
 @dataclass
