@@ -106,6 +106,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, "report: " + str(total))
             except RuntimeError:
                 return self._send(500, "concurrent modification")
+        if self.path == "/slow":  # content injected late by client JS -> high First Contentful Paint
+            return self._send(200, '<div id="app"></div><script>'
+                              'setTimeout(function(){document.getElementById("app").innerHTML='
+                              '"<h1>loaded</h1>";}, 1500);</script>')
         if self.path.startswith("/notes/"):
             try:
                 note_id = int(self.path.rsplit("/", 1)[1])

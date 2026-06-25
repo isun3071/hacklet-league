@@ -54,3 +54,11 @@ def test_dom_xss_detects_sink(serve):
     # vulnerable /dom innerHTMLs the q param (the payload executes); hardened uses textContent (safe)
     assert browser.dom_xss_executes(serve("vulnerable"), ["/dom"]) is True
     assert browser.dom_xss_executes(serve("hardened"), ["/dom"]) is False
+
+
+def test_cwv_detects_slow_paint(serve):
+    # vulnerable /slow injects content late (high FCP); hardened has it in the initial HTML (fast)
+    slow = browser.first_contentful_paint(serve("vulnerable") + "/slow")
+    assert slow is not None and slow > 1000
+    fast = browser.first_contentful_paint(serve("hardened") + "/slow")
+    assert fast is not None and fast < 1000

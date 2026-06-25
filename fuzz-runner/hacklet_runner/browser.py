@@ -61,6 +61,32 @@ def render_html(url: str, timeout: float = 15.0) -> str | None:
         return None
 
 
+def first_contentful_paint(url: str, timeout: float = 12.0) -> float | None:
+    """Render url and return First Contentful Paint in milliseconds (the user-facing 'time to see
+    something' metric). None if no browser, render fails, or nothing ever paints."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return None
+            try:
+                page = b.new_page()
+                page.goto(url, timeout=timeout * 1000, wait_until="load")
+                page.wait_for_timeout(2500)  # allow delayed/contentful paint to occur
+                return page.evaluate(
+                    "() => { const e = performance.getEntriesByName('first-contentful-paint')[0];"
+                    " return e ? e.startTime : null; }"
+                )
+            finally:
+                b.close()
+    except Exception:
+        return None
+
+
 def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24) -> bool:
     """Inject an executing payload into candidate query params of each path, render, and return True
     if it ran (the payload's JS set a window global) — i.e. XSS that *executes* in the DOM, which a

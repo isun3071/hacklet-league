@@ -154,6 +154,8 @@ def csrf_missing(ctx, probe) -> bool:
             follow_redirects=False,
         )
         return resp.status_code < 400  # accepted cross-site, no token, no SameSite -> CSRF
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return False  # transport/URL failure mid-POST -> can't prove CSRF (clean), don't crash run()
     finally:
         account.client.close()
 
@@ -163,6 +165,15 @@ def dom_xss(ctx, probe) -> bool:
     it runs in the DOM, catching reflected-that-executes and DOM-sink XSS a source check misses.
     Gated on the `browser` capability, so it's N/A unless the run enabled rendering."""
     return browser.dom_xss_executes(ctx.base_url, ctx.profile.routes)
+
+
+def slow_first_paint(ctx, probe) -> bool:
+    """Browser oracle: render and read First Contentful Paint; slop if it exceeds the gate — the
+    user-facing 'slow app' signal (client render delay, distinct from server TTFB). Browser-gated."""
+    fcp = browser.first_contentful_paint(ctx.base_url.rstrip("/") + probe.probe.get("target", "/"))
+    # isinstance guard (not just None): a hostile page can redefine performance.* so FCP marshals
+    # back as a non-numeric value, which would make `fcp > threshold` raise TypeError and DNF the run.
+    return isinstance(fcp, (int, float)) and fcp > probe.probe.get("threshold_ms", 1000)
 
 
 def idor_horizontal(ctx, probe) -> bool:
@@ -186,7 +197,7 @@ def idor_horizontal(ctx, probe) -> bool:
             return False
         leaked = b.client.get(resource)
         return leaked.status_code == 200 and marker in leaked.text
-    except httpx.HTTPError:
+    except (httpx.HTTPError, httpx.InvalidURL):
         return False
     finally:
         a.client.close()
@@ -215,7 +226,10 @@ def race_resource_ids(ctx, probe) -> bool:
     if account is None:
         return False
     try:
-        urls = _concurrent_creates(ctx.base_url, form.action, dict(account.client.cookies))
+        # iterate the jar, not dict(cookies) — dict() raises httpx.CookieConflict when the session
+        # cookie was set on multiple paths/domains during the register redirect chain.
+        cookies = {c.name: c.value for c in account.client.cookies.jar}
+        urls = _concurrent_creates(ctx.base_url, form.action, cookies)
         created = [u for u in urls if u and u != form.action]
         return len(created) >= 2 and len(set(created)) < len(created)
     finally:
@@ -250,4 +264,5 @@ PREDICATES = {
     "dom_xss": dom_xss,
     "race_resource_ids": race_resource_ids,
     "load_resilience": load_resilience,
+    "slow_first_paint": slow_first_paint,
 }

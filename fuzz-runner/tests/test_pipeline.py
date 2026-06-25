@@ -60,6 +60,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["qa-race-001"] == "slop_detected"
     # perf-load-001: /report 5xx's under a concurrent burst (unsynchronized shared state):
     assert o["perf-load-001"] == "slop_detected"
+    # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
+    assert o["perf-cwv-001"] == "not_applicable"
     # sec-exposure-* find the served .env and .git files (.git config+HEAD share a variant group):
     exposure_hits = {x.target for x in report.outcomes
                      if x.probe_id.startswith("sec-exposure") and x.outcome == "slop_detected"}
@@ -91,4 +93,5 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-idor-001"] == "not_applicable"      # same gate
     assert o["sec-domxss-001"] == "not_applicable"    # browser-gated
     assert o["qa-race-001"] == "not_applicable"       # no password form -> can't self-register
+    assert o["perf-cwv-001"] == "not_applicable"      # browser-gated
     assert report.slop_score == 0

@@ -85,7 +85,14 @@ def run(deployer: Deployer, catalog: list[Probe], render=None) -> Report:
                     outcomes.append(_outcome(probe, "not_applicable", 0, target))
                     continue
                 if "predicate" in probe.probe:
-                    slop = PREDICATES[probe.probe["predicate"]](ctx, probe)
+                    try:
+                        slop = PREDICATES[probe.probe["predicate"]](ctx, probe)
+                    except Exception:
+                        # a predicate drives an UNTRUSTED target; a hostile/edge-case response must
+                        # degrade this one probe to N/A, never crash the whole grade (run must not DNF).
+                        # Calibration is the backstop: a predicate that ALWAYS raises fails the suite.
+                        outcomes.append(_outcome(probe, "not_applicable", 0, target))
+                        continue
                     outcomes.append(_outcome(
                         probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, target
                     ))
@@ -94,8 +101,8 @@ def run(deployer: Deployer, catalog: list[Probe], render=None) -> Report:
                 for label, fetch in _expand(probe, profile):
                     try:
                         resp = fetch(client)
-                    except httpx.HTTPError:
-                        continue  # unreachable target -> try the next
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue  # unreachable / malformed-URL (control-char path) target -> next
                     client.cookies.clear()  # form-fan submissions stay independent (no session leak)
                     produced = True
                     slop = _matches(probe, resp)

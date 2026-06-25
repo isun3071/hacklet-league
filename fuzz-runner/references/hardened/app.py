@@ -109,6 +109,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _HITS[len(_HITS)] = 1
                 snapshot = list(_HITS.values())
             return self._send(200, "report: " + str(sum(snapshot)))
+        if self.path == "/slow":  # content in the initial HTML -> fast First Contentful Paint
+            return self._send(200, '<div id="app"><h1>loaded</h1></div>')
         return self._send(404, "not found")
 
     def do_POST(self):

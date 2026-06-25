@@ -87,7 +87,9 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
     client = httpx.Client(base_url=base_url, timeout=15.0, follow_redirects=True)
     try:
         resp = client.request("POST", form.action, data=_fill(form, username, password))
-    except httpx.HTTPError:
+    except (httpx.HTTPError, httpx.InvalidURL):
+        # InvalidURL is NOT a subclass of HTTPError; catching both ensures a control-char form
+        # action (hostile target) closes the client here instead of leaking it and crashing run().
         client.close()
         return None
     return Account(username=username, password=password, client=client, register_response=resp)

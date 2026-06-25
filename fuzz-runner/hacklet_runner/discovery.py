@@ -71,8 +71,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             visited.add(path)
             try:
                 resp = c.get(path)
-            except httpx.HTTPError:
-                continue
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue  # InvalidURL isn't an HTTPError: a hostile target served a control-char path
             any_response = True
             routes[path] = None
             if "html" not in resp.headers.get("content-type", "").lower():
