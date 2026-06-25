@@ -222,6 +222,26 @@ def race_resource_ids(ctx, probe) -> bool:
         account.client.close()
 
 
+def _concurrent_get(base_url, path, n: int = 20):
+    def get():
+        try:
+            with httpx.Client(base_url=base_url, timeout=15.0) as c:
+                return c.get(path).status_code
+        except Exception:
+            return None
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        return [f.result() for f in [ex.submit(get) for _ in range(n)]]
+
+
+def load_resilience(ctx, probe) -> bool:
+    """Fire a concurrent burst at an endpoint; slop if it falls over (>10% 5xx) under load — the
+    resource-exhaustion / unsynchronized-shared-state failure that only surfaces under concurrency."""
+    statuses = _concurrent_get(ctx.base_url, probe.probe.get("target", "/"))
+    done = [s for s in statuses if s is not None]
+    errors = sum(1 for s in done if s >= 500)
+    return bool(done) and errors / len(done) > 0.1
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "session_cookie_missing_flag": session_cookie_missing_flag,
@@ -229,4 +249,5 @@ PREDICATES = {
     "idor_horizontal": idor_horizontal,
     "dom_xss": dom_xss,
     "race_resource_ids": race_resource_ids,
+    "load_resilience": load_resilience,
 }

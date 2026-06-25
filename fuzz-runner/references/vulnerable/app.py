@@ -23,6 +23,7 @@ _db.commit()
 _SESSIONS = {}     # session token -> username
 _NOTES = {}        # note id -> {"owner", "text"}
 _NEXT_NOTE = [1]   # sequential note ids (mutable holder)
+_HITS = {}         # shared dict for the /report load probe (unsynchronized)
 
 
 def _user_of(handler):
@@ -95,6 +96,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, '<div id="out"></div><script>'
                               'document.getElementById("out").innerHTML = '
                               'new URLSearchParams(location.search).get("q") || "";</script>')
+        if self.path == "/report":  # unsynchronized shared dict -> 500s under concurrent load
+            try:
+                _HITS[len(_HITS)] = 1
+                total = 0
+                for k in _HITS:  # iterating the LIVE dict while peers add keys -> RuntimeError
+                    total += _HITS[k]
+                    time.sleep(0.005)
+                return self._send(200, "report: " + str(total))
+            except RuntimeError:
+                return self._send(500, "concurrent modification")
         if self.path.startswith("/notes/"):
             try:
                 note_id = int(self.path.rsplit("/", 1)[1])

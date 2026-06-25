@@ -24,6 +24,7 @@ _SESSIONS = {}     # session token -> username
 _NOTES = {}        # note id -> {"owner", "text"}
 _NEXT_NOTE = [1]   # sequential note ids (mutable holder)
 _LOCK = threading.Lock()
+_HITS = {}         # shared dict for the /report load probe
 
 
 def _user_of(handler):
@@ -103,6 +104,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, '<div id="out"></div><script>'
                               'document.getElementById("out").textContent = '
                               'new URLSearchParams(location.search).get("q") || "";</script>')
+        if self.path == "/report":  # locked snapshot -> safe under concurrent load
+            with _LOCK:
+                _HITS[len(_HITS)] = 1
+                snapshot = list(_HITS.values())
+            return self._send(200, "report: " + str(sum(snapshot)))
         return self._send(404, "not found")
 
     def do_POST(self):
