@@ -9,6 +9,7 @@ browser (chromium / chrome / msedge channels), so it works wherever one is avail
 from __future__ import annotations
 
 import contextlib
+import time
 import urllib.parse
 
 # An <img onerror> payload executes when inserted into the DOM (unlike a bare <script>), so it fires
@@ -87,7 +88,8 @@ def first_contentful_paint(url: str, timeout: float = 12.0) -> float | None:
         return None
 
 
-def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24) -> bool:
+def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24,
+                     total_timeout: float = 45.0) -> bool:
     """Inject an executing payload into candidate query params of each path, render, and return True
     if it ran (the payload's JS set a window global) — i.e. XSS that *executes* in the DOM, which a
     source-only reflection check misses (reflected-that-executes and DOM-sink XSS). False if no
@@ -104,9 +106,10 @@ def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24
             try:
                 page = b.new_page()
                 attempts = 0
-                for path in paths:
-                    for param in params:
-                        if attempts >= max_attempts:
+                deadline = time.monotonic() + total_timeout  # overall wall-clock cap: a slow-loris
+                for path in paths:                            # target that stalls each goto can't tie
+                    for param in params:                      # up the probe (24 x 8s would be ~3 min)
+                        if attempts >= max_attempts or time.monotonic() > deadline:
                             return False
                         attempts += 1
                         url = f"{base_url.rstrip('/')}{path}?{param}={urllib.parse.quote(_XSS_PAYLOAD)}"
