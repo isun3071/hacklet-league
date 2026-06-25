@@ -6,7 +6,7 @@ import pathlib
 import pytest
 
 from hacklet_runner.deploy import SubprocessDeployer
-from hacklet_runner.discovery import discover
+from hacklet_runner.discovery import _ACTION, _FIELD, _LINK, discover
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REFS = ROOT / "references"
@@ -37,6 +37,15 @@ def test_discovers_routes_and_login_form(serve):
     assert searches and searches[0].method == "get" and searches[0].fields == ["q"]
     assert profile.capabilities["any_endpoint_accepts_text_input"] is True
     assert {"/login", "/search"} <= set(profile.form_endpoints)  # back-compat property
+
+
+def test_attribute_regexes_ignore_data_attrs():
+    # data-* attributes must not be mistaken for href/name/action (no leading boundary -> phantoms).
+    assert _LINK.findall('<a href="/real">x</a>') == ["/real"]
+    assert _LINK.findall('<div data-href="/phantom"></div>') == []
+    assert _FIELD.findall('<input data-name="phantom" name="real">') == ["real"]
+    assert _FIELD.findall('<input data-name="phantom" type="text">') == []
+    assert _ACTION.findall('<form data-action="/x" action="/real">') == ["/real"]
 
 
 def test_minimal_has_no_forms(serve):

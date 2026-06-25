@@ -210,11 +210,9 @@ class DockerDeployer(Deployer):
         return proc.returncode == 0 and proc.stdout.strip() == "true"
 
     def _container_ip(self) -> str:
-        # The per-network address; the top-level .IPAddress is empty for custom networks.
-        proc = _docker(
-            "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-            self.container_id or "",
-        )
+        # The address on THIS network specifically; ranging over all networks would concat IPs.
+        fmt = '{{(index .NetworkSettings.Networks "%s").IPAddress}}' % self.network
+        proc = _docker("inspect", "-f", fmt, self.container_id or "")
         ip = proc.stdout.strip()
         if not ip:
             raise RuntimeError(f"could not resolve container IP on '{self.network}':\n{proc.stderr}")
@@ -240,11 +238,12 @@ class RemoteDeployer(Deployer):
         deadline = time.time() + self.health_timeout
         while time.time() < deadline:
             try:
-                httpx.get(self.base_url + "/", timeout=3.0, follow_redirects=True)
-                return DeployHandle(self.base_url)  # any HTTP response means it is up
+                if httpx.get(self.base_url + "/", timeout=3.0, follow_redirects=True).status_code < 500:
+                    return DeployHandle(self.base_url)  # a non-5xx response means it is up
             except httpx.HTTPError:
-                time.sleep(0.3)
-        raise RuntimeError(f"target did not respond: {self.base_url}")
+                pass
+            time.sleep(0.3)
+        raise RuntimeError(f"target did not respond (or only 5xx): {self.base_url}")
 
     def teardown(self) -> None:
         pass  # never tear down a target we did not deploy

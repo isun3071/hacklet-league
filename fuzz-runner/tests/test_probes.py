@@ -31,10 +31,14 @@ def test_ignores_public_by_design():
 
 def test_detects_exposed_files():
     assert response_is_dotenv(_Resp("DATABASE_URL=postgres://x\nSECRET_KEY=abc"))
+    assert response_is_dotenv(_Resp("export GITHUB_TOKEN=ghp_xyz\n"))   # export prefix + TOKEN key
+    assert response_is_dotenv(_Resp("  STRIPE_KEY=sk_live_xyz\n"))      # indented + bare *_KEY
     assert response_is_git_config(_Resp("[core]\n\trepositoryformatversion = 0\n"))
-    assert response_is_git_head(_Resp("ref: refs/heads/main\n"))
+    assert response_is_git_head(_Resp("ref: refs/heads/main\n"))        # symbolic ref
+    assert response_is_git_head(_Resp("a" * 40 + "\n"))                 # detached HEAD (raw SHA)
 
 
 def test_exposure_needs_200_and_signature():
     assert not response_is_dotenv(_Resp("DATABASE_URL=x", status=404))   # not actually served
+    assert not response_is_dotenv(_Resp("<html><body>hi</body></html>"))  # 200 but not a .env
     assert not response_is_git_head(_Resp("<html>not found</html>"))     # 200, wrong content

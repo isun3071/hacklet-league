@@ -83,19 +83,19 @@ def run(deployer: Deployer, catalog: list[Probe]) -> Report:
                         probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, target
                     ))
                     continue
-                expanded = _expand(probe, profile)
-                if not expanded:
-                    outcomes.append(_outcome(probe, "not_applicable", 0, target))
-                    continue
-                for label, fetch in expanded:
+                produced = False
+                for label, fetch in _expand(probe, profile):
                     try:
                         resp = fetch(client)
                     except httpx.HTTPError:
-                        continue  # unreachable target -> no outcome for it
+                        continue  # unreachable target -> try the next
+                    produced = True
                     slop = _matches(probe, resp)
                     outcomes.append(_outcome(
                         probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label
                     ))
+                if not produced:  # no targets, or every fetch failed -> inconclusive
+                    outcomes.append(_outcome(probe, "not_applicable", 0, target))
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes)
     finally:
         deployer.teardown()

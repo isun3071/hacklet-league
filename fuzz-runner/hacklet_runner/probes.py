@@ -61,7 +61,7 @@ def response_leaks_secret(resp, arg=None) -> bool:
 
 # Files that must never be served at the webroot (deploying with .env / .git present is classic
 # slop). Each requires status 200 AND a content signature, so a 404 / redirect reads clean.
-_DOTENV = re.compile(r"(?im)^[A-Z0-9_]*(?:SECRET|PASSWORD|DATABASE_URL|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=")
+_DOTENV = re.compile(r"(?im)^[ \t]*(?:export[ \t]+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|CREDENTIAL|DATABASE_URL)[A-Z0-9_]*[ \t]*=")
 
 
 def response_is_dotenv(resp, arg=None) -> bool:
@@ -73,7 +73,8 @@ def response_is_git_config(resp, arg=None) -> bool:
 
 
 def response_is_git_head(resp, arg=None) -> bool:
-    return resp.status_code == 200 and resp.text.lstrip().startswith("ref: refs/")
+    # symbolic ref (ref: refs/...) OR a detached-HEAD raw commit SHA
+    return resp.status_code == 200 and bool(re.fullmatch(r"ref: refs/\S+|[0-9a-f]{40}", resp.text.strip()))
 
 
 MATCHERS = {

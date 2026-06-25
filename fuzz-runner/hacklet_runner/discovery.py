@@ -14,12 +14,12 @@ import httpx
 
 from .schema import Form, Profile
 
-_LINK = re.compile(r'href=["\']([^"\']+)["\']', re.I)
-_SCRIPT = re.compile(r'<script\b[^>]+\bsrc=["\']([^"\']+)["\']', re.I)
+_LINK = re.compile(r'(?<![-\w])href=["\']([^"\']+)["\']', re.I)
+_SCRIPT = re.compile(r'<script\b[^>]+(?<![-\w])src=["\']([^"\']+)["\']', re.I)
 _FORM = re.compile(r"<form\b([^>]*)>(.*?)</form>", re.I | re.S)
-_ACTION = re.compile(r'action=["\']([^"\']*)["\']', re.I)
-_METHOD = re.compile(r'method=["\']([^"\']*)["\']', re.I)
-_FIELD = re.compile(r'<(?:input|textarea|select)\b[^>]*\bname=["\']([^"\']+)["\']', re.I)
+_ACTION = re.compile(r'(?<![-\w])action=["\']([^"\']*)["\']', re.I)
+_METHOD = re.compile(r'(?<![-\w])method=["\']([^"\']*)["\']', re.I)
+_FIELD = re.compile(r'<(?:input|textarea|select)\b[^>]*(?<![-\w])name=["\']([^"\']+)["\']', re.I)
 
 MAX_PAGES = 25
 MAX_DEPTH = 2
