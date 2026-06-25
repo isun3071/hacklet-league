@@ -28,15 +28,18 @@ def serve():
 
 def test_discovers_routes_and_login_form(serve):
     profile = discover(serve("vulnerable"))
-    assert {"/", "/login", "/search", "/crash", "/heavy", "/config.js"} <= set(profile.routes)
+    assert {"/", "/login", "/search", "/crash", "/heavy", "/config.js", "/register"} <= set(profile.routes)
     logins = [f for f in profile.forms if f.action == "/login"]
     assert logins, "should discover the /login form"
     assert logins[0].method == "post"
     assert set(logins[0].fields) == {"username", "password"}
     searches = [f for f in profile.forms if f.action == "/search"]
     assert searches and searches[0].method == "get" and searches[0].fields == ["q"]
+    registers = [f for f in profile.forms if f.action == "/register"]
+    assert registers and "password" in registers[0].fields
     assert profile.capabilities["any_endpoint_accepts_text_input"] is True
-    assert {"/login", "/search"} <= set(profile.form_endpoints)  # back-compat property
+    assert profile.capabilities["any_form_has_password"] is True
+    assert {"/login", "/search", "/register"} <= set(profile.form_endpoints)  # back-compat property
 
 
 def test_attribute_regexes_ignore_data_attrs():
@@ -53,6 +56,7 @@ def test_minimal_has_no_forms(serve):
     assert profile.routes == ["/"]  # no links, no forms
     assert profile.forms == []
     assert profile.capabilities["any_endpoint_accepts_text_input"] is False
+    assert profile.capabilities["any_form_has_password"] is False
 
 
 def test_hardened_same_surface_as_vulnerable(serve):

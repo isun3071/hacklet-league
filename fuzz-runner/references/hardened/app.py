@@ -7,6 +7,7 @@ must read clean here.
 import html
 import http.server
 import os
+import secrets
 import sqlite3
 import urllib.parse
 
@@ -29,6 +30,12 @@ HOME = b"""<!doctype html><html><body>
   <input name="q" placeholder="search">
   <button type="submit">search</button>
 </form>
+<form action="/register" method="post">
+  <input name="username" placeholder="user">
+  <input name="email" placeholder="email">
+  <input name="password" type="password" placeholder="pw">
+  <button type="submit">register</button>
+</form>
 <script src="/config.js"></script>
 </body></html>"""
 
@@ -37,13 +44,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, code, body, ctype="text/html; charset=utf-8"):
+    def _send(self, code, body, ctype="text/html; charset=utf-8", cookie=None):
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")  # security header set
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.end_headers()
         self.wfile.write(body)
 
@@ -62,6 +71,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._send(404, "not found")
 
     def do_POST(self):
+        if self.path == "/register":
+            length = int(self.headers.get("Content-Length", "0"))
+            self.rfile.read(length)  # consume body
+            sid = secrets.token_hex(16)
+            return self._send(200, "account created",
+                              cookie="session=" + sid + "; HttpOnly; SameSite=Lax; Path=/")
         if self.path == "/login":
             length = int(self.headers.get("Content-Length", "0"))
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())

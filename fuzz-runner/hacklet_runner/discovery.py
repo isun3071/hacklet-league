@@ -99,5 +99,8 @@ def discover(base_url: str, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEP
     capabilities = {
         "at_least_one_http_endpoint_exists": any_response,
         "any_endpoint_accepts_text_input": any(f.fields for f in forms),
+        "any_form_has_password": any(
+            any("pass" in name.lower() for name in form.fields) for form in forms
+        ),
     }
     return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities)

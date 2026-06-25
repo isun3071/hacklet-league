@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+from . import auth
+
 _TRACE = re.compile(
     r"Traceback \(most recent call last\)|File \"[^\"]+\", line \d+, in |"
     r"\bat [\w.$]+\([\w.]+:\d+\)"
@@ -112,6 +114,20 @@ def sqli_auth_bypass(ctx, probe) -> bool:
     return False
 
 
+def session_cookie_insecure(ctx, probe) -> bool:
+    """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if that
+    cookie lacks HttpOnly — an XSS could then steal the session."""
+    account = auth.register_account(ctx.base_url, ctx.profile)
+    if account is None:
+        return False  # registration not possible (applicability gates this) -> treat as clean
+    try:
+        cookie = auth.session_cookie(account.register_response)
+        return cookie is not None and not cookie["httponly"]
+    finally:
+        account.client.close()
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
+    "session_cookie_insecure": session_cookie_insecure,
 }
