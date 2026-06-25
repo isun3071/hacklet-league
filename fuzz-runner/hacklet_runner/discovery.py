@@ -122,5 +122,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         # gate on an ACTUAL successful render, not just --browser: if Playwright/Chrome can't launch,
         # render returns None and browser probes must read N/A, not silently 'clean' (false negative).
         "browser": browser_ok,
+        # HSTS and other transport-security headers are meaningless over plain HTTP -> gate on this so
+        # those probes read N/A (not a false positive) against an http:// target.
+        "served_over_https": base_url.lower().startswith("https"),
     }
     return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities)

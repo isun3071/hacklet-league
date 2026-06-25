@@ -42,6 +42,14 @@ def response_missing_header(resp, arg) -> bool:
     return str(arg) not in resp.headers  # httpx headers are case-insensitive
 
 
+def response_missing_clickjacking_defense(resp, arg=None) -> bool:
+    # Clickjacking is defended by EITHER X-Frame-Options OR a CSP frame-ancestors directive;
+    # checking only one header would false-positive on an app that uses the other.
+    if "x-frame-options" in resp.headers:
+        return False
+    return "frame-ancestors" not in resp.headers.get("content-security-policy", "").lower()
+
+
 def response_server_error(resp, arg=None) -> bool:
     # A crash is a 5xx the app caused, not 501 (method not implemented) or 405.
     return resp.status_code in (500, 502, 503, 504)
@@ -88,6 +96,7 @@ MATCHERS = {
     "ttfb_at_least": ttfb_at_least,
     "response_contains": response_contains,
     "response_missing_header": response_missing_header,
+    "response_missing_clickjacking_defense": response_missing_clickjacking_defense,
     "response_server_error": response_server_error,
     "response_leaks_secret": response_leaks_secret,
     "response_is_dotenv": response_is_dotenv,

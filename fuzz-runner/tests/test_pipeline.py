@@ -18,7 +18,8 @@ REFS = ROOT / "references"
 ALL_PROBES = [
     "sec-sqli-001", "sec-sqli-002", "sec-sqli-003",  # variant group
     "sec-xss-001", "sec-secrets-001", "sec-session-001", "sec-session-002", "sec-csrf-001",
-    "sec-headers-001", "qa-errhyg-001", "perf-ttfb-001",
+    "sec-headers-001", "sec-headers-002", "sec-headers-004", "sec-headers-005",  # header depth (003=HSTS is https-only)
+    "qa-errhyg-001", "perf-ttfb-001",
     "sec-exposure-001", "sec-exposure-002", "sec-exposure-003",  # .env + .git
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
     "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance: /profile (form)
@@ -41,6 +42,11 @@ def test_vulnerable_app_accrues_slop():
     # sec-headers-001 fans across every discovered route (now 9: + /dom):
     header_hits = [x for x in report.outcomes if x.probe_id == "sec-headers-001"]
     assert len(header_hits) == 9 and all(x.outcome == "slop_detected" for x in header_hits)
+    # header-depth probes check the homepage once (global headers); HSTS is https-only -> N/A over http:
+    assert o["sec-headers-002"] == "slop_detected"   # missing Content-Security-Policy
+    assert o["sec-headers-004"] == "slop_detected"   # no X-Frame-Options and no CSP frame-ancestors
+    assert o["sec-headers-005"] == "slop_detected"   # missing Referrer-Policy
+    assert o["sec-headers-003"] == "not_applicable"  # HSTS meaningless over plain http
     # sec-xss-001 fans across discovered forms (/login, /search, /register, /notes); only /search reflects:
     xss_hits = [x for x in report.outcomes if x.probe_id == "sec-xss-001"]
     assert {x.target for x in xss_hits} == {"/login", "/search", "/register", "/notes"}
@@ -68,9 +74,10 @@ def test_vulnerable_app_accrues_slop():
     assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
     # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + race 25 + errhyg 8 + ttfb 5 + load 10.
     # session: httponly 20 + samesite 15 diminished -> 20 + 15*.6 = 29.
-    # security-headers: 9 fires -> 7.42. crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53.
-    # Total 311.72 + load 10 = 321.72 -> 322.
-    assert report.slop_score == 322
+    # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2, sorted-desc decay -> 13.68.
+    # crash-resistance: 6 fires -> 14.30. exposure: 35 + 30*.6 = 53.
+    # Total 317.98 + load 10 = 327.98 -> 328.
+    assert report.slop_score == 328
 
 
 def test_hardened_app_is_clean():
@@ -78,6 +85,7 @@ def test_hardened_app_is_clean():
     o = report.by_id
     for probe in ALL_PROBES:
         assert o[probe] == "clean", f"{probe} should be clean on the hardened app"
+    assert o["sec-headers-003"] == "not_applicable"  # HSTS https-only -> N/A over the http reference
     assert report.slop_score == 0
 
 
@@ -87,6 +95,9 @@ def test_minimal_app_resolves_surface_probes_na():
     for probe in SURFACE_PROBES:  # no form/text input -> input-dependent probes don't apply
         assert o[probe] == "not_applicable"
     assert o["sec-headers-001"] == "clean"  # universal probe applies; minimal sets the header
+    assert o["sec-headers-002"] == "clean" and o["sec-headers-004"] == "clean" \
+        and o["sec-headers-005"] == "clean"  # minimal sets CSP / X-Frame-Options / Referrer-Policy
+    assert o["sec-headers-003"] == "not_applicable"  # HSTS https-only
     assert o["sec-session-001"] == "not_applicable"  # no password form -> can't self-register
     assert o["sec-session-002"] == "not_applicable"
     assert o["sec-csrf-001"] == "not_applicable"
