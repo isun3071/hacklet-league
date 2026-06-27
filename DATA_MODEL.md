@@ -142,7 +142,7 @@ created_by_user_id      : FK User
 unique constraint: (chapter_id, slug)
 ```
 
-The `(format, timer)` pair identifies the variant: e.g., `(vibe, sprint)` is HackLet Vibe Sprint, `(unslop, agile)` is HackLet Unslop Agile. Per the 1-event-1-format rule (format_spec.md §7.1), each event commits to one variant for its lifetime. The two-axis taxonomy is intentional — the earlier "Relationship" axis (Classical vs Agentic) has been retired in favor of the unified-substrate model where the league hosts both chat-window and agent-interface clients with a shared token budget (see format_spec.md §1, §5.3). 2 formats × 5 timers = 10 sanctioned variants.
+The `(format, timer)` pair identifies the variant: e.g., `(vibe, sprint)` is HackLet Vibe Sprint, `(unslop, agile)` is HackLet Unslop Agile. Per the 1-event-1-format rule (format_spec.md §7.1), each event commits to one variant for its lifetime. The two-axis taxonomy is intentional — the earlier "Relationship" axis (Classical vs Agentic) has been retired in favor of the unified-substrate model where the league hosts both chat-window and agent-interface clients with a shared token budget (see format_spec.md §1, §5.3). 3 formats × 5 timers = 15 sanctioned variants.
 
 Events inherit credentialing weight from their chapter's tier (tier A chapter events count globally, tier B/C are local-only).
 

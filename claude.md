@@ -22,7 +22,7 @@ Correct usage:
 - ✓ "Come attend a hacklet" (generic event)
 - ✓ "build a hacklet in 24 minutes" (generic activity)
 - ✓ "First HackLet coming soon" (formal league event)
-- ✓ "HackLet League runs two formats" (the league)
+- ✓ "HackLet League runs three formats" (the league)
 - ✓ "HackLet Vibe is akin to..." (formal format name)
 - ✓ "qualified for HackLet Vibe Sprint Regionals" (formal tournament)
 
@@ -226,7 +226,7 @@ Correct usage examples:
 - "Come attend a hacklet" (generic event)
 - "build a hacklet in 24 minutes" (generic activity)
 - "First HackLet coming soon" (formal league event)
-- "HackLet League runs two formats" (the league)
+- "HackLet League runs three formats" (the league)
 - "HackLet Vibe is akin to a traditional hackathon" (formal format name)
 - "qualified for HackLet Vibe Sprint Regionals" (formal tournament)
 
