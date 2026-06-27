@@ -19,10 +19,10 @@ ALL_PROBES = [
     "sec-sqli-001", "sec-sqli-002", "sec-sqli-003",  # variant group
     "sec-xss-001", "sec-secrets-001",
     "sec-session-001", "sec-session-002", "sec-session-003",  # cookie hygiene: HttpOnly / SameSite / Secure
-    "sec-csrf-001", "sec-cors-001", "sec-ratelimit-001",
-    "sec-headers-001", "sec-headers-002", "sec-headers-004", "sec-headers-005",  # header depth (003=HSTS is https-only)
+    "sec-csrf-001", "sec-cors-001", "sec-ratelimit-001", "sec-redirect-001",
+    "sec-headers-001", "sec-headers-002", "sec-headers-004", "sec-headers-005", "sec-headers-006",  # header depth (003=HSTS https-only); 006=X-Powered-By
     "qa-errhyg-001", "perf-ttfb-001",
-    "sec-exposure-001", "sec-exposure-002", "sec-exposure-003",  # .env + .git
+    "sec-exposure-001", "sec-exposure-002", "sec-exposure-003", "sec-exposure-004",  # .env + .git + .aws/credentials
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
     "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance: /profile (form)
     "qa-crash-004", "qa-crash-005", "qa-crash-006",  # crash-resistance: /api/items (JSON gauntlet)
@@ -82,15 +82,20 @@ def test_vulnerable_app_accrues_slop():
     assert o["qa-crash-007"] == "slop_detected"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
+    # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):
+    assert o["qa-console-001"] == "not_applicable"
+    assert o["qa-a11y-001"] == "not_applicable"
     # sec-exposure-* find the served .env and .git files (.git config+HEAD share a variant group):
     exposure_hits = {x.target for x in report.outcomes
                      if x.probe_id.startswith("sec-exposure") and x.outcome == "slop_detected"}
-    assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD"}
-    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10 + compress 5.
+    assert exposure_hits == {"/.env", "/.git/config", "/.git/HEAD", "/.aws/credentials"}
+    # sec-redirect-001: a user-controlled param redirects to an arbitrary external host:
+    assert o["sec-redirect-001"] == "slop_detected"
+    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + redirect 20 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10 + compress 5.
     # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
-    # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2, sorted-desc decay -> 13.68.
-    # crash-resistance: 7 fires -> 14.58. exposure: 35 + 30*.6 = 53. -> total 379.
-    assert report.slop_score == 379
+    # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2 + X-Powered-By 2, sorted-desc decay.
+    # crash-resistance: 7 fires -> 14.58. exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 412.
+    assert report.slop_score == 412
 
 
 def test_hardened_app_is_clean():
@@ -117,12 +122,17 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-csrf-001"] == "not_applicable"
     assert o["sec-ratelimit-001"] == "not_applicable"  # no password form -> no login to brute-force
     assert o["sec-cors-001"] == "clean"  # applies (any endpoint) but minimal doesn't reflect Origin
-    assert o["perf-compress-001"] == "clean"  # 84-byte homepage -> too small to need compression
+    assert o["perf-compress-001"] == "clean"  # tiny homepage -> too small to need compression
     assert o["qa-crash-007"] == "clean"       # robust 404 on the malformed-encoding path
+    assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
+    assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
+    assert o["sec-headers-006"] == "clean"    # no X-Powered-By header
     assert o["sec-idor-001"] == "not_applicable"      # same gate
     assert o["sec-domxss-001"] == "not_applicable"    # browser-gated
     assert o["qa-race-001"] == "not_applicable"       # no password form -> can't self-register
     assert o["perf-cwv-001"] == "not_applicable"      # browser-gated
+    assert o["qa-console-001"] == "not_applicable"    # browser-gated
+    assert o["qa-a11y-001"] == "not_applicable"       # browser-gated
     assert report.slop_score == 0
 
 

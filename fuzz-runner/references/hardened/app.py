@@ -37,26 +37,26 @@ def _user_of(handler):
     return None
 
 
-HOME = b"""<!doctype html><html><body>
+HOME = b"""<!doctype html><html lang="en"><body>
 <h1>demo app</h1>
 <a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a> | <a href="/dom">dom</a>
 <form action="/login" method="post">
-  <input name="username" placeholder="user">
-  <input name="password" type="password" placeholder="pw">
+  <input name="username" aria-label="username" placeholder="user">
+  <input name="password" type="password" aria-label="password" placeholder="pw">
   <button type="submit">log in</button>
 </form>
 <form action="/search" method="get">
-  <input name="q" placeholder="search">
+  <input name="q" aria-label="search query" placeholder="search">
   <button type="submit">search</button>
 </form>
 <form action="/register" method="post">
-  <input name="username" placeholder="user">
-  <input name="email" placeholder="email">
-  <input name="password" type="password" placeholder="pw">
+  <input name="username" aria-label="new username" placeholder="user">
+  <input name="email" aria-label="email" placeholder="email">
+  <input name="password" type="password" aria-label="new password" placeholder="pw">
   <button type="submit">register</button>
 </form>
 <form action="/notes" method="post">
-  <input name="text" placeholder="note">
+  <input name="text" aria-label="note text" placeholder="note">
   <button type="submit">add note</button>
 </form>
 <script src="/config.js"></script>
@@ -122,6 +122,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, "report: " + str(sum(snapshot)))
         if self.path == "/slow":  # content in the initial HTML -> fast First Contentful Paint
             return self._send(200, '<div id="app"><h1>loaded</h1></div>')
+        if self.path.startswith("/redirect"):  # validated redirect: same-origin relative paths only
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            dest = (q.get("next") or q.get("url") or [""])[0]
+            if dest.startswith("/") and not dest.startswith("//"):
+                self.send_response(302)
+                self.send_header("Location", dest)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._send(400, "invalid redirect")
         return self._send(404, "not found")
 
     def do_POST(self):

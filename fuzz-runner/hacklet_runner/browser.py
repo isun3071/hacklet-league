@@ -111,6 +111,82 @@ def first_contentful_paint(url: str, headers=None, timeout: float = 12.0) -> flo
         return None
 
 
+# Hand-rolled presence-based accessibility checks (no axe-core dependency): missing lang, images with
+# no alt attribute, form fields with no accessible name, and icon-only controls with no name. Presence
+# only — the *content* of alt text etc. is intent-dependent (the judge's domain), not ours.
+_A11Y_JS = """() => {
+  let v = 0;
+  const root = document.documentElement;
+  if (!root.lang || !root.lang.trim()) v++;
+  v += document.querySelectorAll('img:not([alt])').length;
+  const fields = document.querySelectorAll(
+    'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]), textarea, select');
+  fields.forEach(el => {
+    const named = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
+      || el.getAttribute('title') || (el.id && document.querySelector('label[for="' + el.id + '"]'))
+      || el.closest('label');
+    if (!named) v++;
+  });
+  document.querySelectorAll('button, a[href]').forEach(el => {
+    const txt = (el.textContent || '').trim();
+    const named = el.getAttribute('aria-label') || el.getAttribute('title')
+      || el.querySelector('img[alt]:not([alt=""])');
+    if (!txt && !named) v++;
+  });
+  return v;
+}"""
+
+
+def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> int | None:
+    """Render url and count presence-based accessibility violations (missing lang / alt / field label /
+    control name). None if no browser or the render fails."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return None
+            try:
+                page = b.new_page()
+                _apply_auth(page, url, headers)
+                page.goto(url, timeout=timeout * 1000, wait_until="load")
+                page.wait_for_timeout(300)
+                return page.evaluate(_A11Y_JS)
+            finally:
+                b.close()
+    except Exception:
+        return None
+
+
+def console_errors(url: str, headers=None, timeout: float = 12.0) -> int | None:
+    """Render url and count uncaught JavaScript errors thrown on load (pageerror) — a page that throws
+    as it renders is broken regardless of intent. None if no browser or the render fails."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return None
+            try:
+                page = b.new_page()
+                errors = []
+                page.on("pageerror", lambda e: errors.append(str(e)))
+                _apply_auth(page, url, headers)
+                page.goto(url, timeout=timeout * 1000, wait_until="load")
+                page.wait_for_timeout(500)  # let late/async errors surface
+                return len(errors)
+            finally:
+                b.close()
+    except Exception:
+        return None
+
+
 def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24,
                      total_timeout: float = 45.0, headers=None) -> bool:
     """Inject an executing payload into candidate query params of each path, render, and return True

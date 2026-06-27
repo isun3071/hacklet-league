@@ -9,7 +9,7 @@ import os
 
 PORT = int(os.environ.get("PORT", "8080"))
 
-HOME = b"<!doctype html><html><body><h1>minimal</h1><p>nothing to see here.</p></body></html>"
+HOME = b'<!doctype html><html lang="en"><body><h1>minimal</h1><p>nothing to see here.</p></body></html>'
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

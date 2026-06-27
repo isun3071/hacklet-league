@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import statistics
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
@@ -78,6 +79,17 @@ def response_uncompressed(resp, arg=1024) -> bool:
     return len(resp.content) > int(arg)
 
 
+def response_has_header(resp, arg) -> bool:
+    return str(arg) in resp.headers  # presence is the slop (e.g. X-Powered-By leaks the stack)
+
+
+def response_is_aws_credentials(resp, arg=None) -> bool:
+    # an AWS credentials file served at the webroot — content-signatured so an SPA catch-all 200 (the
+    # index shell) doesn't false-positive the way a bare 200 check would.
+    t = resp.text.lower()
+    return "aws_access_key_id" in t or "aws_secret_access_key" in t
+
+
 # High-confidence server secrets that must never reach a client. Precision over recall: we skip
 # public-by-design values (Firebase apiKey AIza..., Stripe publishable pk_..., generic JWT session
 # tokens), because a false positive wrongly penalizes a non-flaw.
@@ -123,6 +135,8 @@ MATCHERS = {
     "response_cors_misconfigured": response_cors_misconfigured,
     "response_server_error": response_server_error,
     "response_uncompressed": response_uncompressed,
+    "response_has_header": response_has_header,
+    "response_is_aws_credentials": response_is_aws_credentials,
     "response_leaks_secret": response_leaks_secret,
     "response_is_dotenv": response_is_dotenv,
     "response_is_git_config": response_is_git_config,
@@ -269,6 +283,49 @@ def slow_first_paint(ctx, probe) -> bool:
     return statistics.median(vals) > probe.probe.get("threshold_ms", 1000)
 
 
+def console_errors_present(ctx, probe) -> bool:
+    """Browser oracle: the page throws an uncaught JavaScript error on load — broken regardless of
+    intent. Browser-gated."""
+    url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
+    n = browser.console_errors(url, headers=ctx.headers)
+    return isinstance(n, (int, float)) and n > 0
+
+
+def a11y_violations_present(ctx, probe) -> bool:
+    """Browser oracle: presence-based accessibility violations (missing lang / alt / field label /
+    control name) above the threshold. Browser-gated; presence only, so intent-independent."""
+    url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
+    n = browser.a11y_violations(url, headers=ctx.headers)
+    return isinstance(n, (int, float)) and n > probe.probe.get("threshold", 0)
+
+
+_REDIRECT_PARAMS = ("next", "url", "redirect", "return", "dest", "continue", "to", "r")
+_REDIRECT_PROBE_HOST = "hacklet-redirect-probe.example"
+_REDIRECT_ENDPOINTS = ("/redirect", "/login", "/logout", "/go", "/out", "/auth/callback", "/sso")
+
+
+def open_redirect(ctx, probe) -> bool:
+    """A user-controlled redirect param that sends the browser to an arbitrary EXTERNAL host -> open
+    redirect (phishing / OAuth-token theft). Intent-independent: fires only on a 3xx whose Location
+    host is our foreign probe host. Tests discovered routes plus common redirect endpoints/params."""
+    evil = {p: "https://" + _REDIRECT_PROBE_HOST + "/x" for p in _REDIRECT_PARAMS}
+    seen = set()
+    with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=False,
+                      headers=ctx.headers) as c:
+        for path in list(ctx.profile.routes) + list(_REDIRECT_ENDPOINTS):
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                resp = c.get(path, params=evil)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if resp.is_redirect and urllib.parse.urlparse(
+                    resp.headers.get("location", "")).hostname == _REDIRECT_PROBE_HOST:
+                return True
+    return False
+
+
 def idor_horizontal(ctx, probe) -> bool:
     """Self-as-oracle: register A and B, A creates a resource, B fetches it by URL. If B can read
     A's content, object-level access control is broken (horizontal IDOR)."""
@@ -380,6 +437,9 @@ PREDICATES = {
     "race_resource_ids": race_resource_ids,
     "load_resilience": load_resilience,
     "slow_first_paint": slow_first_paint,
+    "console_errors_present": console_errors_present,
+    "a11y_violations_present": a11y_violations_present,
+    "open_redirect": open_redirect,
 }
 
 
@@ -393,6 +453,8 @@ _MATCHER_REASONS = {
     "response_cors_misconfigured": "reflects an arbitrary Origin with credentials (CORS)",
     "response_server_error": "returned a 5xx server error",
     "response_uncompressed": "sizeable text served without gzip (no Content-Encoding)",
+    "response_has_header": "leaks the {arg} header (stack / version disclosure)",
+    "response_is_aws_credentials": "served an AWS credentials file at the webroot",
     "response_leaks_secret": "leaked a secret (private key / cloud or API token)",
     "response_is_dotenv": "served a .env secrets file",
     "response_is_git_config": "served .git/config (source repo exposed)",
@@ -409,6 +471,9 @@ _PREDICATE_REASONS = {
     "load_resilience": "endpoint 5xx'd under a concurrent burst",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
+    "console_errors_present": "threw an uncaught JavaScript error on load",
+    "a11y_violations_present": "accessibility violations (missing alt / form label / lang / control name)",
+    "open_redirect": "a user-controlled parameter redirects to an arbitrary external host",
 }
 
 

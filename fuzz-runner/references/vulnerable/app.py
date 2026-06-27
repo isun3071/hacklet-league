@@ -57,6 +57,7 @@ HOME = b"""<!doctype html><html><body>
   <button type="submit">add note</button>
 </form>
 <script src="/config.js"></script>
+<script>hacklet_undefined_fn();</script>
 </body></html>"""
 
 
@@ -70,6 +71,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Powered-By", "Express")  # leaks the stack — disclosure slop
         origin = self.headers.get("Origin")
         if origin:  # reflects ANY origin + allows credentials -> CORS misconfiguration
             self.send_header("Access-Control-Allow-Origin", origin)
@@ -100,6 +102,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
         if self.path == "/.git/HEAD":
             return self._send(200, "ref: refs/heads/main\n", "text/plain")
+        if self.path == "/.aws/credentials":  # cloud creds served at the webroot — critical exposure
+            return self._send(
+                200, "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\n"
+                "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n", "text/plain")
         if self.path.startswith("/dom"):  # DOM-sink XSS: client JS innerHTMLs a URL param (unescaped)
             return self._send(200, '<div id="out"></div><script>'
                               'document.getElementById("out").innerHTML = '
@@ -140,6 +146,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/heavy"):
             time.sleep(1.5)  # slow: over the TTFB gate, but small enough to keep the suite fast
             return self._send(200, "done")
+        if self.path.startswith("/redirect"):  # open redirect: reflects any destination, no validation
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            dest = (q.get("next") or q.get("url") or q.get("redirect") or q.get("return")
+                    or q.get("dest") or [""])[0]
+            if dest:
+                self.send_response(302)
+                self.send_header("Location", dest)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._send(400, "no destination")
         return self._send(404, "not found")
 
     def do_POST(self):

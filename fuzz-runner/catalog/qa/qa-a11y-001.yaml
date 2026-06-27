@@ -1,0 +1,12 @@
+id: qa-a11y-001
+bundle: qa
+category: accessibility
+pool: public
+evidence_model: oracle
+penalty: 5
+applicability:
+  requires: [browser]   # needs a rendered DOM; N/A without --browser
+probe:
+  predicate: a11y_violations_present
+  target: /
+  threshold: 0   # fire on any presence-based violation (missing alt / label / lang / control name)

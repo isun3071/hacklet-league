@@ -70,7 +70,7 @@ def test_cwv_detects_slow_paint(serve):
 # End-to-end: the browser probes through the FULL pipeline (browser capability gate + predicate +
 # scoring), not just the helper primitives above. Closes the gap where run(..., render=...) — and so
 # the browser_ok gate and the median-of-N slow_first_paint predicate — was never exercised.
-_BROWSER_PROBES = ("sec-domxss-001", "perf-cwv-001")
+_BROWSER_PROBES = ("sec-domxss-001", "perf-cwv-001", "qa-console-001", "qa-a11y-001")
 
 
 def _browser_run(app: str):
@@ -82,9 +82,13 @@ def test_browser_pipeline_fires_on_vulnerable():
     o = _browser_run("vulnerable").by_id
     assert o["sec-domxss-001"] == "slop_detected"  # /dom innerHTMLs q -> the injected payload executes
     assert o["perf-cwv-001"] == "slop_detected"    # /slow paints late -> median FCP over the gate
+    assert o["qa-console-001"] == "slop_detected"  # homepage throws an uncaught JS error on load
+    assert o["qa-a11y-001"] == "slop_detected"     # missing lang + unlabeled inputs
 
 
 def test_browser_pipeline_clears_on_hardened():
     o = _browser_run("hardened").by_id
     assert o["sec-domxss-001"] == "clean"          # /dom uses textContent -> no execution
     assert o["perf-cwv-001"] == "clean"            # /slow content in initial HTML -> fast FCP
+    assert o["qa-console-001"] == "clean"          # no uncaught errors on load
+    assert o["qa-a11y-001"] == "clean"             # lang set + every input aria-labeled
