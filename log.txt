@@ -1,0 +1,1112 @@
+commit 7fdcbaa7654f9c80f3380e770ffc89e77429801d
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 27 19:22:39 2026 -0400
+
+    feat(fuzz-runner): +5 probes — console-errors, accessibility, open-redirect, AWS-creds exposure, X-Powered-By
+    
+    Bundled because the console/a11y batch wasn't committed before the next, so probes.py + the references carry both.
+    
+    BROWSER-GATED (intent-independent, hand-rolled, no axe-core; N/A in the no-browser suite so the 379 baseline is unchanged — they fire in the --browser pipeline):
+    - qa-console-001 (pen 8): uncaught JS error on load (Playwright pageerror).
+    - qa-a11y-001 (pen 5): presence-based a11y violations (missing lang / img alt / field label / control name) via a hand-rolled DOM check.
+    
+    NO-BROWSER (raise the vulnerable baseline 379 -> 412):
+    - sec-redirect-001 (pen 20): open redirect — a user-controlled param 3xx's to a foreign host; tests discovered routes + common redirect endpoints/params; fires only when the Location host is our foreign probe host (low-FP).
+    - sec-exposure-004 (pen 35): /.aws/credentials served at the webroot (content-signatured, so an SPA catch-all 200 doesn't false-positive).
+    - sec-headers-006 (pen 2): X-Powered-By present (stack/version disclosure).
+    
+    References: vulnerable homepage throws + keeps a11y violations, serves /.aws/credentials, sets X-Powered-By, adds an open /redirect; hardened homepage made accessible (lang + aria-labels) and adds a validated /redirect; minimal gains lang. Calibration: no-browser vulnerable 379 -> 412, hardened 0, minimal 0. Catalog 34 -> 39. Tests: 47 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit f26d63ab6124864ad0ffe48a1e87593aff7ec2d8
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 27 18:45:23 2026 -0400
+
+    docs(ideas): propagate three-format taxonomy + add Underspecified credentialing leg (ambiguity-readiness)
+    
+    Bring IDEAS_FOR_LATER.md in line with format_spec.md's canonical three-format taxonomy:
+    - count: 2x5=10 -> 3x5=15 variants; format axis enumerates Vibe/Unslop/Underspecified (taxonomy + variant-pruning entries).
+    - credentialing hierarchy gains its third leg: Vibe = interview-readiness, Unslop = work-readiness, Underspecified = ambiguity-readiness (decomposition under a vague brief — the FDE interview's most predictive signal; deliverable = a tested foundation a client can understand). Slop axis applies to all three; judge weight heaviest for Underspecified (format_spec.md §4.5).
+    - anti-slop positioning: 'build or fix' -> 'build / fix / frame'; three-format coverage.
+    - title accumulation + format-lane championship now span all three formats.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 32b3c335d31e0e4eeb24a600e26a614eee749bc4
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 27 18:40:53 2026 -0400
+
+    docs(format): add HackLet Underspecified, no-permanent-meta principle, two-axis/tester-judge split, FDE positioning; expand 24-min rationale
+    
+    format_spec.md: Underspecified as canonical third format (§1/§2, 10->15 variants); two-axis architecture — fuzz = intent-independent objective axis, human tester judge owns intent-dependent axis incl. logical errors (§4.2); new §4.5 Tradeoffs and the Absence of a Permanent Meta (axes conflict under the clock; instrumental to the credential; Goodhart defused by hidden pool + judge + benign gaming; Underspecified bold-vs-timid guard); expanded 24-min rationale with time-stakes-as-material-stakes via clock-vs-fuzzer tension + club-fit/broadcast (§5.1); two-format -> three-format coverage + Forward Deployed Engineer 'potential FDE' entry-pathway positioning (§11). Propagated 2->3 format count to DATA_MODEL.md and claude.md.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 6090695f6b71fbb60b4ff4fc8b9fb76d4ffe3ddb
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 18:23:09 2026 -0400
+
+    feat(fuzz-runner): per-finding point value + 'why it fired' in verbose and --failed
+    
+    Each Outcome now carries a derived reason; verbose and --failed surface the penalty and the why so a finding is actionable, not just a name.
+    
+    - schema: Outcome.reason (slop only; empty for clean/N-A).
+    - probes.describe(probe): a short human reason derived from the predicate or the slop_if conditions — e.g. 'missing header: content-security-policy', 'login bypassed by a SQL-injection payload', 'reflects an arbitrary Origin with credentials (CORS)'. Not live evidence, but enough to know what failed and act.
+    - pipeline: sets reason=describe(probe) on slop outcomes (predicate + declarative fan-out).
+    - cli: -v shows 'SLOP -<penalty>  category  target  reason'; --failed gains a WHY column; --json carries reason via asdict.
+    - fix: ttfb reason unit was ms but the matcher compares seconds -> '>1.0s'.
+    
+    Calibration unchanged (reason is additive): 47 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit d0baf1f76778c22131ec42c3e60f4f990063d4c7
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 18:12:55 2026 -0400
+
+    feat(fuzz-runner): live progress output — --verbose stream + default progress bar
+    
+    The runner was silent until the final report. Add visibility via a run() on_progress hook, all on stderr so --json/--failed on stdout stay clean:
+    
+    - pipeline: extracted _run_probe (one probe -> its outcomes) so run() can fire on_progress(done, total, probe, outcomes) per probe — before each (outcomes=None, shows what's currently testing) and after (with its outcomes). Behavior-identical refactor; calibration unchanged (379/0/0).
+    - cli: -v/--verbose streams every probe/target/outcome ('▸ [i/N] probe-id', then SLOP/ok/-- per target); the default shows a one-line progress bar with the current bundle/category; -q/--quiet suppresses it. The bar is TTY-gated (isatty) so piped/CI runs and --json stay clean.
+    
+    Test: on_progress fires exactly one start + one done per probe (none skipped). 47 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 3151a4071909302900b5bfc0ef54ab6289b6a3d2
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 17:47:14 2026 -0400
+
+    feat(fuzz-runner): authenticated probing (--header) + gzip & routing-crash probes
+    
+    Bundled because the --header commit wasn't run before this batch, so probes.py holds both.
+    
+    AUTHENTICATED PROBING (--header): black-box-only stopped at the login wall; an SSO-gated app's authenticated surface was invisible. New repeatable --header 'Name: Value' injects auth on every request ('Cookie: session=...' or 'Authorization: Bearer ...'), threaded through run -> discover (crawl) + the shared pipeline client + _served + the load burst, and into the browser harness via _apply_auth (Cookie -> cookie jar, others -> extra HTTP headers) so authed SPA discovery + DOM-XSS + CWV work too. The self-as-oracle auth probes don't inherit it (self-register fresh -> N/A on SSO). Test: an inline header-gated server proves the header unlocks the authed crawl.
+    
+    GZIP (perf-compress-001, penalty 5, new 'compression' category): a >512-byte text response with no Content-Encoding -> wasted bandwidth. New size-gated response_uncompressed matcher (small bodies legitimately skip compression). Hardened now gzips sizeable responses; vulnerable doesn't -> fires.
+    
+    ROUTING CRASH (qa-crash-007, penalty 6, crash-resistance): a malformed-encoding path (/%ff%fe) should 404; a naive router 500s. Generic (not a reference-specific route) so it's meaningful on real apps. Vulnerable now strict-decodes the path and 500s; hardened 404s.
+    
+    Calibration: vulnerable 373 -> 379 (compress +5, crash-resistance 6->7 fires), hardened 0, minimal 0. Tests: 46 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit be66996f2086c43d12e53324a7efc8a4dfed0d38
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:53:56 2026 -0400
+
+    feat(fuzz-runner): login rate-limiting probe (self-as-oracle) — flags missing brute-force protection
+    
+    sec-ratelimit-001 (penalty 15, new 'rate-limiting' category): fires 10 wrong-password logins at the discovered login form; slop if NONE is throttled (HTTP 429/423). No brute-force protection -> every attempt returns the same auth-failure status, enabling credential stuffing / password spraying.
+    
+    - auth.login_form: finds the login (not register) password form — prefers a login-hinted action, else any non-register password form.
+    - login_no_rate_limit uses its OWN username (hacklet_probe_rl) on a fresh client, so a per-account lockout can't collide with sqli_auth_bypass (which also POSTs /login).
+    - hardened reference: per-username lockout (_LOGIN_FAILS, threshold 5 under _LOCK) -> 429 after repeated failures. Per-username (not per-IP) so the fixture isolates cleanly: sqli's 'zzz_no_such_user' baseline hits /login only ~3x across the 3 variants (< 5) and stays clean; the probe still detects per-IP defenses on real targets (N same-IP attempts trip them).
+    
+    Calibration: vulnerable 358 -> 373 (+15), hardened 0 (locks out -> clean; sqli unaffected), minimal N/A (no password form). Tests (pipeline/remote/docker): 45 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 2f87a2b292d63f991b1315d184801d060831c6d0
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:42:50 2026 -0400
+
+    feat(fuzz-runner): CORS-misconfig + cookie-Secure probes
+    
+    Two new security probes, both observable + intent-independent + low false-positive:
+    
+    - sec-cors-001 (penalty 25, new 'cors' category): sends Origin: <foreign> and fires only when the app REFLECTS it into Access-Control-Allow-Origin AND sets Access-Control-Allow-Credentials: true -> any site can make credentialed cross-origin reads. Bare ACAO:* is deliberately excluded (browsers refuse credentials with *), so this flags only the genuinely exploitable case. The matcher reads the sent Origin from resp.request (no hardcoded constant to drift).
+    - sec-session-003 (penalty 15): the session cookie lacks Secure -> can transit in cleartext on an HTTP downgrade. Reuses the session_cookie_missing_flag predicate with flag=secure. NOT https-gated (unlike HSTS): a missing Secure flag is a real exposure regardless of the current scheme.
+    
+    References: vulnerable _send now reflects any Origin with credentials; hardened cookie gains Secure. Calibration: vulnerable 328 -> 358 (cors +25, session 29 -> 34.4), hardened 0, minimal 0 (cors clean — no reflection; secure N/A — no password form). Tests updated (pipeline/remote/docker): 45 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit b647bb872e129e3b583d8860beb6abd4d2f81400
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:34:17 2026 -0400
+
+    feat(fuzz-runner): security-header depth — CSP, HSTS, clickjacking, Referrer-Policy
+    
+    sec-headers-001 only checked X-Content-Type-Options. Added the high-signal headers — all observable, intent-independent, low false-positive:
+    
+    - sec-headers-002 CSP (penalty 8) — the #1 XSS mitigation
+    - sec-headers-003 HSTS (penalty 5) — gated on a new served_over_https capability, so it reads N/A over plain HTTP (flagging it there would be a false positive) and applies only to https:// targets
+    - sec-headers-004 clickjacking (penalty 5) — custom matcher accepts EITHER X-Frame-Options OR a CSP frame-ancestors directive, so a modern CSP-only app isn't false-flagged
+    - sec-headers-005 Referrer-Policy (penalty 2)
+    
+    Each checks the homepage once (global headers -> proportionate; fanning across routes would over-weight the category vs SQLi). References: hardened + minimal now set the headers (stay clean), vulnerable sets none (fires). Calibration: vulnerable 322 -> 328 (security-headers category 7.42 -> 13.68, dampened), hardened 0, minimal 0. Tests updated (pipeline/remote/docker): 45 passed, 7 skipped.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 595c2fda52b02e79d20c9d0369e67f879b61cfae
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:34:14 2026 -0400
+
+    fix(fuzz-runner): cap dom_xss probe wall-clock so a slow-loris target can't tie it up ~3 min
+    
+    dom_xss_executes did up to 24 sequential page.goto at 8s each (~3 min worst case) against an untrusted target. Add a 45s overall deadline (time.monotonic) alongside the existing max_attempts cap, so a target that stalls each load degrades the probe quickly instead of throttling the grade. Browser tests: 6 passed.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 98121401c6b5bc83a29296116636807b8d981285
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:12:52 2026 -0400
+
+    feat(fuzz-runner): JSON-crash probes read N/A when no JSON API is served (no fake clean)
+    
+    qa-crash-004/005/006 POST malformed JSON to /api/items expecting a graceful 4xx (slop if 500). On a real app that doesn't serve it they 404'd -> read clean -> presented coverage they didn't provide. New per-probe 'na_if_absent: true': when the target endpoint/method isn't served (404/405/501), the probe reads not_applicable, not clean. Chose N/A over fanning JSON payloads across form endpoints because form-endpoint crash-resistance is already covered by qa-crash-001/002/003 (/profile) — fanning would duplicate it with less precision and false-positive risk. References serve /api/items -> fire/clean unchanged (322/0/0); minimal (501) now reads N/A. Tests: 45 passed, 7 skipped (Docker).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit fb57d8ecd6f3c78127792b9e525cdc11f3675add
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:12:49 2026 -0400
+
+    test(fuzz-runner): end-to-end browser-pipeline calibration (run with render=...)
+    
+    The browser probes were only tested via their helper primitives; run(..., render=...) — the browser_ok capability gate + the median-of-N slow_first_paint predicate + scoring — was never exercised. Two tests grade the vulnerable and hardened references through the full rendered pipeline: sec-domxss-001 and perf-cwv-001 fire on vulnerable, clear on hardened. Tests: 45 passed (2 new), 7 skipped (Docker).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit d9f30603fee56288d79486ee3144dc9d780052d9
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 16:12:46 2026 -0400
+
+    feat(fuzz-runner): load/CWV real-target coverage (homepage fallback) + collapse _fanout helper
+    
+    Two probes.py changes from the E batch:
+    
+    Real-target coverage (bounded, no DoS): load_resilience and slow_first_paint targeted literal paths only the references serve (/report, /slow), so on a real app they 404'd -> read clean -> zero signal while looking like coverage. Each now uses its declared endpoint when actually served (references -> calibration fires unchanged), else falls back to the homepage — the representative, always-present endpoint. Deliberately NOT a fan across all routes: bursting every endpoint of a live target is a DoS. New _served(ctx, path) does the not-404 check.
+    
+    Cleanup: extracted _fanout(work, n) from the two duplicate ThreadPoolExecutor blocks; _concurrent_creates and _concurrent_get now wrap it.
+    
+    Verified: references 322/0/0; on minimal (no /report) load falls back to / and tests it. Tests: 45 passed, 7 skipped (Docker).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 1bd5864e6abc49ae94e85e271077e1cf3597f65e
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 14:53:59 2026 -0400
+
+    fix(fuzz-runner): determinism + gating — median-of-N perf oracles, browser capability via actual render
+    
+    Code-review determinism batch. All calibration-neutral (322/0/0):
+    
+    - slow_first_paint (CWV) and load_resilience were single-sample threshold oracles: a target whose true FCP or 5xx-under-load ratio sits near the gate flipped True/False between runs -> a different slop_score for the SAME target (violates same-target-same-score). Both now take the median of 3 samples (the TTFB matcher already documented this pattern). FCP also filters non-numeric samples (hostile-page TypeError guard).
+    - discovery 'browser' capability was (render is not None) — True whenever --browser is passed, even if Playwright/Chrome can't launch. Browser-gated probes were then 'applicable' but their predicates returned False -> scored 'clean' instead of N/A (a real DOM-XSS scored clean on a browserless box; machine-dependent score). Now gated on an ACTUAL successful render (home-page render returning HTML), so it reads N/A when no browser works.
+    
+    Tests: 43 passed (incl. 4 browser), 7 skipped (Docker).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit e90cbc9f14d8225fb83bdf45dee15c72b980f8bb
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 14:46:24 2026 -0400
+
+    fix(fuzz-runner): scoring accuracy — csrf redirect-rejection, race field-fill, load counts dropped connections
+    
+    Code-review scoring-accuracy batch. All calibration-neutral (322/0/0):
+    
+    - csrf_missing: a 3xx (follow_redirects=False) counted as 'accepted cross-site' (status<400), so a defended app that 302-redirects a forged POST to /login was falsely flagged (false-positive, pen 25). Now a redirect to a login/auth/error destination is a rejection (clean); only a redirect to a resource, or a 2xx, counts as accepted.
+    - race_resource_ids/_concurrent_creates: the concurrent POST hardcoded data={'text':'race'} and ignored the discovered form's fields (unlike idor/csrf). A real create form named content/body/title got an empty POST -> no resources -> race never detected (false-negative). Now fills form.fields like the siblings.
+    - load_resilience: dropped None statuses (connection refused/dropped/timeout) before the 5xx ratio, so an app that crashes the connection read CLEANER than one returning honest 500s. Now counts None as a failure over the whole burst.
+    
+    Tests: 43 passed, 7 skipped (browser).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 3e700618251423f1714d13cd8e456f8b59daf90b
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 14:46:20 2026 -0400
+
+    fix(fuzz-runner): auth correctness — self-as-oracle suite works on real apps, not just the references
+    
+    Code-review found the self-as-oracle auth probes were near-inert against real apps (the references happen to dodge all four gaps). All calibration-neutral (322/0/0):
+    
+    - session_cookie now reads Set-Cookie across the whole redirect chain (resp.history), not just the final response. register_account follows redirects, and the common POST /register -> 302 -> dashboard sets the session cookie on the 302; reading only the final 200 returned None, so sec-session-001/002 and csrf all silently read clean on real redirect-based registration.
+    - SameSite=None now reads as UNDEFENDED. parse_set_cookies recorded samesite by mere presence, so SameSite=None (the cross-site opt-out, zero CSRF defense) scored identically to Lax/Strict. Now parses the value: True only for lax/strict.
+    - session-cookie name matching recognizes framework-namespaced names (myapp_session, laravel_session, __Host-session, next-auth.session-token) via substring hints, not just the exact set; still excludes csrf/xsrf tokens.
+    - per-call random username (was fixed 'hacklet_probe'+suffix): a unique-username app rejected the fixed name on re-grade (run 2+), nulling the session and flipping the probes to clean. Score is independent of the username value -> still deterministic.
+    
+    Tests: 43 passed, 7 skipped (browser).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 2bb70e1b8894105dfdf8185798ad9130e0fda0ad
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 12:16:26 2026 -0400
+
+    fix(fuzz-runner): crash-resilience — hostile-target edge cases degrade one probe, never DNF the grade
+    
+    Code-review (Stage-5 self-as-oracle batch) found the runner could be crashed mid-grade by an untrusted target's response. Keystone + 7 guards, all calibration-neutral (322/0/0 unchanged):
+    
+    - pipeline.run: wrap predicate dispatch in try/except -> a predicate that raises degrades THAT probe to N/A instead of aborting run() with no Report. Calibration is the backstop (an always-raising predicate fails the suite).
+    - httpx.InvalidURL is NOT a subclass of httpx.HTTPError: a control-char form action/href survived discovery and made client.request raise InvalidURL, escaping every 'except httpx.HTTPError'. Now caught at all four request sites (pipeline fan-out, discovery crawl, auth.register_account, idor_horizontal); register_account also closes its client on this path (was leaking it).
+    - csrf_missing: the cross-site POST was unguarded (only try/finally) -> a transport/URL failure mid-POST crashed the run; now returns False (clean).
+    - race_resource_ids: dict(account.client.cookies) raises httpx.CookieConflict when the session cookie is set on >1 path/domain during the register redirect chain; iterate the jar instead.
+    - slow_first_paint: isinstance guard on the FCP value -> a hostile page redefining performance.* can't make 'fcp > threshold' raise TypeError.
+    
+    Tests: 43 passed, 7 skipped (browser).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit b3132853299493de1ca893861a37968186a41821
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 01:40:35 2026 -0400
+
+    feat(fuzz-runner): load-resilience probe (perf) — concurrent burst, fire if >10% 5xx under load (unsynchronized shared state; perf-load-001, pen 10); references gain /report (vulnerable unsync dict crashes under concurrency, hardened locked snapshot); _concurrent_get primitive; tests (vulnerable 322)
+
+commit bc610010a0555141e6d12a80c5100726cee36b42
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 01:31:08 2026 -0400
+
+    feat(fuzz-runner): race-condition probe (self-as-oracle) — fire N concurrent resource creates, flag duplicate IDs (non-atomic id allocation; qa-race-001, pen 25); references switch to ThreadingHTTPServer (vulnerable racy increment, hardened locked); concurrency primitive _concurrent_creates; tests (vulnerable 312)
+
+commit ce2781c99b72f4c2663dcec6e25f0a41bacb8f1f
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 25 01:21:10 2026 -0400
+
+    feat(fuzz-runner): crash-resistance battery (QA) — JSON malformed-input gauntlet (bad JSON / wrong type / missing field → 500; qa-crash-004/005/006) targeting the #1 non-security slop (error handling); references gain /api/items (vulnerable crashes, hardened validates to 400); executor gains a raw `body` field; tests (vulnerable 287)
+
+commit 6fcbdb90c240e316c0015a4f5a74c57c573a6dd6
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 23:47:49 2026 -0400
+
+    feat(fuzz-runner): browser probes — DOM-XSS oracle (render + <img onerror> execution detection; sec-domxss-001, browser-gated, pen 30) catches reflected-that-executes + DOM-sink XSS a source check misses; references gain a /dom sink (vulnerable innerHTML, hardened textContent); discovery src extraction generalized to all tags (img/iframe/source/...); browser capability gate; tests (no-browser 284, --browser 314)
+
+commit 13b7d7bac3748a7ede7698f744d4d67c89752fa2
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 23:35:29 2026 -0400
+
+    feat(fuzz-runner): browser harness — Playwright render for client-rendered (SPA) form/route discovery; browser-agnostic launch (bundled chromium → system chromium/chrome/msedge; Ubuntu 26.04 bundled needs Playwright ≥1.61, unreleased, so system Chrome used here); --browser flag; discovery merges rendered DOM; SPA reference + browser-gated tests; playwright optional dep-group
+
+commit 4a65ddc19ebd6f4d70fb1af20d30da95bc92a436
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 23:00:30 2026 -0400
+
+    feat(fuzz-runner): CSRF + SameSite probes (self-as-oracle) — sec-csrf-001 (cross-site POST accepted with no token + no SameSite → pen 25, auto-clears when SameSite/token defends) + sec-session-002 (missing SameSite, 15); generalize session probe to a flag-parameterized predicate; auth.is_csrf_field; tests (vulnerable 284)
+
+commit c6ff45f86fc486ebfbc4fa9683410b07de1e79a2
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 22:52:42 2026 -0400
+
+    feat(fuzz-runner): two-account IDOR (self-as-oracle flagship) — A creates a note, B reads it → broken access control (sec-idor-001, pen 40); references gain stateful sessions + owned /notes (vulnerable any-logged-in, hardened owner-only); auth.create_form; pipeline keeps the shared client stateless (no cross-form cookie leak); tests (vulnerable 250)
+
+commit 8e4ba1c679f8bb128a9eeb18597aa7d4b91e9bdb
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 22:36:17 2026 -0400
+
+    feat(fuzz-runner): self-as-oracle — auth.py registers the runner own account (find password form, fill, POST, capture session); sec-session-001 fires when the session cookie lacks HttpOnly; references gain /register + sessions (vulnerable no flags, hardened HttpOnly+SameSite); any_form_has_password capability; auth + calibration tests (vulnerable 210)
+
+commit 39fff135ac4c05328bc76e14cf51bd94a1c6c10c
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 22:26:48 2026 -0400
+
+    fix(fuzz-runner): zip-bomb guard — stream-extract each member with a running cap on actual decompressed bytes (stop trusting forged file_size headers); per-member dir handling; zip-bomb test
+
+commit 8015684e4203abf5b15897d92dfbcc39bd925ed5
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 22:23:25 2026 -0400
+
+    fix(fuzz-runner): review batch — _DOTENV catches TOKEN/bare-KEY/export-prefixed keys; git-head matches detached SHA; discovery attr regexes reject data-* (no-boundary mis-parse); probe emits N/A when all fan-out fetches fail (no silent vanish); _container_ip indexes the target network; RemoteDeployer requires <500 (5xx no longer "healthy"); tests
+
+commit 9de82e6ed6fdac711e6950517a49afce4a924d9b
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 22:00:29 2026 -0400
+
+    feat(fuzz-runner): unauthenticated-exposure family — dotfile/.git matchers (200 + content signature, precision) + sec-exposure-001/002/003 (/.env, /.git config+HEAD variant-grouped); vulnerable reference serves them; matcher + calibration tests (vulnerable 190)
+
+commit 02f0f14262ce6553763f8fa5a62eaa71b10248db
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 20:22:58 2026 -0400
+
+    feat(fuzz-runner): secrets-exposure family — response_leaks_secret matcher (high-confidence corpus, precision over recall) + sec-secrets-001 (route-fanned, variant-grouped, pen 35); discovery captures <script src> for JS scanning; references leak fake AWS key in /config.js; matcher + calibration tests (vulnerable 137)
+
+commit eecfeca5239d5bb9ef81b1aeb3d0744cc8a1cf73
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 17:58:02 2026 -0400
+
+    docs(fuzz-runner): spec — intent-boundary carve-out (unauthenticated exposure + secrets-in-the-open + auth mechanics via self-as-oracle are runner-owned; authz semantics stay human); calibration anchored to real-world slop frequency
+
+commit 886bf885d394ff79ab2c00b7f3b8b13765097fe3
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 17:36:34 2026 -0400
+
+    docs(fuzz-runner): spec — Project identity & scope philosophy (standalone universal grader the league plugs into; ~95% intent-independent comprehensiveness; humans carry intent; moat = the score, not check-count)
+
+commit 6b51258e5a3a2496497934f8cca456bcc0592ffa
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 17:14:13 2026 -0400
+
+    feat(fuzz-runner): CLI output modes — human summary by default, --failed for a slop-only table, --json for the full report; grouped --help with examples; renderer tests
+
+commit 88a26bcdea36b43486f14b94e9219d0ca23771f3
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 16:45:49 2026 -0400
+
+    feat(fuzz-runner): forms fan-out — target: forms selector fills + submits each discovered form (GET→params, POST→body); sec-xss-001 fans across forms; reflective /search form on references; tests
+
+commit d7d5354bd618a9c6cfed2b3a275d19ee8de51655
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 15:56:39 2026 -0400
+
+    feat(fuzz-runner): per-target fan-out — probes expand a routes selector and fan across discovered routes (one outcome per probe×target); sec-headers-001 per-route; Outcome.target + by_id collapse; trim reference /heavy for fast suite; vulnerable 98→102
+
+commit 4200e26ddef5f81f8ca08460aa1154c59dcd9a2e
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 15:42:07 2026 -0400
+
+    feat(fuzz-runner): discovery depth — bounded same-origin crawl builds a structured surface map (routes + forms with method/fields); Profile gains routes/forms (form_endpoints derived); discovery tests
+
+commit 1e3424932f38e665a2f0a0406bec8d317837d291
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 15:33:12 2026 -0400
+
+    feat(fuzz-runner): RemoteDeployer + --target — dogfood any live URL, no Docker (no-op teardown); remote tests; README dogfooding section
+
+commit ab333d3cdc64d06939e9ea257933fb59e16decb6
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 15:14:18 2026 -0400
+
+    fix(fuzz-runner): DockerDeployer reaches the container by IP on a custom network (-p does not route on --internal); add read-only isolation test
+
+commit b1d6a271630d4eb8429427bbbebfacc60457bd5b
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 14:54:31 2026 -0400
+
+    test(fuzz-runner): verify DockerDeployer hardening (read-only + egress-blocked --internal network preserve 98/0/0; egress-block proof + control); README reflects DockerDeployer is implemented + hardened invocation
+
+commit 6c98ae029bd0fddd886237d32dd37a7db02cdfe9
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 13:11:02 2026 -0400
+
+    feat(fuzz-runner): production DockerDeployer (build/run/health-gate/teardown, quotas + cap-drop, hardening toggles); references bind 0.0.0.0; guaranteed teardown on deploy failure; Docker-gated 98/0/0 calibration test
+
+commit 2b319ed4c1fbebce8c72b3200ebafd5799202be6
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 13:01:24 2026 -0400
+
+    docs(fuzz-runner): spec — Production deploy (DockerDeployer) section (build/run/health/teardown pipeline, exact sandbox flags, DNF-not-crash guarantee, throughput)
+
+commit f4931bd3ed09f39bc56a75977d6238de7fa7707c
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 12:39:11 2026 -0400
+
+    docs(fuzz-runner): CONTRIBUTING.md — probe authoring guide (add/change/remove recipes, matcher/predicate registry, three-way calibration gate)
+
+commit dc83f88af29a676233e37e6e9a5be0226ea22042
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 12:32:41 2026 -0400
+
+    feat(fuzz-runner): author core batch — SQLi variant group (3 syntaxes, parameterized oracle → fires once) + crash-resistance category (3 probes, /profile endpoint, response_server_error matcher, POST-body support → diminishing returns); both dampers proven end-to-end (10 fire, raw 184 → damped 98). 8 tests pass
+
+commit c1d05af873e62bf0fdefa36ea00f41aada03a88e
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 12:20:17 2026 -0400
+
+    feat(fuzz-runner): aggregation dampers — variant-group-fires-once + diminishing-returns-within-category (aggregate.py); per-bundle ordering via penalty calibration, not a runtime multiplier; 9 tests pass
+
+commit 97f7f70c019ecba4bd007991a31d7e36404e97b4
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 02:21:36 2026 -0400
+
+    docs: application self-containment policy — format_spec §5.7 (self-contained apps, no external services/secrets; SQLite/in-memory/browser persistence) + DNF fix in §5.6; reconcile FUZZ_RUNNER deployment contract (only $PORT, drop $DATABASE_URL sidecar, defer client-side storage probing); IDEAS Phase 2/3 integration roadmap
+
+commit 38ff2673f0cdf859a861f1c8e6cbff245d606fde
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 01:52:42 2026 -0400
+
+    feat(fuzz-runner): expand public catalog to 5 probes (SQLi oracle, XSS reflection, security-header, error-hygiene, TTFB) across 3 bundles; minimal reference app completes the vuln/hardened/minimal triad (N/A path); hidden-pool repo boundary (gitignore backstop + FUZZ_RUNNER_SPEC note). 4 tests pass
+
+commit e2b03256c8ef6e7f5355554945dd267d9fe80693
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 00:38:07 2026 -0400
+
+    docs(fuzz-runner): deployment contract — Dockerfile + $PORT + optional $DATABASE_URL sidecar, ~60s health gate → DNF, build=mirror-only / run=no-egress, fixed run envelope
+
+commit 7ac7405e4e092dd67061fc7aa0fb2188be85ff22
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 00:32:19 2026 -0400
+
+    feat(web): /contact page (subject-tagged mailto to iansun20@gmail.com); link about "reach out" → /contact; footer contact link
+
+commit 8d959d933360f9ae9cb73c622bb06c0fe44393ea
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 24 00:24:45 2026 -0400
+
+    feat(web): /about page — origin story, founder bio, how it works, tiers, engage + newsletter; footer link
+
+commit e599ac97a9594f97a1be0f9db5cd6e52d3975e28
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 23:23:35 2026 -0400
+
+    feat(web): /scoring transparency page — slop score, the fuzz pipeline step-by-step, deployment contract, public/hidden catalog; footer + landing links
+
+commit facd430b8691cf1c17c165807367ade3668a5b2e
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 22:37:35 2026 -0400
+
+    docs(slop): composition rules — variant group fires once (corrects per-variant over-counting), diminishing returns within a category, per-bundle scale (security ≫ qa > performance); reconcile FUZZ_RUNNER_SPEC aggregation
+
+commit fb28cf9161a7dd4f5757da2913b341d81ffefa19
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 22:33:51 2026 -0400
+
+    docs(fuzz-runner): pool composition (75/25 split method), stochastic-probe sampling rules (median-of-N timing / any-of-N race), reference-submission matrix (vuln/hardened/minimal triad + stack-diversity clones + CI regression gate)
+
+commit b8c5cf6eaf16b5adec42cd882927f82427898be4
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 21:41:45 2026 -0400
+
+    docs(slop): §4.2 penalty calibration → three-axis model (frequency × worst-case severity × bounded fix-difficulty discount), FDE-grounded; replaces five-axis methodology
+
+commit 223743ce7e5497e894481ff3fbf834aaa0217e40
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 21:23:01 2026 -0400
+
+    feat(slop): landing copy "resilience"→"slop"; note engineering_score is the Stage-3 stand-in for the future deduction-only Slop Score (scoring.py/models.py/RoundResults). engineering_score field left intact until the Stage-5 runner.
+
+commit 6f5412f3f0671e0cc809cc65587b3fa0b0e9d739
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 21:11:18 2026 -0400
+
+    docs(slop): rename Resilience Score → Slop Score (deduction-only, [0,+∞), lower-is-better); cascade format_spec §4 + FUZZ_RUNNER_SPEC + LEAGUE_OPS + tier ops + IDEAS + ROADMAP + DATA_MODEL + ARCHITECTURE + claude.md + PITCH; CHANGELOG entry; preserve "Most Resilient"/"fuzz catalog"/"resilient" adjective
+
+commit fb2eb62b155b69c0d579c775c42e985e033075bb
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 18:52:21 2026 -0400
+
+    docs(stage5): scoring evidence models — failure_only (penalty-only) vs provable_defense (+X/0/−Y); add evidence_model to test schema; reconcile format_spec §4.2 adversarial outcomes + Defense Rate
+
+commit 4aee9ab35de74fe1acc2c8ca5535da5bd745e554
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 14:54:51 2026 -0400
+
+    docs(stage5): fuzz-runner design pass — universal-only catalog + intent-independence litmus, security/qa/performance bundles, TTFB/FCP/INP speed gates, N/A-via-oracle semantics, sandbox threat model, zip-ingest; reconcile format_spec §4.2 CWV exclusion
+
+commit 63bb35db27a6c322bc8a71345a1daa27c903a0f6
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 23 14:02:35 2026 -0400
+
+    fix(meta): site-wide description → "24 minutes of competitive vibecoding. no slop survives."
+
+commit 7c70c3e39894bab2a7f25a034ff7e1a3318d86ac
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 17:09:43 2026 -0400
+
+    feat(dashboard): command-center stats — per-chapter aggregation endpoint + cyber stat cards/band; deep-link targets for nav dropdown
+
+commit 0add95cee47cbfbc421fe67cdda9e722d8d2e0a4
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 16:38:41 2026 -0400
+
+    feat(nav): collapse login-gated links into a [username] dropdown (hover+click, a11y, outside-click/Esc close); deep-link chapter/event mgmt to dashboard anchors
+
+commit 64e6341353c9d1c8721499149212599610db1305
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 15:47:28 2026 -0400
+
+    feat(stage3): round frontend — live poll/countdown, check-in, zip submit, judge console, results + leaderboards; chore(chapters): sync related_name migration
+
+commit 7e10b1c99ac6fedaa295e8e61e1de672c271c76a
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 13:24:50 2026 -0400
+
+    feat(stage3): round frontend — live poll/countdown, check-in, zip submit, judge console, results + leaderboards; chore(chapters): sync related_name migration
+
+commit de2c1342c6de4f01d2e423062a7998e0546401f1
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 12:57:28 2026 -0400
+
+    feat(stage3): rankings — placement-point aggregation, chapter + Tier-A-global leaderboards, recompute on complete/cancel
+
+commit c9e41c6c593c252c70fb418ddd73c28fd8d52878
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 12:47:18 2026 -0400
+
+    feat(stage3): scoring API — judge scores, rank-sum composite + awards, reveal-gated results
+
+commit a57f2caebcbb7973b5ad3b612a6e9e8be8920102
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 12:09:07 2026 -0400
+
+    feat(stage3): submission upload — direct zip (no git), private storage, server-side freeze, auth-gated download
+
+commit 972755ed5f059f6d0c258723802ebc042bca8496
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 10:58:08 2026 -0400
+
+    feat(stage3): round lifecycle API — schedule/start/complete/cancel, clock-derived phase, check-in, poll endpoint
+
+commit fe3fca1837ad4bf143d847a2db9d61e8b9361eeb
+Author: Ian <isun@bu.edu>
+Date:   Mon Jun 22 10:34:28 2026 -0400
+
+    feat(stage3): data layer — rounds (Round/Submission/Score) + rankings (Ranking) + migrations
+
+commit 4096c12f62a5ec3f4afdc9f1a515b87b6b5ff3f1
+Author: Ian <isun@bu.edu>
+Date:   Sun Jun 21 15:36:20 2026 -0400
+
+    feat(newsletter): Buttondown signup via backend proxy (server-side key, double opt-in, throttled)
+
+commit 5cecc9feedf18a75182d259ba5466913b78dd885
+Author: Ian <isun@bu.edu>
+Date:   Sun Jun 21 13:32:31 2026 -0400
+
+    landing: visuals — hero fuzz-waveform, per-format timeline bars, ASCII dividers, format glyphs
+
+commit a9599bed42acbf81dc5af9c8baf7003d91d09cd0
+Author: Ian <isun@bu.edu>
+Date:   Sun Jun 21 00:04:14 2026 -0400
+
+    landing: rewrite (hero/dictionary/how-it-works/CTA) + lowercase hero + hacklet vs HackLet convention
+
+commit 38e802043dbdb75ed7a9198fef772a4a35cdde6a
+Author: Ian <isun@bu.edu>
+Date:   Sun Jun 21 00:00:05 2026 -0400
+
+    landing: rewrite (hero/dictionary/how-it-works/CTA) + hacklet vs HackLet convention
+
+commit 66c58feca5c0db285af652dc5f94e048e8f63ee7
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 22:18:15 2026 -0400
+
+    design: CRT atmosphere + hero boot-reveal + format timeline SVG + role icons
+
+commit b39f855ac7590be12ea906511d76a9fa04a42bbd
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 21:12:26 2026 -0400
+
+    feat(events): registration-window + terminal-status guardrails (incr 4)
+
+commit 54d0acaf6214562fc2c8356e243cbf28b7d2c734
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 19:48:40 2026 -0400
+
+    feat(events): dashboard (events + invitations/applications) + chapter staff management UI
+
+commit b675b4820123386752b59abce8be42fad8567d47
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 18:52:01 2026 -0400
+
+    feat(events): apply buttons + event create/edit forms + organizer manage console
+
+commit d01740d7ca6fbf7bae5a8c165a7936cfd661433f
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 18:09:39 2026 -0400
+
+    feat(events): public event directory + detail pages; chapter tier on event payload
+
+commit e5049dffbf5df74471ef9a935eec09d667d0e6c0
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 17:44:17 2026 -0400
+
+    feat(chapters): ChapterStaff management API + move chapter-role perms to chapters app + tests
+
+commit 5cc068da076f19ef3b56d78fe510c5c946470078
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 17:26:28 2026 -0400
+
+    feat(events): participant flows API (apply/invite/respond/decide/corps-judge) + tests
+
+commit 2465fb0365fcba8ea4caf413222bd926ff0dfa35
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 16:20:24 2026 -0400
+
+    feat(events): Event CRUD API (chapter-manager-scoped) + public read + tests
+
+commit 4b57550fe9cc64f9d5c0ddd3a12cb9270e0953b6
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 15:52:58 2026 -0400
+
+    fix(admin): run Caddy on host network so the tailnet gate sees real client IPs
+
+commit c3c886456ca71e08208009bf64010865fdb5d9aa
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 14:31:52 2026 -0400
+
+    feat(stage2): events app + ChapterStaff refactor; harden admin (secret slug + tailnet-only)
+
+commit d6a334ce21faef58ff29007e313ed321e8ae2ce1
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 12:53:08 2026 -0400
+
+    feat(stage2): events app (Event + EventParticipant), ChapterMembership→ChapterStaff refactor, migrations
+
+commit d468e43aa691c540b2902f9d87e83e499bca6214
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 20 11:54:53 2026 -0400
+
+    docs: reconcile tier split — Tier C three-profile model, MVR=60, award single-source, tier-agnostic round timing, Round schema for 3 profiles
+
+commit 3d453d386576de4d02da495d3b3c2eb4cb990db0
+Author: Ian <isun@bu.edu>
+Date:   Fri Jun 19 10:31:45 2026 -0400
+
+    feat: chapter edit + delete (owner-scoped CRUD) with dashboard actions
+
+commit b3c815f8d316ce8ab15fd9966855bf42718c1690
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 21:17:26 2026 -0400
+
+    fix: absolute callback_url for Google login (relative not honored) + socialaccount_login_error fallback
+
+commit 0c4d75aa44929e77a2573304c43925c7bd4743b0
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 20:58:08 2026 -0400
+
+    fix: install allauth socialaccount extras (requests/oauthlib/pyjwt) so the Google provider imports
+
+commit e19701094cce43621776966077e2b69b3974b591
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 20:41:52 2026 -0400
+
+    feat: Google SSO via allauth socialaccount (headless redirect flow)
+
+commit 0594272c8351b0f58b4d26a204414d399b5b81f4
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 20:19:58 2026 -0400
+
+    docs: fact-check stat attributions, fix $ROUND_ID SCP path, add Unslop as Stage 11 (Agentic -> Stage 12) with taxonomy alignment
+
+commit 8e063078aa1fe93a547b192d0df4f70ebf66a977
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 18:30:07 2026 -0400
+
+    major doc changes made during ideation
+
+commit f4c79d429713c7fc059b7349fdc036d7812e306a
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 18:28:08 2026 -0400
+
+    major doc changes made during ideation
+
+commit feff3f91dd90308f38352e0620ea6cc950db4dd1
+Author: Ian <isun@bu.edu>
+Date:   Thu Jun 18 11:24:51 2026 -0400
+
+    changelog: Stage 1 acceptance verified; close-out fixes
+
+commit 52cbb4fc957182da40367ecd62bb4ba85e18ce11
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 17:09:57 2026 -0400
+
+    updated docs
+
+commit 178d3b4d58e7117f445be72932d2224ffdcdb69d
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 11:41:58 2026 -0400
+
+    chapters: pending-by-default lifecycle; owner dashboard with status badges; status-aware detail banner
+
+commit 351cd307dc919b19db124dc1476a83eea9261833
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 11:19:42 2026 -0400
+
+    fix: allow internal SSR Host (DisallowedHost 500); forward session to SSR so creators see their pending chapter + pending banner
+
+commit e8d6bcda8a3dcec87363a00677e399441885a1b0
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 11:10:07 2026 -0400
+
+    frontend: refresh auth nav on route change; handle already-authenticated (409) login
+
+commit a977ce03edbe3342d5fe84eb267c0fe101cbd0c6
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 10:57:21 2026 -0400
+
+    frontend: decode percent-encoded email-verification key before POST (fixes invalid_or_expired_key)
+
+commit 538cd33ff01d0d6cd7532ee7e502c61f638f1e10
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 00:52:24 2026 -0400
+
+    email: fix Sites record (example.com -> HackLet League) in transactional mail
+
+commit bd7aec53392c5d74096105d9ebb184c928610bdf
+Author: Ian <isun@bu.edu>
+Date:   Wed Jun 17 00:36:58 2026 -0400
+
+    email: forward EMAIL_*/RESEND_API_KEY to backend; send via Resend HTTP API
+
+commit 6af5dcdacf805ea8768cf4064fb6f97e2a248777
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 23:44:22 2026 -0400
+
+    Add CHANGELOG documenting Stage 0 + Stage 1 work
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 3ffff1435b80dbf9e6559245db6fdfbb0289f731
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 21:45:30 2026 -0400
+
+    email: real SMTP in prod (env-driven) with console fallback when unconfigured
+    
+    - prod: EMAIL_BACKEND=smtp when EMAIL_HOST set, else console (never a silent black hole)
+    - DEFAULT_FROM_EMAIL env-overridable
+    - .env.example: Email section (provider SMTP creds; Resend example)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 57cfe9d8eec5f7c012403ced7c599a76ce06d963
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 21:31:18 2026 -0400
+
+    Add DB backup/restore scripts + concrete Hetzner migration runbook
+    
+    - scripts/db-backup.sh: timestamped gzipped pg_dump -> backups/
+    - scripts/db-restore.sh: restore a dump into an empty DB (single-transaction)
+    - .gitignore: backups/ (dumps contain user data)
+    - DEPLOY.md: full host-migration runbook (clone + .env + dump/restore + DNS cutover + runner)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit a441334bd761ee2aa1bce4b7080f0788903e8f99
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 21:19:31 2026 -0400
+
+    ci/cd: gate deploy on tests passing (single workflow, deploy needs backend+frontend)
+    
+    - merge deploy into ci.yml as a 'deploy' job with needs:[backend,frontend]
+    - deploy only on push to main (if guard), skipped on PRs
+    - remove standalone deploy.yml
+    - a failing test/build now blocks the VM deploy
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit fbac63d2477ccd8d18b680bef9adaaf973d5902b
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 21:10:56 2026 -0400
+
+    deploy: concurrency guard + resolve deploy dir via repo variable
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit ad1dcdff2f9b1bcca40d0aa74981a3b1855580a2
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 21:01:28 2026 -0400
+
+    ci: pin pnpm@10 to match the lockfile (avoid frozen-lockfile mismatch)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit ba8387f3fe4ee993237fdf33b5a57501b64706db
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 21:00:48 2026 -0400
+
+    Stage 1: CI (GitHub Actions) + deploy workflow + uptime monitoring docs
+    
+    - .github/workflows/ci.yml: backend pytest (Postgres service) + frontend pnpm build, on PR + push
+    - .github/workflows/deploy.yml: self-hosted-runner auto-deploy on merge to main
+    - scripts/deploy.sh: idempotent VM deploy (reset to origin/main, rebuild, prune dangling)
+    - DEPLOY.md: CI/CD + uptime (UptimeRobot on /api/healthz) section
+    - roadmap/status + memory: public (not publicized) on the domain, prod settings
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 5449a67dc341be49802bb1afd91d2252bf991978
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 20:52:29 2026 -0400
+
+    env.example: production (public-domain) config + prod/dev guidance
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 5e3d75fc2b91caa9bfcff6431138c2aa674242eb
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 20:28:09 2026 -0400
+
+    IDEAS: park social SSO (GitHub/Google via allauth) as a launch-time add
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit f2918b002cd956d60a2e3149aeb69ddac9e5881c
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 20:20:51 2026 -0400
+
+    Stage 1 frontend (3/3): auth flow + profile + chapter creation
+    
+    - backend: /api/csrf/ ensure-cookie endpoint for SPA writes
+    - lib/http: same-origin fetch with X-CSRFToken + error extraction (allauth + DRF shapes)
+    - lib/auth: allauth headless browser client (session, signup, login, logout, verify)
+    - auth-aware nav (AuthNav): logged-out -> log in/sign up; logged-in -> new chapter/profile/log out
+    - pages: /auth/login, /auth/signup, /auth/verify-email/[key], /profile, /chapters/new
+    - session-cookie + CSRF auth, same-origin via Caddy (no CORS)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit b7aaee3aca2062073d2b750b7565b351a7cb572a
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 17:57:28 2026 -0400
+
+    frontend: sticky footer + chapter page polish
+    
+    - sticky footer (body flex column, main grows) — fixes the floating-footer/void on short pages
+    - chapter directory: count subtitle, row hover, where falls back to affiliation
+    - chapter detail: structured info panel (kv list) instead of loose lines
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit e320b6b46a2cabe40e2f00eebd20065af6748de5
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 17:45:37 2026 -0400
+
+    Stage 1 frontend (2/3): chapter directory + detail pages
+    
+    - lib/api.ts: server-side fetchers (SSR via internal backend:8000)
+    - shared SiteHeader (nav: chapters, get updates) + SiteFooter, moved into root layout
+    - /chapters: server-rendered directory (verified chapters) with graceful empty/error states
+    - /chapters/[slug]: server-rendered detail (404 via notFound)
+    - globals: nav-links, page-title, data-table, note styles
+    - compose: INTERNAL_API_URL for the frontend SSR fetches
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit d268029ee6c22825bfcf57e9f38e05febf5b0896
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 17:20:13 2026 -0400
+
+    frontend: drop unsupported eslint key from next.config (Next 16 removed it)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit bb0be01ea9f8b1e61d46a56f19e516edac7af235
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 17:10:32 2026 -0400
+
+    Stage 1 frontend (1/3): Next.js plumbing + landing behind Caddy
+    
+    - next.config: output standalone + eslint ignoreDuringBuilds
+    - fix pnpm-workspace onlyBuiltDependencies (sharp, unrs-resolver) so the image
+      build doesn't hit ERR_PNPM_IGNORED_BUILDS
+    - multi-stage Dockerfile (pnpm@10 build -> standalone runtime, HOSTNAME=0.0.0.0)
+    - frontend service in compose; Caddy routes / -> frontend:3000 (replaces the
+      static Stage 0 landing); /api /admin /static /_allauth still -> backend
+    - port the terminal landing (hero, format, thesis, Buttondown signup) to the app
+    - drop next/font Google fetch (mono stack) to avoid a build-time network dep
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 6dad349cdf6ff9d7197dea91138f7f9f7d16b621
+Author: isun3071 <isun@bu.edu>
+Date:   Tue Jun 16 17:02:31 2026 -0400
+
+    Scaffold Next.js frontend (create-next-app base)
+
+commit 60bb33f8c067ba01d5996c90aae69ad274cd2a45
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 15:54:33 2026 -0400
+
+    Stage 1: chapter API + profile API + pytest smoke tests
+    
+    - DRF ChapterViewSet: public directory (verified only), public detail (creator sees
+      own pending), authenticated create (sets slug/created_by/pending + owner membership),
+      /api/chapters/mine/
+    - /api/me/ profile retrieve+update (email read-only)
+    - pytest smoke tests for users + chapters (custom user, auth gates, create flow,
+      slug collisions, directory filtering)
+    - Makefile: 'make test' (runs pytest via the dev-override venv)
+    No model changes -> no new migrations.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 46f38429939d4c8762d573aaa38466ce5cd4236e
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 15:43:49 2026 -0400
+
+    Caddy: serve domain over HTTPS + LAN IP over HTTP simultaneously
+    
+    Single SITE_ADDRESS forced either/or (any HTTPS site enables a global :80->:443
+    redirect that also catches the IP). Split into two site blocks via a shared (app)
+    snippet: SITE_ADDRESS (domain, auto-HTTPS) + LAN_ADDRESS (explicit http:// host,
+    no redirect). LAN_ADDRESS stays in .env so the LAN IP isn't committed.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 4f17de2ce89a860adbde8a3937b35114f1423d49
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 15:24:08 2026 -0400
+
+    DEPLOY: make-free migration command (make isn't always installed)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit eb2ef21a2cc225989e934f6f7096b3b374df3054
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 15:09:19 2026 -0400
+
+    Fix migrations not persisting: add dev override + commit-migrations workflow
+    
+    Root cause: 'docker compose run --rm makemigrations' generates files in a throwaway
+    container; with COPY-based images they never reach the host or the running image,
+    so the backend crashes on 'Dependency on app with no migrations: users'.
+    
+    Fix (per claude.md: migrations are forward-only, version-controlled):
+    - add docker-compose.dev.yml (bind-mounts ./backend so generated migrations persist;
+      named volume preserves the image venv; runserver for autoreload)
+    - Makefile: 'make migrations' and 'make dev'
+    - DEPLOY.md: document the generate -> commit -> rebuild migration workflow
+    Migrations themselves are generated by Django and committed (next step, on the VM).
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit ca96e29476a1a068ce4b770fbe45192899986ba1
+Author: isun3071 <isun@bu.edu>
+Date:   Tue Jun 16 15:24:16 2026 -0400
+
+    Stage 1: initial migrations for users and chapters
+
+commit f7e559f4de322464ac2df08b7603d88f1bc3e487
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 14:13:01 2026 -0400
+
+    additional doc changes
+
+commit 2b3c68ade3c8b974426b96e88d617238e8d32636
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 13:58:21 2026 -0400
+
+    Stage 1: add django-allauth headless auth (email, session-based)
+    
+    - django-allauth with headless API for the Next.js SPA (browser/session client)
+    - email-as-login, no usernames, mandatory email verification, no JWT
+    - console email backend in dev (verification/reset links print to logs)
+    - mount /_allauth/ urls; Caddy proxies /_allauth/* to backend
+    - add django.contrib.sites (SITE_ID=1) + allauth auth backend + middleware
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit e064a20025f0c291ab03ef1a2d4c940bba0a8f5b
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 13:54:01 2026 -0400
+
+    format_spec: trim §11 thesis restatement (now led by §10)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 269e401ba3d56f0fd66fc45fb47711924ebf3137
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 13:26:56 2026 -0400
+
+    Docs: correct FMWC and Microsoft Agents League facts
+    
+    Verified via web search:
+    - FMWC: drop unverified 'collegiate feeder tiers' (conflated CTWC's regional feeder
+      with FMWC's tier organization); ESPN -> ESPN2 (All-Star Battle, Aug 2022); add
+      Latvia + 2020 founding consistently
+    - Microsoft Agents League: not 'week-long async' — ~10-day AI Skills Fest (Jun 4-14
+      2026) combining live battles + async submissions across 3 tracks; differentiator
+      is objective-fuzz + credentialing institution vs subjective judging + one-off event
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit d684853cf3a8bba5ac9133674ca2d11caed6cc05
+Author: Ian <isun@bu.edu>
+Date:   Tue Jun 16 13:06:31 2026 -0400
+
+    Docs: reframe HackLet as a multi-format league (Classical first)
+    
+    Eight strategic shifts integrated across the spec set:
+    - format_spec: 'HackLet Classical' framing; per-account Zamboni lifecycle; Classical
+      substrate (VSCodium, extensions disabled, portal chat); OpenAI-compatible substrate
+      note; section 10 leads with the two-principle thesis; section 11 softened to
+      credentialing-as-side-effect + FMWC precedent
+    - LEAGUE_OPERATIONS: multi-format institution + FMWC precedent + catalog-as-moat +
+      per-format/league-wide governance split
+    - BUILD_ROADMAP: Stage 5 strategic-moat note; new Stage 11 (Agentic format)
+    - DATA_MODEL: Event.format_type enum; WorkstationSession entity
+    - ARCHITECTURE: OpenAI-compatible chat flow; per-round workstation session lifecycle
+    - IDEAS_FOR_LATER: Agentic sketch, FMWC rationale, MS Agents League, testing-center
+      framing, broadcast deferred details
+    Untouched per instructions: claude.md, AGENTS.md, FUZZ_RUNNER_SPEC.md
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 24ce507134f04329fcbc4e0c4aae1dad0fccce3a
+Author: Ian <isun@bu.edu>
+Date:   Sun Jun 14 00:02:54 2026 -0400
+
+    Stage 1: scaffold Django backend foundation
+    
+    - backend/ Django 5 project (uv, split settings base/dev/prod, whitenoise)
+    - custom email-based User model (UUID pk, is_superadmin) + admin
+    - Chapter + ChapterMembership models per DATA_MODEL + admin (chapter approval)
+    - /api/healthz liveness endpoint
+    - docker-compose: add postgres + backend services; Caddy proxies /api /admin /static
+    - roadmap status block (stealth, home-VM, AI-compressed timeline)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit d5f5d2d5328799a9ad5b4734d1a08d94e382b341
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 13 23:40:47 2026 -0400
+
+    Wire signup form to Buttondown account iansun20
+    
+    - point form action + onsubmit at buttondown.com endpoint (was .email placeholder)
+    - add recommended hidden embed input
+    - update landing/README to reflect wired account
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit ea1d324812ca8a237c553ada64efbb40bd7a1072
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 13 23:22:40 2026 -0400
+
+    Humanize landing copy
+    
+    - cut rule-of-three triads and em-dash rhythm
+    - drop the 'anyone can X, we measure Y' antithesis in the band
+    - concrete over abstract (no abstract skill lists), varied sentence length
+    - first-person voice on the signup (it's a solo project)
+    - align social meta + standings empty-state to the new voice
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 5b20dea147a5a6ffa480946d988c4b9654030719
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 13 23:14:54 2026 -0400
+
+    Rework landing into competition-platform layout
+    
+    Layout modeled on Codeforces / CTFtime / Advent of Code patterns:
+    - platform nav (format/round/tiers/events/rankings)
+    - two-column hero with Codeforces-style 'next event' panel
+    - stats strip of real format constants
+    - round timeline as a contest timetable
+    - events + standings + tiers data tables (honest pre-launch states)
+    Replaces the marketing hero+feature-cards funnel.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 835e9cb0a797c1b87b14365701c1d1a74e76628c
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 13 23:07:48 2026 -0400
+
+    Restyle landing page: terminal / CTF aesthetic
+    
+    - monospace throughout, command-prompt hero with live cursor
+    - ascii rules, data-readout meters, flat/sharp panels, CRT scanlines
+    - drop SaaS grid-glow/gradients/rounded cards
+    - cut filler microcopy (No spam line, footer tagline)
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+commit 014a7dd401ff49f7afb050d4cb869568c698c694
+Author: Ian <isun@bu.edu>
+Date:   Sat Jun 13 17:21:51 2026 -0400
+
+    Scaffold Stage 0: landing page + portable Docker Compose deploy
+    
+    - landing/: static anti-slop landing page with Buttondown signup
+    - docker-compose.yml + Caddyfile: host-agnostic stack, Caddy auto-HTTPS
+    - .env.example, .gitignore, Makefile, DEPLOY.md move-runbook
+    - BUILD_ROADMAP: parallel-validation note; IDEAS_FOR_LATER seeded
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
