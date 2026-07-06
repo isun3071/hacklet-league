@@ -46,8 +46,8 @@ Tier A chapters must demonstrate the following infrastructure to qualify for ver
 - Scoreboard overlay infrastructure for live results display
 
 **Judge corps**:
-- Minimum 3 members per round, including at least one tester judge and one UX designer judge (see format_spec.md §3 for judge roles)
-- Stakeholder judge role available when format design absorbs it (see IDEAS_FOR_LATER.md)
+- Four permanent judge roles per round — tester, UI/UX/HCI, general engineering, and nontech stakeholder — weighted 30/20/20/30 into the 0-100 Communication axis (see format_spec.md §4.1)
+- May drop to 3 where senior corps is thin; when it does, name which role is dropped and how the 30/20/20/30 weights re-normalize across the remaining three
 - Judge corps calibration through training events
 - Judge availability for full round duration (135-min commitment per round)
 
@@ -100,7 +100,7 @@ At T+29:00, code freeze takes effect simultaneously. The network cuts for code c
 
 *Code submission and central fuzzing*: at freeze each workstation copies its final code state to league infrastructure via SCP. League infrastructure deploys each submission in an ephemeral container with assigned port, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; local fuzz during build was intelligence-gathering only.
 
-*Judges evaluate submissions*: judges interact with each submission live in their portals while the fuzz runner completes work. The panel includes specialized roles (tester judge with override capability, UX designer with professional design expertise, general engineering judges). With 18 minutes for 8 submissions across 4 judges, each judge has ~9 minutes per submission for substantive evaluation. Fuzz runner output gives quick technical baseline; clickaround surfaces what automation can't measure.
+*Judges evaluate submissions*: judges interact with each submission live in their portals while the fuzz runner completes work. The panel includes four permanent specialized roles (tester judge with override capability, UI/UX/HCI judge, general engineering judge, and nontech stakeholder judge). With 18 minutes for 8 submissions across 4 judges, each judge has ~9 minutes per submission for substantive evaluation. Fuzz runner output gives quick technical baseline; clickaround surfaces what automation can't measure.
 
 *Players prepare pitches*: code files become read-only at freeze; players retain access to submitted code, README, and the chat-window AI interface for pitch preparation. Agent-interface edit capabilities are disabled at freeze; chat-window AI assistance remains for pitch planning and anticipating cross-examination. Players who tokenmaxxed during build have no AI assistance for prep. This is the strategic tradeoff. Players also author **PITCH.md** as part of pitch preparation, though at Tier A the live pitch + cross-ex is the primary credentialing dimension (see §8).
 
@@ -223,11 +223,13 @@ See §10 for multi-day tournament structure.
 
 Tier A uses **human judge corps** with calibrated panel roles. LLM judging is not used at Tier A because the live performance dimension (pitch + cross-ex) requires human evaluators capable of real-time question generation, body-language reading, follow-up probing.
 
-**Judge panel composition**:
-- **Tester judge**: operates portal displaying automated test applicability decisions, with override capability for cases where automated detection missed or misidentified features
-- **UX designer judge**: brings professional design expertise to UX/UI evaluation; assesses user experience, interaction quality, visual hierarchy, intuitive navigation
-- **General engineering judges**: assess creative coherence, derived feature correctness, technical execution, documentation quality
-- **Stakeholder judge** (when format absorbs this role per IDEAS_FOR_LATER.md): non-technical stakeholder perspective during cross-examination
+**Judge panel composition (four permanent roles):**
+- **Tester judge** — intent-dependent correctness; operates the portal showing automated-test applicability, with override for fuzzer false positives that are actually intended behavior. Weight 30.
+- **UI/UX/HCI judge** — the artifact's human-fitness and adoption gap (legibility, actionable error states, workflow match). Weight 20.
+- **General engineering judge** — engineering judgment revealed by the choices: tradeoffs, scoping, which corners got cut, mostly recovered via cross-ex. Weight 20.
+- **Nontech stakeholder judge** — translation and trust to a non-verifier; per-format posture (CES attendee / anxious incumbent / the vague-brief author). Weight 30.
+
+Four judges, four rubrics, weighted 30/20/20/30 into the 0-100 Communication axis (format_spec.md §4.1). The panel lives entirely inside the Communication axis; the fuzzer's Slop Score is separate and untouched.
 
 **Judge calibration**: judge corps participates in pre-event calibration sessions reviewing exemplar submissions across scoring dimensions. Calibration produces shared evaluation standards reducing inter-judge variance. Calibration discipline is part of Tier A chapter operational maturity.
 

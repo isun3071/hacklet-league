@@ -291,7 +291,7 @@ event_id             : FK Event
 user_id              : FK User, nullable (null until an emailed invite is claimed)
 email                : varchar, nullable (carries an invite to a not-yet-registered person)
 role                 : enum (player, judge, audience)
-judge_specialization : enum (tester, ux_designer, general), nullable (judge role only)
+judge_specialization : enum (tester, ux_designer, general, stakeholder), nullable (judge role only)  # ux_designer scope now covers UI/UX/HCI (no rename); stakeholder = the nontech role
 source               : enum (invited, applied, corps)  # corps = drawn from the chapter's ChapterStaff judge corps
 status               : enum (pending, registered, declined, rejected, withdrawn)
 chapter_staff_id     : FK ChapterStaff, nullable (set for corps judges → their standing corps record)
@@ -311,6 +311,8 @@ The `status` lifecycle covers both access modes and both join paths:
 - **corps judge**: an organizer pulls a standing judge from `ChapterStaff` (`source=corps`, `chapter_staff_id` set), typically straight to `registered`.
 
 `role`+`judge_specialization` determine which scoring interfaces a judge sees and how their expertise weights categorical awards.
+
+> **⚠ Scoring-math flag — the enum add is NOT the whole fix.** The four permanent judge roles compose the Communication axis **weighted 30/20/20/30 by judge role** (tester / UI-UX-HCI / general / nontech — format_spec.md §4.1). But `Score.score_type` and the current aggregation model scoring as *facet score-types* (pitch_quality, cross_examination, creative_coherence, ux_quality, technical_execution, documentation) averaged into composites — a **different decomposition**. Adding `stakeholder` to this enum does not by itself implement the role-weighting; weighting each judge-role's contribution to the Communication composite is a separate scoring-logic change to be scoped on its own. Do not mistake the enum add for a complete fix, and do not silently rewrite the facet-based aggregation to match.
 
 **Audience** participants (`role=audience`) are non-competing spectators — RSVP'd attendees tracked for headcount and in-person People's Hacklet eligibility. They carry no `judge_specialization`, no `chapter_staff`, and never the `corps` source; they don't count toward the player cap, and may optionally link to an `AudienceVote`. (Anonymous walk-in audience and anonymous voting still work through `AudienceVote` with no EventParticipant row.)
 

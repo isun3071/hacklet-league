@@ -205,7 +205,7 @@ Multiple allowed per chapter, appointed by chapter owner. Powers:
 
 ### Judges
 
-Scoped to chapters where invited. Subroles include tester, UX designer, and general engineering judge as described in the format spec. Constraints:
+Scoped to chapters where invited. Subroles are the four permanent judge roles — tester, UI/UX/HCI, general engineering, and nontech stakeholder — as described in the format spec (§4.1). Constraints:
 
 - Cannot judge events they are competing in (system-enforced)
 - Cannot judge cohort peers in qualification events (norm, possibly system-enforced)

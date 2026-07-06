@@ -142,9 +142,9 @@ Per format_spec.md §4, Tier B operates the scoring framework with **modified Mo
 
 ## 9. Live Judging Protocol
 
-Tier B uses **human judge corps** identical to Tier A judging protocol (see TIER_A_OPERATIONS.md §9). Same judge panel composition (tester, UX designer, general engineering judges), same cross-examination structure, same calibration discipline.
+Tier B uses **human judge corps** identical to Tier A judging protocol (see TIER_A_OPERATIONS.md §9). Same judge panel composition — the four permanent roles (tester, UI/UX/HCI, general engineering, nontech stakeholder), weighted 30/20/20/30 into the 0-100 Communication axis (format_spec.md §4.1) — same cross-examination structure, same calibration discipline.
 
-**Judge corps may be smaller** at Tier B chapters with limited senior judge availability (3 judges minimum vs Tier A's 4 standard panel). Cross-examination structure adjusts: 3 judges produce 3 questions, 30 seconds per question (90 sec cross-ex window instead of 120 sec). The reduced cross-ex window slightly compresses the pitch phase but preserves the live performance dimension.
+**Judge corps may drop to 3** at Tier B chapters where senior corps is thin (vs Tier A's 4 standard panel). When it does, name which of the four roles is dropped and how the 30/20/20/30 weights re-normalize across the remaining three — a dropped judge silently re-weights the Communication axis, so make it explicit. Cross-examination structure adjusts: 3 judges produce 3 questions, 30 seconds per question (90 sec cross-ex window instead of 120 sec). The reduced cross-ex window slightly compresses the pitch phase but preserves the live performance dimension.
 
 Tier B does not use LLM judging. The live performance dimension (pitch + cross-ex with human judges) is preserved because Tier B operates at scales where human judging fits the format clock (8-12 player rounds).
 

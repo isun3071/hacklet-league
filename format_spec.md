@@ -94,13 +94,18 @@ At Tier B and Tier C, the format runs without broadcast production. In-person au
 
 ### 4.1 Component Structure
 
-A player's performance is measured across three components:
+A player's performance is measured on **two independent axes**:
 
-- **Slop Score**: the amount of slop the fuzz catalog detected in the submission — a **deduction-only** score in the range **[0, +∞)** where **lower is better and 0 is the aspirational maximum** (a clean submission). It is the sum of per-probe penalties for every probe that detected slop; passing a probe, or not having the surface a probe targets, contributes nothing. Golf-style: you accumulate slop the way a golfer accumulates strokes — zero is perfect, and there is no bound on how much slop a broken submission can carry.
-- **Pitch Quality**: Judge evaluation on a 0-100 scale, averaged across the panel, incorporating judge clickaround findings
-- **Cross-Examination Performance**: Judge evaluation on a 0-100 scale, averaged across the panel, scoring substance and conciseness
+- **Slop Score**: the amount of slop the fuzz catalog detected in the submission — a **deduction-only** score in the range **[0, +∞)** where **lower is better and 0 is the aspirational maximum** (a clean submission). It is the sum of per-probe penalties for every probe that detected slop; passing a probe, or not having the surface a probe targets, contributes nothing. Golf-style: you accumulate slop the way a golfer accumulates strokes — zero is perfect, and there is no bound on how much slop a broken submission can carry. Produced by the fuzz catalog (intent-independent universals); unchanged by the judging structure below.
+- **Communication Score**: judge evaluation of live performance on a **[0, 100]** scale where **higher is better** — a **weighted composite of four permanent judge-role rubrics**, each scoring the player's pitch + cross-examination on its own rubric:
+  - Tester **30%** — intent-*dependent* correctness (the fuzzer's blind spot)
+  - UI/UX/HCI **20%** — the artifact's fitness for a human (legibility, actionable error states, the works-to-adopted gap)
+  - General engineering **20%** — engineering judgment revealed by the choices, mostly recovered via cross-ex
+  - Nontech stakeholder **30%** — translation and trust to a skeptical non-engineer, without jargon-drowning
 
-Each component is reported as a raw score and used in category awards. The Best Overall determination uses rank-based composition rather than weighted-sum.
+The two axes are **never summed into one number** — they differ in direction (slop lower-is-better, communication higher-is-better), scale (slop unbounded, communication ranged), and epistemics (the fuzzer is pure objectivity; cross-ex is where subjectivity is allowed to live). Each is reported as a raw score and used in categorical awards; Best Overall is the rank-based composition of the two axes (§4.3). The four judge rubrics live entirely inside the Communication axis; the Slop axis is untouched by the judging structure.
+
+The old model split communication into separate Pitch Quality and Cross-Examination Performance components; under the four-rubric model each judge scores across *both* pitch and cross-ex on their own rubric, so pitch-vs-cross-ex is at most an internal sub-structure of a rubric — the axis-level weighting is by judge role (30/20/20/30). Rubric internals are written separately.
 
 ### 4.2 Slop Scoring Philosophy
 
@@ -164,7 +169,7 @@ Speed is also measured as **boolean abandonment-threshold gates** in the perform
 
 Future format iterations may add structured intent-dependent QA testing as the format matures and operational experience reveals where this measurement value is needed. The initial catalog focuses on universal properties that produce honest measurement of engineering quality for the format's actual scope: applications built in 24 minutes by individual engineers directing AI assistance.
 
-The division is architectural, not merely sequencing. The fuzz catalog is the **intent-independent** axis — properties true regardless of what the app was meant to do (it crashed, it leaked a secret, it shipped no CSP), measured objectively and deterministically. **Intent-dependent** properties — logical correctness, business-rule fidelity, whether the build does what its brief actually asked — cannot be reduced to intent-free predicates and are the domain of a **human tester judge** who, knowing the round's intent, exercises and scores them. The two axes stay separate by design: folding subjective intent-judgment into the objective slop score would forfeit the determinism and defensibility that make the slop score worth having. Logical errors are the canonical intent-dependent case — hard to test universally precisely because they *are* intent-dependent — so they sit with the judge, not the runner.
+The division is architectural, not merely sequencing. The fuzz catalog is the **intent-independent** axis — properties true regardless of what the app was meant to do (it crashed, it leaked a secret, it shipped no CSP), measured objectively and deterministically. **Intent-dependent** properties — logical correctness, business-rule fidelity, whether the build does what its brief actually asked — cannot be reduced to intent-free predicates and are the domain of a **human tester judge** who, knowing the round's intent, exercises and scores them. The two axes stay separate by design: folding subjective intent-judgment into the objective slop score would forfeit the determinism and defensibility that make the slop score worth having. Logical errors are the canonical intent-dependent case — hard to test universally precisely because they *are* intent-dependent — so they sit with the judge, not the runner. The tester judge both *extends* the fuzzer (reaching the intent-dependent correctness it cannot) and *checks* it (overriding an intent-mismatched false positive — a probe that fired on behavior that is deliberate and correct for this app). The tester is one of **four permanent judge roles** whose weighted rubrics compose the Communication axis (§4.1); the other three — UI/UX/HCI, general engineering, and nontech stakeholder — grade the human-facing and trust dimensions the fuzzer never touches.
 
 The README remains load-bearing for cross-examination and pitch context. Players describe their app's intent for judge interpretation during clickaround, but the automated test catalog does not depend on intent classifications for its initial implementation.
 
@@ -172,7 +177,7 @@ The README remains load-bearing for cross-examination and pitch context. Players
 
 The Best Overall winner is determined through rank-based composition with progressive tiebreaking:
 
-1. Players are ranked independently on Slop Score and Communication Score (Communication = average of Pitch Quality and Cross-Examination Performance). Slop is ranked **ascending** (lowest slop is rank 1, since lower is better); Communication is ranked descending (highest is rank 1). Because composition is rank-based, the unbounded range and lower-is-better direction of the slop score need no normalization — only the ranking direction differs.
+1. Players are ranked independently on Slop Score and Communication Score (Communication = the 30/20/20/30 weighted composite of the four judge-role rubrics, §4.1). Slop is ranked **ascending** (lowest slop is rank 1, since lower is better); Communication is ranked descending (highest is rank 1). Because composition is rank-based, the unbounded range and lower-is-better direction of the slop score need no normalization — only the ranking direction differs.
 2. Each player's Rank Sum equals Slop Rank plus Communication Rank.
 3. **Lowest Rank Sum wins.**
 4. Ties on Rank Sum are broken by **smallest absolute differential** between Slop Rank and Communication Rank. This rewards balanced performance across components.
@@ -189,7 +194,7 @@ This produces the right kind of Best Overall winner: the most balanced player am
 Per-round categorical awards are kept deliberately small to preserve credentialing signal at 8-player round size. Per-round awards alongside Best Overall (§4.3):
 
 - **Most Resilient**: Lowest raw Slop Score. The award title stays aspirational (it credentials the *quality* of resilience demonstrated) while the underlying measurement is descriptive (slop score 0 is what earned it) — the same way golf names a "Champion," not a "Lowest Score Holder."
-- **Best Communicator**: Highest raw Communication Score (combined Pitch Quality + Cross-Examination Performance per §4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination.
+- **Best Communicator**: Highest raw Communication Score (the weighted four-rubric composite per §4.1/§4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination. *(Award name flagged for a possible rename — credit defense-under-pressure over oratory — but unsettled; left as-is here.)*
 - **People's Hacklet**: Audience vote (separate from judge evaluation entirely)
 
 This produces **3 per-round categorical awards plus Best Overall** for each round, regardless of event tier or structure. Players may win multiple awards (e.g., a dominant performer might win Most Resilient + Best Overall in the same round). A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
