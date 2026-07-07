@@ -21,3 +21,15 @@ def test_ignores_client_routes_and_static_assets():
 
 def test_dedups_and_strips_trailing_slash():
     assert mine_paths('a("/rest/products/");b("/rest/products");c(`/rest/products/`)') == ["/rest/products"]
+
+
+def test_mines_paths_embedded_in_template_literals():
+    # the dominant SPA shape: the API path is a SUFFIX of an interpolated string, not quote-anchored
+    js = 'this.http.get(`${restServer}/rest/products/search?q=${term}`);x("h"+"/api/Users")'
+    paths = mine_paths(js)
+    assert "/rest/products/search" in paths and "/api/Users" in paths
+
+
+def test_root_boundary_and_bare_root():
+    assert mine_paths('a("/apixyz/foo")') == []          # /api glued to a longer word -> not an API path
+    assert mine_paths('b(`/graphql`)') == ["/graphql"]   # a bare API root still mines

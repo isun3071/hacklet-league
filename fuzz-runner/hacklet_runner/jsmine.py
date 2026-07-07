@@ -14,10 +14,12 @@ import httpx
 
 from .schema import Endpoint
 
-# Quoted absolute paths under an UNAMBIGUOUS API root. Precision over recall: rest/api/graphql/vN are
-# backend roots, so this avoids the noise of mining every '/...' string (client-router paths, CSS
-# selectors, i18n keys). A path built by concatenation ('/rest/products/' + id) mines as its literal base.
-_API_PATH = re.compile(r"""['"`](/(?:rest|api|graphql|v[1-9]\d?)(?:/[A-Za-z0-9_./-]*)?)['"`]""")
+# Absolute paths under an UNAMBIGUOUS API root (rest/api/graphql/vN) — precise enough to avoid the
+# noise of every '/...' string (client-router paths, CSS selectors, i18n keys), while catching paths
+# embedded MID-string, not just quote-anchored: `${base}/rest/products/search` is the dominant SPA
+# pattern. Preceded by a non-word char (quote/backtick/}/(/,), root not glued to a longer word
+# (so /apixyz doesn't match /api), then any /segments (a bare /graphql matches too).
+_API_PATH = re.compile(r"(?<![\w])(/(?:rest|api|graphql|v[1-9]\d?)(?![A-Za-z0-9])(?:/[A-Za-z0-9_.-]+)*)")
 _STATIC_EXT = (".js", ".css", ".map", ".json", ".png", ".jpg", ".jpeg", ".svg", ".gif",
                ".woff", ".woff2", ".ttf", ".ico", ".html")
 
