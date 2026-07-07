@@ -65,8 +65,8 @@ def test_api_sqli_na_when_no_endpoints(jsonapi):
 
 # --- excessive data exposure (response_leaks_credentials) ---
 
-def _resp(text, status=200):
-    return httpx.Response(status, text=text)
+def _resp(text, status=200, ctype="application/json"):
+    return httpx.Response(status, text=text, headers={"content-type": ctype})
 
 
 def test_credential_leak_fires_on_password_field_and_hash():
@@ -84,6 +84,9 @@ def test_credential_leak_precision_no_false_positives():
     assert response_leaks_credentials(_resp('{"openapi":"3.0.0","paths":{"x":{"password":"string"}}}')) is False
     # non-200 (e.g. a 401 body that happens to mention a password) is not a leak
     assert response_leaks_credentials(_resp('{"password":"secret"}', status=401)) is False
+    # a JS bundle's Angular password-toggle (hide?"password":"text") is code, not a data leak
+    js = 'x("type",n.hide?"password":"text"),l(2)'
+    assert response_leaks_credentials(_resp(js, ctype="application/javascript")) is False
 
 
 def test_data_exposure_probe_fires_on_leaky_endpoint():

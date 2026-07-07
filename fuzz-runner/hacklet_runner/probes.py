@@ -132,6 +132,12 @@ def response_leaks_credentials(resp, arg=None) -> bool:
     if resp.status_code != 200:
         return False
     body = resp.text
+    # Excessive data exposure = credentials in a DATA (JSON) response, not in code/markup. A JS bundle
+    # with hide?"password":"text" (the Angular/Material password-toggle) is not a leak; genuine secrets
+    # hardcoded in JS are caught by response_leaks_secret (key patterns). So require a JSON body.
+    ctype = resp.headers.get("content-type", "").lower()
+    if "json" not in ctype and body.lstrip()[:1] not in ("{", "["):
+        return False
     if _OPENAPI_DOC.search(body[:4000]):
         return False  # a served spec naming a "password" field in its schema isn't a data leak
     return bool(_CRED_FIELD.search(body) or _CRED_HASH.search(body))
