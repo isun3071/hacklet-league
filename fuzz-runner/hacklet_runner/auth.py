@@ -115,7 +115,7 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
     usable form or registration fails (email verification / CAPTCHA), so the caller treats it as N/A."""
     form = _password_form(profile.forms)
     if form is None:
-        return None
+        return _register_json(base_url, suffix)  # no HTML form -> try a JSON-API registration + login
     # per-call random username: a real app with a unique-username constraint rejects a FIXED name on
     # re-grade (run 2+), silently nulling the authed session and flipping the auth probes to clean.
     # The score depends on the cookie's flags, not the username value, so this stays deterministic.
@@ -141,6 +141,83 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
         client.close()
         return None
     return Account(username=username, password=password, client=client, register_response=resp)
+
+
+# JSON-API auth: modern SPAs (Juice Shop, Django REST, ...) authenticate via JSON endpoints, not HTML
+# forms. These let the self-as-oracle probes reach that surface — session established as a bearer token
+# (set as a default Authorization header) or a session cookie, whichever the app returns.
+_JSON_LOGIN_PATHS = ("/rest/user/login", "/api/login", "/api/auth/login", "/api/sessions",
+                     "/login", "/api/v1/login", "/auth/login", "/api/token", "/users/login",
+                     "/api/user/login", "/api/authenticate")
+_JSON_REGISTER_PATHS = ("/api/users", "/api/register", "/api/auth/register", "/api/signup",
+                        "/register", "/api/v1/users", "/api/accounts", "/api/user")
+
+
+def _bearer_token(resp: httpx.Response) -> str | None:
+    """Pull a JWT/bearer token from a JSON login response (top level or one level nested)."""
+    try:
+        data = resp.json()
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    nodes = [data] + [data[p] for p in ("authentication", "data", "auth", "result") if isinstance(data.get(p), dict)]
+    for node in nodes:
+        for key in ("token", "accessToken", "access_token", "jwt", "id_token"):
+            v = node.get(key)
+            if isinstance(v, str) and len(v) > 10:
+                return v
+    return None
+
+
+def find_json_login(client: httpx.Client):
+    """Probe common JSON login endpoints with a wrong-creds body; return (path, creds, response) for
+    the first that behaves like a login (responds, not 404/405/501), else (None, None, None). Lets the
+    rate-limit probe reach JSON-API apps that have no HTML login form."""
+    creds = {"email": "hacklet_probe_rl@example.com", "username": "hacklet_probe_rl",
+             "password": "hl-wrong-password"}
+    for path in _JSON_LOGIN_PATHS:
+        try:
+            r = client.post(path, json=creds)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+        if r.status_code not in (404, 405, 501):
+            return path, creds, r
+    return None, None, None
+
+
+def _register_json(base_url: str, suffix: str) -> Account | None:
+    """Self-register via a JSON API (no HTML form): try common register endpoints, then log in to get
+    an authed session — a bearer token (default Authorization header) or a session cookie."""
+    username = "hl_" + secrets.token_hex(5) + suffix
+    password = "Hl-Probe-Passw0rd!"
+    email = username + "@example.com"
+    client = httpx.Client(base_url=base_url, timeout=15.0, follow_redirects=True)
+    body = {"email": email, "username": username, "password": password}
+    registered = False
+    for path in _JSON_REGISTER_PATHS:
+        try:
+            registered = client.post(path, json=body).status_code in (200, 201)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+        if registered:
+            break
+    if not registered:
+        client.close()
+        return None
+    for path in _JSON_LOGIN_PATHS:
+        for cred in ({"email": email, "password": password}, {"username": username, "password": password}):
+            try:
+                r = client.post(path, json=cred)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if r.status_code == 200:
+                token = _bearer_token(r)
+                if token:
+                    client.headers["Authorization"] = "Bearer " + token
+                return Account(username=username, password=password, client=client, register_response=r)
+    client.close()
+    return None
 
 
 def parse_set_cookies(resp: httpx.Response) -> list[dict]:

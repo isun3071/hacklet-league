@@ -191,7 +191,7 @@ def login_no_rate_limit(ctx, probe) -> bool | None:
     can't collide with other probes that hit /login (e.g. sqli_auth_bypass). N/A when no login form."""
     form = auth.login_form(ctx.profile.forms)
     if form is None:
-        return None
+        return _login_rate_limit_json(ctx, probe)  # no HTML login form -> try a JSON login endpoint
     data = {}
     for name in form.fields:
         low = name.lower()
@@ -207,10 +207,31 @@ def login_no_rate_limit(ctx, probe) -> bool | None:
             try:
                 resp = c.request((form.method or "post").upper(), form.action, data=data)
             except (httpx.HTTPError, httpx.InvalidURL):
-                return False  # login endpoint unreachable -> can't prove a missing control
+                return None  # login endpoint unreachable -> couldn't test
             if resp.status_code in (429, 423):
                 return False  # throttled -> brute-force protection present -> clean
     return True  # N attempts, never throttled -> no rate limiting -> slop
+
+
+def _login_rate_limit_json(ctx, probe) -> bool | None:
+    """JSON-API fallback for login_no_rate_limit: find a JSON login endpoint (Juice Shop /rest/user/
+    login, /api/login, ...) and hammer it with wrong creds. N/A when no JSON login endpoint responds."""
+    attempts = probe.probe.get("attempts", 10)
+    with httpx.Client(base_url=ctx.base_url, timeout=15.0, follow_redirects=False,
+                      headers=ctx.headers) as c:
+        path, creds, first = auth.find_json_login(c)
+        if path is None:
+            return None  # no login surface at all -> couldn't test
+        if first.status_code in (429, 423):
+            return False  # already throttling
+        for _ in range(attempts - 1):  # find_json_login already made the first attempt
+            try:
+                r = c.post(path, json=creds)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                return None
+            if r.status_code in (429, 423):
+                return False
+    return True
 
 
 # Redirect destinations that signal a CSRF REJECTION (request not honored) rather than acceptance.
