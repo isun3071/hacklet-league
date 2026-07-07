@@ -387,6 +387,19 @@ def api_sqli(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+def _injectable_targets(profile):
+    """(action, method, field_names) over the injectable input surface — HTML forms (GET + POST) and
+    reflecting/searchable query GETs — shared by the reflection/injection probes (XSS, command
+    injection, path traversal)."""
+    forms = [(f.action, (f.method or "get").lower(), list(f.fields)) for f in profile.forms if f.fields]
+    q_eps = [(e.raw_path, "get", list(e.query_params)) for e in profile.endpoints
+             if e.method.lower() == "get" and e.query_params]
+    s_eps = [(e.raw_path, "get", list(_COMMON_PARAMS)) for e in profile.endpoints
+             if e.method.lower() == "get" and not e.query_params and not e.path_params
+             and _SEARCHABLE.search(e.raw_path)]
+    return forms + q_eps + s_eps
+
+
 # Reflected + stored XSS — comprehensive technique coverage of one flaw ("this input is echoed into
 # HTML unescaped"), collapsing to a single finding. Each payload targets a different reflection context;
 # detection is verbatim, unescaped reflection of a UNIQUE per-run marker (an escaping app encodes the
@@ -425,13 +438,7 @@ def xss_injectable(ctx, probe) -> bool | None:
     each payload shape (script / img / svg / javascript-URI / attribute-breakout / script-breakout /
     case-varied) and fires on verbatim unescaped reflection of a unique marker; for POST forms, also
     submits then re-fetches the page to catch STORED XSS. N/A when there's no HTML input surface."""
-    forms = [(f.action, (f.method or "get").lower(), list(f.fields)) for f in ctx.profile.forms if f.fields]
-    q_eps = [(e.raw_path, "get", list(e.query_params)) for e in ctx.profile.endpoints
-             if e.method.lower() == "get" and e.query_params]
-    s_eps = [(e.raw_path, "get", list(_COMMON_PARAMS)) for e in ctx.profile.endpoints
-             if e.method.lower() == "get" and not e.query_params and not e.path_params
-             and _SEARCHABLE.search(e.raw_path)]
-    targets = forms + q_eps + s_eps
+    targets = _injectable_targets(ctx.profile)
     if not targets:
         return None
     m = "hlx" + secrets.token_hex(4)
@@ -476,6 +483,76 @@ def xss_injectable(ctx, probe) -> bool | None:
                         return True  # persisted across a fresh request -> stored XSS
                 except (httpx.HTTPError, httpx.InvalidURL):
                     pass
+    return False if tested else None
+
+
+# OS command injection — comprehensive coverage: shell separators (; | || && newline), command
+# substitution ($(...) and backticks), and a blind time-based fallback; one finding. Precision: the
+# marker is the RESULT of a shell-evaluated arithmetic expr (13*13 -> 169) — it appears ONLY if a shell
+# ran the payload, never from reflecting the literal (which shows the "$((13*13))" text). Execution, not echo.
+_CMD_OUT = "hlci169"
+_CMD_TAIL = "echo hlci$((13*13))"          # -> hlci169 when a POSIX shell evaluates it
+# empty base so the host command fails FAST (`ping ;echo ...`), never hanging on a bogus host arg
+_CMD_SEPS = (";%s", "|%s", "||%s", "&&%s", "\n%s", "$(%s)", "`%s`")
+_CMD_TIME = (";sleep {d}", "$(sleep {d})", "`sleep {d}`", "&&sleep {d}", "|sleep {d}")
+
+
+def _elapsed(c, method, action, data) -> float:
+    """Seconds for one request; a large sentinel on error so it can't look like a fast baseline."""
+    t0 = time.perf_counter()
+    try:
+        _xss_send(c, method, action, data)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return 0.0
+    return time.perf_counter() - t0
+
+
+def command_injection(ctx, probe) -> bool | None:
+    """OS command injection across forms + query params. Injects `<sep> echo <arith>` across shell
+    separators and command-substitution; fires when the arithmetic RESULT (not the literal) reflects —
+    proving a shell executed it. Falls back to blind time-based sleep. N/A when no input surface."""
+    targets = _injectable_targets(ctx.profile)
+    if not targets:
+        return None
+    budget = probe.probe.get("max_attempts", 120)
+    delay = probe.probe.get("time_delay", 3)
+    tested = False
+    deep: list = []
+    with make_client(ctx.base_url, ctx.headers, timeout=max(15.0, delay + 8), follow_redirects=True) as c:
+        for action, method, fields in targets:
+            for field in fields:
+                if budget <= 0:
+                    break
+                try:
+                    baseline = _xss_send(c, method, action, {fn: (_XSS_FILLER if fn != field else "1") for fn in fields})
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                if _CMD_OUT in baseline.text:
+                    continue  # already present -> can't attribute to the injection
+                for sep in _CMD_SEPS:
+                    if budget <= 0:
+                        break
+                    budget -= 1
+                    tested = True
+                    inject = sep % _CMD_TAIL
+                    data = {fn: (inject if fn == field else _XSS_FILLER) for fn in fields}
+                    try:
+                        if _CMD_OUT in _xss_send(c, method, action, data).text:
+                            return True  # a shell evaluated echo hlci$((13*13)) -> hlci169 -> injectable
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+                if len(deep) < _DEEP_SLOTS:
+                    deep.append((action, method, fields, field))
+            if budget <= 0:
+                break
+        for action, method, fields, field in deep:  # blind time-based (no observable output)
+            base_time = _elapsed(c, method, action, {fn: (_XSS_FILLER if fn != field else "x") for fn in fields})
+            for tmpl in _CMD_TIME:
+                data = {fn: (tmpl.format(d=delay) if fn == field else _XSS_FILLER) for fn in fields}
+                # delta vs THIS slot's baseline (the host command itself may be slow, e.g. ping) so a
+                # naturally-slow endpoint can't false-positive; confirm twice to reject jitter
+                if all(_elapsed(c, method, action, data) - base_time >= delay * 0.7 for _ in range(2)):
+                    return True
     return False if tested else None
 
 
@@ -883,6 +960,7 @@ PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
     "xss_injectable": xss_injectable,
+    "command_injection": command_injection,
     "api_bola": api_bola,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
@@ -921,6 +999,7 @@ _PREDICATE_REASONS = {
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
+    "command_injection": "an input reaches an OS shell (injected command executed: separator / substitution / time-based)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
