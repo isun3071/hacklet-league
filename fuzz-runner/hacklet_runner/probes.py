@@ -166,6 +166,79 @@ def sqli_auth_bypass(ctx, probe) -> bool:
     return False
 
 
+# Error-based SQL injection over the API surface discovered from the OpenAPI spec (path params, query
+# params, JSON body fields) — the injection points a form-crawler never sees on a JSON API. Precision
+# comes from a differential + a DB-error signature: an unbalanced quote must induce a database error
+# string the benign baseline never shows. Only GET/POST are probed (never PUT/PATCH/DELETE), so
+# grading can't destroy the target's state.
+_SQL_ERROR = re.compile(
+    r"SQL syntax|SQLITE_ERROR|sqlite3\.(?:Operational|Integrity|Programming|Interface)Error|"
+    r"sqlalchemy\.exc|unrecognized token|unterminated quoted string|"
+    r"quoted string not properly terminated|you have an error in your sql syntax|mysqlsyntaxerror|"
+    r"com\.mysql|psycopg2|PG::\w*Error|PostgreSQL query failed|ORA-\d{5}|Microsoft OLE DB|"
+    r"ODBC SQL Server|SQLSTATE\[|Npgsql\.|unclosed quotation mark|incorrect syntax near|\[SQL:\s",
+    re.IGNORECASE,
+)
+_SQLI_BENIGN = "1"
+_SQLI_PAYLOAD = "1'"  # a lone quote breaks unparameterized string SQL -> a detectable DB error
+
+
+def _sqli_slots(ep) -> list[tuple[str, str]]:
+    """Injectable positions on an endpoint as (kind, name): path params, query params, body fields."""
+    return ([("path", n) for n in ep.path_params]
+            + [("query", n) for n in ep.query_params]
+            + [("body", n) for n in ep.body_fields])
+
+
+def _sqli_request(ep, poison, value: str):
+    """(path, query_dict, json_body) for ep with the single `poison` slot set to `value` and every
+    other slot benign; poison=None yields the all-benign baseline."""
+    def sv(kind, name):
+        return value if poison == (kind, name) else _SQLI_BENIGN
+    path = ep.raw_path
+    for n in ep.path_params:
+        path = path.replace("{" + n + "}", urllib.parse.quote(sv("path", n), safe=""))
+    query = {n: sv("query", n) for n in ep.query_params}
+    body = {n: sv("body", n) for n in ep.body_fields} or None
+    return path, query, body
+
+
+def api_sqli(ctx, probe) -> bool | None:
+    """Error-based SQLi across spec-discovered API endpoints. Per injectable slot: benign baseline vs.
+    unbalanced-quote payload; slop iff the payload induces a DB-error signature the baseline lacks.
+    N/A when no injectable GET/POST endpoint exists (e.g. no spec, or a purely form-based app)."""
+    targets = [e for e in ctx.profile.endpoints
+               if e.method.lower() in ("get", "post") and _sqli_slots(e)]
+    if not targets:
+        return None
+    budget = probe.probe.get("max_attempts", 80)
+    tested = False
+    with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=False,
+                      headers=ctx.headers) as c:
+        for ep in targets:
+            method = ep.method.upper()
+            bpath, bquery, bbody = _sqli_request(ep, None, _SQLI_BENIGN)
+            try:
+                base = c.request(method, bpath, params=bquery, json=bbody)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if _SQL_ERROR.search(base.text):
+                continue  # baseline already errors for unrelated reasons -> can't attribute injection
+            for slot in _sqli_slots(ep):
+                if budget <= 0:
+                    return False if tested else None
+                budget -= 1
+                tested = True
+                ppath, pquery, pbody = _sqli_request(ep, slot, _SQLI_PAYLOAD)
+                try:
+                    r = c.request(method, ppath, params=pquery, json=pbody)
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                if _SQL_ERROR.search(r.text):
+                    return True  # a quote induced a DB error the baseline lacked -> injectable
+    return False if tested else None
+
+
 def session_cookie_missing_flag(ctx, probe) -> bool | None:
     """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if it lacks
     the hardening flag named in the probe (httponly | samesite | secure). Returns None (-> N/A) when
@@ -471,6 +544,7 @@ def load_resilience(ctx, probe) -> bool:
 
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
+    "api_sqli": api_sqli,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
     "csrf_missing": csrf_missing,
@@ -505,6 +579,7 @@ _MATCHER_REASONS = {
 
 _PREDICATE_REASONS = {
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
+    "api_sqli": "an API parameter is SQL-injectable (an unbalanced quote induced a database error)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
     "idor_horizontal": "another account's object was readable by id (broken access control)",
