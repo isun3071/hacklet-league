@@ -65,9 +65,39 @@ def _base_path(spec: dict) -> str:
     return ""
 
 
-def _body_fields(op: dict, params: list) -> list[str]:
-    """Request-body property names: OpenAPI 3 `requestBody.content[json].schema.properties`, plus
-    Swagger 2 `in: body` schema properties and `in: formData` param names."""
+def _deref(spec: dict, schema, depth: int = 0):
+    """Follow a `$ref` (#/components/schemas/X or Swagger 2 #/definitions/X) to the schema it names.
+    Modern specs (FastAPI, Spring, NestJS) reference body schemas by $ref, not inline properties."""
+    if not isinstance(schema, dict) or depth > 6:
+        return schema if isinstance(schema, dict) else {}
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/"):
+        node = spec
+        for part in ref[2:].split("/"):
+            node = node.get(part) if isinstance(node, dict) else None
+            if node is None:
+                return {}
+        return _deref(spec, node, depth + 1)
+    return schema
+
+
+def _schema_props(spec: dict, schema, depth: int = 0) -> list[str]:
+    """Property names of a (possibly $ref'd, allOf-composed) object schema."""
+    schema = _deref(spec, schema, depth)
+    if not isinstance(schema, dict) or depth > 6:
+        return []
+    props: list[str] = []
+    p = schema.get("properties")
+    if isinstance(p, dict):
+        props.extend(p.keys())
+    for sub in schema.get("allOf") or []:  # composed schema: merge each part's properties
+        props.extend(_schema_props(spec, sub, depth + 1))
+    return list(dict.fromkeys(props))
+
+
+def _body_fields(spec: dict, op: dict, params: list) -> list[str]:
+    """Request-body property names: OpenAPI 3 `requestBody.content[json].schema` (resolving $ref),
+    plus Swagger 2 `in: body` schema and `in: formData` param names."""
     fields: list[str] = []
     rb = op.get("requestBody")
     if isinstance(rb, dict):
@@ -75,20 +105,15 @@ def _body_fields(op: dict, params: list) -> list[str]:
         if isinstance(content, dict):
             for ctype in ("application/json", "application/x-www-form-urlencoded"):
                 media = content.get(ctype)
-                schema = media.get("schema") if isinstance(media, dict) else None
-                props = schema.get("properties") if isinstance(schema, dict) else None
-                if isinstance(props, dict):
-                    fields.extend(props.keys())
+                if isinstance(media, dict):
+                    fields.extend(_schema_props(spec, media.get("schema")))
     for p in params:
         if not isinstance(p, dict):
             continue
         if p.get("in") == "formData" and p.get("name"):
             fields.append(p["name"])
         elif p.get("in") == "body":
-            schema = p.get("schema")
-            props = schema.get("properties") if isinstance(schema, dict) else None
-            if isinstance(props, dict):
-                fields.extend(props.keys())
+            fields.extend(_schema_props(spec, p.get("schema")))
     return list(dict.fromkeys(fields))  # dedup, order-preserving
 
 
@@ -126,7 +151,7 @@ def parse_endpoints(spec: dict) -> list[Endpoint]:
                 path=concrete,
                 method=method,
                 query_params=_params_in(params, "query"),
-                body_fields=_body_fields(op, params),
+                body_fields=_body_fields(spec, op, params),
                 path_params=path_params,
                 raw_path=templated,
             ))

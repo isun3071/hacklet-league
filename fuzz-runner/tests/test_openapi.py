@@ -51,6 +51,46 @@ def test_swagger2_basepath_body_and_formdata():
     assert _by_key(eps, "/api/upload", "post").body_fields == ["file"]
 
 
+def test_openapi3_resolves_ref_and_allof_body_schemas():
+    # FastAPI/Spring/NestJS style: requestBody schema is a $ref into components, sometimes allOf-composed
+    spec = {
+        "openapi": "3.0.0",
+        "components": {"schemas": {
+            "UserCreate": {"properties": {"email": {}, "password": {}}},
+            "Extra": {"properties": {"nickname": {}}},
+            "Composed": {"allOf": [{"$ref": "#/components/schemas/UserCreate"},
+                                   {"$ref": "#/components/schemas/Extra"}]},
+        }},
+        "paths": {
+            "/register": {"post": {"requestBody": {"content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/UserCreate"}}}}}},
+            "/profile": {"post": {"requestBody": {"content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/Composed"}}}}}},
+        },
+    }
+    eps = parse_endpoints(spec)
+    assert _by_key(eps, "/register", "post").body_fields == ["email", "password"]
+    # allOf composition merges both referenced schemas
+    assert _by_key(eps, "/profile", "post").body_fields == ["email", "password", "nickname"]
+
+
+def test_swagger2_resolves_definitions_ref():
+    spec = {
+        "swagger": "2.0",
+        "definitions": {"Login": {"properties": {"user": {}, "pass": {}}}},
+        "paths": {"/login": {"post": {"parameters": [
+            {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/Login"}}]}}},
+    }
+    assert _by_key(parse_endpoints(spec), "/login", "post").body_fields == ["user", "pass"]
+
+
+def test_ref_cycle_does_not_hang():
+    spec = {"components": {"schemas": {"A": {"$ref": "#/components/schemas/A"}}},
+            "paths": {"/x": {"post": {"requestBody": {"content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/A"}}}}}}}}
+    assert parse_endpoints(spec)[0].body_fields == []  # bounded, returns rather than recursing forever
+
+
 def test_malformed_specs_do_not_raise():
     assert parse_endpoints({}) == []
     assert parse_endpoints({"paths": None}) == []
