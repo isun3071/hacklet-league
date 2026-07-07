@@ -115,7 +115,8 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
     usable form or registration fails (email verification / CAPTCHA), so the caller treats it as N/A."""
     form = _password_form(profile.forms)
     if form is None:
-        return _register_json(base_url, suffix)  # no HTML form -> try a JSON-API registration + login
+        # no HTML form -> JSON-API registration + login, preferring endpoints named in the spec
+        return _register_json(base_url, suffix, profile)
     # per-call random username: a real app with a unique-username constraint rejects a FIXED name on
     # re-grade (run 2+), silently nulling the authed session and flipping the auth probes to clean.
     # The score depends on the cookie's flags, not the username value, so this stays deterministic.
@@ -163,7 +164,7 @@ def _bearer_token(resp: httpx.Response) -> str | None:
         return None
     nodes = [data] + [data[p] for p in ("authentication", "data", "auth", "result") if isinstance(data.get(p), dict)]
     for node in nodes:
-        for key in ("token", "accessToken", "access_token", "jwt", "id_token"):
+        for key in ("token", "accessToken", "access_token", "auth_token", "authToken", "jwt", "id_token"):
             v = node.get(key)
             if isinstance(v, str) and len(v) > 10:
                 return v
@@ -186,16 +187,32 @@ def find_json_login(client: httpx.Client):
     return None, None, None
 
 
-def _register_json(base_url: str, suffix: str) -> Account | None:
-    """Self-register via a JSON API (no HTML form): try common register endpoints, then log in to get
-    an authed session — a bearer token (default Authorization header) or a session cookie."""
+_REGISTER_KW = ("register", "signup", "sign-up", "sign_up", "join", "create-account")
+_LOGIN_KW = ("login", "signin", "sign-in", "sign_in", "authenticate")
+
+
+def _spec_auth_paths(profile, keywords) -> list[str]:
+    """POST endpoints from a discovered OpenAPI spec whose path names an auth action (register/login),
+    so a versioned or non-standard path (VAmPI's /users/v1/login) is tried before the generic list."""
+    out = []
+    for e in getattr(profile, "endpoints", None) or []:
+        if e.method.lower() == "post" and any(k in e.raw_path.lower() for k in keywords):
+            out.append(e.raw_path)
+    return out
+
+
+def _register_json(base_url: str, suffix: str, profile=None) -> Account | None:
+    """Self-register via a JSON API (no HTML form): try register endpoints (spec-named first), then
+    log in for an authed session — a bearer token (default Authorization header) or a session cookie."""
     username = "hl_" + secrets.token_hex(5) + suffix
     password = "Hl-Probe-Passw0rd!"
     email = username + "@example.com"
+    register_paths = list(dict.fromkeys(_spec_auth_paths(profile, _REGISTER_KW) + list(_JSON_REGISTER_PATHS)))
+    login_paths = list(dict.fromkeys(_spec_auth_paths(profile, _LOGIN_KW) + list(_JSON_LOGIN_PATHS)))
     client = httpx.Client(base_url=base_url, timeout=15.0, follow_redirects=True)
     body = {"email": email, "username": username, "password": password}
     registered = False
-    for path in _JSON_REGISTER_PATHS:
+    for path in register_paths:
         try:
             registered = client.post(path, json=body).status_code in (200, 201)
         except (httpx.HTTPError, httpx.InvalidURL):
@@ -205,7 +222,7 @@ def _register_json(base_url: str, suffix: str) -> Account | None:
     if not registered:
         client.close()
         return None
-    for path in _JSON_LOGIN_PATHS:
+    for path in login_paths:
         for cred in ({"email": email, "password": password}, {"username": username, "password": password}):
             try:
                 r = client.post(path, json=cred)

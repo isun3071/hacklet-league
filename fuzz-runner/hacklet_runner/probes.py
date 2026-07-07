@@ -9,6 +9,7 @@ means the probe fires and adds its penalty.
 from __future__ import annotations
 
 import re
+import secrets
 import statistics
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
@@ -266,6 +267,106 @@ def api_sqli(ctx, probe) -> bool | None:
                 if _SQL_ERROR.search(r.text):
                     return True  # a quote induced a DB error the baseline lacked -> injectable
     return False if tested else None
+
+
+# API BOLA / horizontal IDOR (OWASP API-Security #1): an object created by user A is readable by
+# user B. Verified with a planted canary — B's read must return A's SECRET value (not just a 2xx, and
+# not the id A chose, which legitimately echoes back), so a token-scoped or no-op endpoint can't false
+# -positive. Guarded on the read being auth-gated (unauth -> 401/403), so a public endpoint isn't BOLA.
+def _bola_pairs(endpoints):
+    """(create, read, param, id_field) tuples: a POST-with-body create paired with a GET read whose
+    single path param sits on the same collection. id_field = the create body field that supplies the
+    id (when the path param names one), else None (the id comes from the create response)."""
+    creates = [e for e in endpoints if e.method.lower() == "post" and e.body_fields]
+    pairs = []
+    for r in endpoints:
+        if r.method.lower() != "get" or len(r.path_params) != 1:
+            continue
+        param = r.path_params[0]
+        collection = r.raw_path.rsplit("/", 1)[0]
+        if r.raw_path != collection + "/{" + param + "}":
+            continue  # param must be the final path segment (a resource id), not mid-path
+        for c in creates:
+            if c.raw_path.rstrip("/") == collection:
+                pairs.append((c, r, param, param if param in c.body_fields else None))
+    return pairs
+
+
+def _created_id(resp):
+    """The id of a just-created object: a Location header tail, or an id-like field in the JSON body."""
+    loc = resp.headers.get("location")
+    if loc:
+        return loc.rstrip("/").rsplit("/", 1)[-1]
+    try:
+        data = resp.json()
+    except (ValueError, httpx.HTTPError):
+        return None
+    candidates = [data] + ([v for v in data.values() if isinstance(v, dict)] if isinstance(data, dict) else [])
+    for node in candidates:
+        if isinstance(node, dict):
+            for k in ("id", "_id", "uuid", "slug"):
+                if isinstance(node.get(k), (str, int)):
+                    return node[k]
+    return None
+
+
+# A cross-user-readable object is only unambiguous slop when it carries an INHERENTLY private field —
+# a shared catalog is also readable by everyone but isn't a vuln (that's intent, which humans judge).
+# Gating on a sensitive field name keeps this intent-independent: a secret/credential/PII exposed to
+# another account is wrong regardless of the app's intent.
+_SENSITIVE_FIELD = re.compile(
+    r"secret|password|passwd|apikey|api_key|private|token|ssn|social_security|"
+    r"credit_?card|card_?number|cvv|iban|passport", re.IGNORECASE)
+
+
+def api_bola(ctx, probe) -> bool | None:
+    """Register two accounts A and B; A creates an object whose sensitive field carries a canary; if B
+    can read that object and sees A's canary, object-level authorization is broken. Only pairs whose
+    create body has a sensitive field are tested (precision — a shared collection isn't BOLA). N/A when
+    there's no such pair or two accounts can't be established."""
+    pairs = [(c, r, p, idf) for (c, r, p, idf) in _bola_pairs(ctx.profile.endpoints)
+             if any(_SENSITIVE_FIELD.search(f) for f in c.body_fields)]
+    if not pairs:
+        return None  # no create+read pair with a private field to exercise -> couldn't test
+    a = auth.register_account(ctx.base_url, ctx.profile, suffix="_a")
+    b = auth.register_account(ctx.base_url, ctx.profile, suffix="_b")
+    if a is None or b is None:
+        for acct in (a, b):
+            if acct:
+                acct.client.close()
+        return None  # couldn't establish two accounts (no JSON register) -> couldn't test
+    tested = False
+    try:
+        with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=True,
+                          headers=ctx.headers) as anon:
+            for create_ep, read_ep, param, id_field in pairs:
+                id_value = "hlbola" + secrets.token_hex(4)
+                secret_value = "hlsecret" + secrets.token_hex(6)
+                # canary only in the sensitive field(s); id field gets the id; others a benign filler
+                body = {f: (id_value if f == id_field else
+                            secret_value if _SENSITIVE_FIELD.search(f) else "hlfill" + secrets.token_hex(3))
+                        for f in create_ep.body_fields}
+                try:
+                    created = a.client.post(create_ep.path, json=body)
+                    if created.status_code not in (200, 201):
+                        continue
+                    obj_id = id_value if id_field else _created_id(created)
+                    if obj_id in (None, ""):
+                        continue
+                    read_path = read_ep.raw_path.replace(
+                        "{" + param + "}", urllib.parse.quote(str(obj_id), safe=""))
+                    if anon.get(read_path).status_code not in (401, 403):
+                        continue  # read isn't auth-gated -> a public endpoint, not a BOLA
+                    tested = True
+                    b_read = b.client.get(read_path)
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                if b_read.status_code == 200 and secret_value in b_read.text:
+                    return True  # B read A's object AND saw A's planted secret -> broken object auth
+        return False if tested else None
+    finally:
+        a.client.close()
+        b.client.close()
 
 
 def session_cookie_missing_flag(ctx, probe) -> bool | None:
@@ -574,6 +675,7 @@ def load_resilience(ctx, probe) -> bool:
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
+    "api_bola": api_bola,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
     "csrf_missing": csrf_missing,
@@ -610,6 +712,7 @@ _MATCHER_REASONS = {
 _PREDICATE_REASONS = {
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
     "api_sqli": "an API parameter is SQL-injectable (an unbalanced quote induced a database error)",
+    "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
     "idor_horizontal": "another account's object was readable by id (broken access control)",

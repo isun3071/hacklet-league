@@ -89,3 +89,24 @@ def test_credential_leak_precision_no_false_positives():
 def test_data_exposure_probe_fires_on_leaky_endpoint():
     report = run(SubprocessDeployer(str(REFS / "jsonapi" / "app.py")), load_catalog(CATALOG))
     assert report.by_id["sec-exposure-005"] == "slop_detected"  # /api/dump leaks passwords
+
+
+# --- API BOLA / horizontal IDOR (api_bola) ---
+
+def test_bola_pairs_matches_create_to_read():
+    from hacklet_runner.probes import _bola_pairs
+    eps = [
+        Endpoint(path="/api/orders", method="post", body_fields=["item", "secret"], raw_path="/api/orders"),
+        Endpoint(path="/api/orders/1", method="get", path_params=["id"], raw_path="/api/orders/{id}"),
+        Endpoint(path="/api/notes", method="get", query_params=["q"], raw_path="/api/notes"),  # unpaired
+    ]
+    pairs = _bola_pairs(eps)
+    assert len(pairs) == 1
+    c, r, param, id_field = pairs[0]
+    assert (c.raw_path, r.raw_path, param, id_field) == ("/api/orders", "/api/orders/{id}", "id", None)
+
+
+def test_bola_probe_fires_on_cross_user_object_read():
+    # A creates an order with a canary secret; B reads it back -> broken object-level auth
+    report = run(SubprocessDeployer(str(REFS / "jsonapi" / "app.py")), load_catalog(CATALOG))
+    assert report.by_id["sec-idor-002"] == "slop_detected"
