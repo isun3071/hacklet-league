@@ -36,12 +36,26 @@ class Form:
 
 
 @dataclass
+class Endpoint:
+    """An API operation discovered from a served OpenAPI/Swagger spec — the JSON-API analogue of a
+    Form. Feeds the declarative fan-out (headers/crash/exposure across real endpoints) and the
+    injection probes (concrete query params / JSON body fields to inject into)."""
+    path: str                                              # concretized path ({id}->1) for fetches
+    method: str = "get"                                    # get/post/put/patch/delete
+    query_params: list[str] = field(default_factory=list)  # query parameter names
+    body_fields: list[str] = field(default_factory=list)   # JSON/form request-body property names
+    path_params: list[str] = field(default_factory=list)   # path-template param names (BOLA/IDOR)
+    raw_path: str = ""                                      # original template, e.g. /users/v1/{username}
+
+
+@dataclass
 class Profile:
     """The stack-agnostic surface map produced by discovery."""
     base_url: str
     routes: list[str] = field(default_factory=list)        # discovered paths (incl "/")
     forms: list[Form] = field(default_factory=list)         # discovered forms with their fields
     capabilities: dict[str, bool] = field(default_factory=dict)
+    endpoints: list[Endpoint] = field(default_factory=list)  # API operations from an OpenAPI spec
 
     @property
     def form_endpoints(self) -> list[str]:  # back-compat for predicates that target form actions

@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from . import openapi
 from .schema import Form, Profile
 
 _LINK = re.compile(r'(?<![-\w])href=["\']([^"\']+)["\']', re.I)
@@ -63,6 +64,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     visited: set[str] = set()
     queue: list[tuple[str, int]] = [("/", 0)]
     any_response = False
+    endpoints: list = []
 
     with httpx.Client(base_url=base_url, timeout=5.0, follow_redirects=True, headers=headers) as c:
         while queue and len(visited) < max_pages:
@@ -97,6 +99,13 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                         if p not in visited:
                             queue.append((p, depth + 1))
 
+        # API surface from a served OpenAPI/Swagger spec. A JSON API serves no HTML to crawl, so this
+        # is often the ONLY way to see its endpoints — the fan-out probes (headers/crash/exposure) and
+        # the injection probes all target these. No spec served -> [] (the HTML-only path is unchanged).
+        endpoints = openapi.ingest(base_url, c)
+        for ep in endpoints:
+            routes.setdefault(ep.path, None)
+
     browser_ok = False
     if render is not None:  # browser-rendered DOM: client-rendered forms/routes a static crawl misses
         dom = render(base_url.rstrip("/") + "/", headers=headers)
@@ -116,7 +125,12 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
 
     capabilities = {
         "at_least_one_http_endpoint_exists": any_response,
-        "any_endpoint_accepts_text_input": any(f.fields for f in forms),
+        # text-input surface = HTML form fields OR API query params / JSON body fields (so the
+        # injection probes become applicable on a form-less JSON API discovered via its spec).
+        "any_endpoint_accepts_text_input": (
+            any(f.fields for f in forms)
+            or any(ep.query_params or ep.body_fields for ep in endpoints)
+        ),
         "any_form_has_password": any(
             any("pass" in name.lower() for name in form.fields) for form in forms
         ),
@@ -127,4 +141,5 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         # those probes read N/A (not a false positive) against an http:// target.
         "served_over_https": base_url.lower().startswith("https"),
     }
-    return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities)
+    return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities,
+                   endpoints=endpoints)
