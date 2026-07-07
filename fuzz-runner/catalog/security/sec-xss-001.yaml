@@ -7,7 +7,8 @@ penalty: 30
 applicability:
   requires: [any_endpoint_accepts_text_input]
 probe:
-  target: forms   # fan across every discovered form, filling each field with the payload
-  fill: "<script>hl-xss-7f3c</script>"
-slop_if:
-  - response_contains: "<script>hl-xss-7f3c</script>"
+  # comprehensive reflected+stored XSS: each field gets every payload shape (script / img / svg /
+  # javascript-URI / attribute-breakout / script-breakout / case-varied); fires once on unescaped
+  # reflection of a unique marker. dom_xss (sec-domxss-001) covers execution in a rendered DOM.
+  predicate: xss_injectable
+  max_attempts: 150

@@ -51,10 +51,10 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-headers-004"] == "slop_detected"   # no X-Frame-Options and no CSP frame-ancestors
     assert o["sec-headers-005"] == "slop_detected"   # missing Referrer-Policy
     assert o["sec-headers-003"] == "not_applicable"  # HSTS meaningless over plain http
-    # sec-xss-001 fans across discovered forms (/login, /search, /register, /notes); only /search reflects:
+    # sec-xss-001 is a comprehensive reflected+stored XSS predicate -> ONE finding (fires on /search's
+    # unescaped reflection), not a per-form declarative fan-out:
     xss_hits = [x for x in report.outcomes if x.probe_id == "sec-xss-001"]
-    assert {x.target for x in xss_hits} == {"/login", "/search", "/register", "/notes"}
-    assert any(x.outcome == "slop_detected" and x.target == "/search" for x in xss_hits)
+    assert len(xss_hits) == 1 and xss_hits[0].outcome == "slop_detected"
     # sec-secrets-001 finds the leaked AWS key in /config.js (variant-grouped -> one penalty):
     assert any(x.outcome == "slop_detected" and x.target == "/config.js"
                for x in report.outcomes if x.probe_id == "sec-secrets-001")

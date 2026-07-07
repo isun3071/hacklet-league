@@ -387,6 +387,98 @@ def api_sqli(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+# Reflected + stored XSS — comprehensive technique coverage of one flaw ("this input is echoed into
+# HTML unescaped"), collapsing to a single finding. Each payload targets a different reflection context;
+# detection is verbatim, unescaped reflection of a UNIQUE per-run marker (an escaping app encodes the
+# `<`/`"` -> the detect string never appears -> clean). The browser dom_xss probe covers execution.
+def _xss_payloads(m: str):
+    """(inject, detect) per technique — `detect` appears only if `inject` reflects unescaped."""
+    return [
+        ("<script>%s</script>" % m, "<script>%s</script>" % m),            # script tag in HTML body
+        ("<img src=x onerror=%s>" % m, "<img src=x onerror=%s>" % m),      # <img> event handler
+        ("<svg onload=%s>" % m, "<svg onload=%s>" % m),                    # <svg> event handler
+        ('<a href="javascript:%s">x</a>' % m, 'href="javascript:%s"' % m), # javascript: URI
+        ('"><svg onload=%s>' % m, "<svg onload=%s>" % m),                  # break out of an attribute value
+        ('" onmouseover=%s x="' % m, '" onmouseover=%s' % m),              # attribute event injection (no <)
+        ("</script><svg onload=%s>" % m, "<svg onload=%s>" % m),           # break out of a <script> block
+        ("<ScRiPt>%s</ScRiPt>" % m, "<ScRiPt>%s</ScRiPt>" % m),            # case-varied tag (filter bypass)
+    ]
+
+
+_XSS_FILLER = "hlxfill"  # benign value for the fields we're not currently injecting
+
+
+def _xss_send(c, method, action, data):
+    if (method or "get").lower() == "get":
+        return c.request("GET", action, params=data)
+    return c.request("POST", action, data=data)  # HTML form -> form-encoded body
+
+
+def _reflects(resp, detect: str) -> bool:
+    """The payload reflects unescaped AND in an HTML response — a payload echoed into a JSON API body
+    is not XSS (JSON isn't rendered as HTML), so gate on the content type to avoid that false positive."""
+    return "html" in resp.headers.get("content-type", "").lower() and detect in resp.text
+
+
+def xss_injectable(ctx, probe) -> bool | None:
+    """Reflected + stored XSS across discovered forms and reflecting query params. Per field, injects
+    each payload shape (script / img / svg / javascript-URI / attribute-breakout / script-breakout /
+    case-varied) and fires on verbatim unescaped reflection of a unique marker; for POST forms, also
+    submits then re-fetches the page to catch STORED XSS. N/A when there's no HTML input surface."""
+    forms = [(f.action, (f.method or "get").lower(), list(f.fields)) for f in ctx.profile.forms if f.fields]
+    q_eps = [(e.raw_path, "get", list(e.query_params)) for e in ctx.profile.endpoints
+             if e.method.lower() == "get" and e.query_params]
+    s_eps = [(e.raw_path, "get", list(_COMMON_PARAMS)) for e in ctx.profile.endpoints
+             if e.method.lower() == "get" and not e.query_params and not e.path_params
+             and _SEARCHABLE.search(e.raw_path)]
+    targets = forms + q_eps + s_eps
+    if not targets:
+        return None
+    m = "hlx" + secrets.token_hex(4)
+    payloads = _xss_payloads(m)
+    budget = probe.probe.get("max_attempts", 150)
+    tested = False
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
+        for action, method, fields in targets:
+            for field in fields:
+                if budget <= 0:
+                    break
+                budget -= 1
+                tested = True
+                # Cheap gate: does this field echo the marker into an HTML response at all? If not, no
+                # reflected XSS is possible here -> skip the 8 payload shapes. Keeps breadth across every
+                # form affordable (a non-reflecting form costs 1 request/field, not 8).
+                try:
+                    probe_resp = _xss_send(c, method, action, {fn: (m if fn == field else _XSS_FILLER) for fn in fields})
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                if not _reflects(probe_resp, m):
+                    continue
+                for inject, detect in payloads:
+                    if budget <= 0:
+                        break
+                    budget -= 1
+                    data = {fn: (inject if fn == field else _XSS_FILLER) for fn in fields}
+                    try:
+                        if _reflects(_xss_send(c, method, action, data), detect):
+                            return True  # reflected unescaped in an HTML (executable) context -> XSS
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+            if budget <= 0:
+                break
+            # STORED: submit a script payload, then re-fetch the page — persisted reflection = stored XSS
+            if method == "post" and budget > 0:
+                budget -= 1
+                inject, detect = payloads[0]
+                try:
+                    _xss_send(c, "post", action, {fn: inject for fn in fields})
+                    if _reflects(c.get(action), detect):
+                        return True  # persisted across a fresh request -> stored XSS
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    pass
+    return False if tested else None
+
+
 # API BOLA / horizontal IDOR (OWASP API-Security #1): an object created by user A is readable by
 # user B. Verified with a planted canary — B's read must return A's SECRET value (not just a 2xx, and
 # not the id A chose, which legitimately echoes back), so a token-scoped or no-op endpoint can't false
@@ -790,6 +882,7 @@ def load_resilience(ctx, probe) -> bool:
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
+    "xss_injectable": xss_injectable,
     "api_bola": api_bola,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
@@ -827,6 +920,7 @@ _MATCHER_REASONS = {
 _PREDICATE_REASONS = {
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
+    "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
