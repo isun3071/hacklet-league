@@ -37,7 +37,7 @@ class _Ctx:
 
 
 class _Probe:
-    probe = {"max_attempts": 80}
+    probe = {"max_attempts": 80, "time_delay": 1}   # short delay keeps the time-based test fast
 
 
 def test_discovers_api_endpoints_from_spec(jsonapi):
@@ -83,6 +83,34 @@ def test_api_sqli_common_param_guessing_on_searchable_get(jsonapi):
     prof = Profile(base_url=jsonapi, endpoints=[
         Endpoint(path="/api/search", method="get", raw_path="/api/search")])
     assert api_sqli(_Ctx(jsonapi, prof), _Probe()) is True
+
+
+def _only(jsonapi, path):
+    return _Ctx(jsonapi, Profile(base_url=jsonapi,
+                                 endpoints=[Endpoint(path=path, method="get", raw_path=path)]))
+
+
+def test_sqli_boolean_technique(jsonapi):
+    # /api/bsearch leaks NO error; injection only shows as a result-set size change (true vs false)
+    assert api_sqli(_only(jsonapi, "/api/bsearch"), _Probe()) is True
+
+
+def test_sqli_union_technique(jsonapi):
+    # /api/usearch: a UNION-concatenated marker executes (appears only if the SQL ran)
+    assert api_sqli(_only(jsonapi, "/api/usearch"), _Probe()) is True
+
+
+def test_sqli_time_technique(jsonapi):
+    # /api/tsearch: fully blind — only a SLEEP payload's measurable delay reveals it
+    assert api_sqli(_only(jsonapi, "/api/tsearch"), _Probe()) is True
+
+
+def test_sqli_clean_on_parameterized_reflecting_endpoint(jsonapi):
+    # /api/notes reflects q but is parameterized; equal-length true/false payloads -> no divergence,
+    # no error, no marker, no delay -> every technique stays clean (precision on a reflecting API)
+    prof = Profile(base_url=jsonapi, endpoints=[
+        Endpoint(path="/api/notes", method="get", query_params=["q"], raw_path="/api/notes")])
+    assert api_sqli(_Ctx(jsonapi, prof), _Probe()) is False
 
 
 # --- excessive data exposure (response_leaks_credentials) ---

@@ -15,6 +15,8 @@ api_bola fires on /api/orders/{id} (B reads A's order + secret) — all clean on
 import http.server
 import json
 import os
+import re
+import time
 from urllib.parse import parse_qs, unquote, urlparse
 
 PORT = int(os.environ.get("PORT", "8080"))
@@ -35,7 +37,10 @@ SPEC = {
         "/api/notes": {
             "get": {"parameters": [{"in": "query", "name": "q", "schema": _STR}]}
         },
-        "/api/search": {"get": {}},   # searchable, but declares NO params -> exercises common-param guessing
+        "/api/search": {"get": {}},   # searchable, declares NO params -> exercises common-param guessing
+        "/api/bsearch": {"get": {}},  # BOOLEAN-based only (no error leaked; result set depends on truth)
+        "/api/usearch": {"get": {}},  # UNION-based only (a concatenated marker executes)
+        "/api/tsearch": {"get": {}},  # TIME-based only (a sleep payload delays the response)
         "/api/dump": {"get": {}},
         "/api/register": {"post": {"requestBody": {"content": {"application/json": {
             "schema": {"properties": {"username": _STR, "email": _STR, "password": _STR}}}}}}},
@@ -78,13 +83,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
             q = parse_qs(u.query).get("q", [""])[0]  # parameterized: quote is data, never grammar
             _send(self, 200, "application/json", json.dumps({"query": q, "notes": []}).encode())
         elif u.path == "/api/search":
-            q = parse_qs(u.query).get("q", [""])[0]  # INJECTABLE via the undeclared ?q= (common-param guess)
+            q = parse_qs(u.query).get("q", [""])[0]  # ERROR-based: a lone quote leaks a DB error
             sql = "SELECT * FROM products WHERE name LIKE '%%%s%%'" % q
             if "'" in q:
                 body = ('sqlite3.OperationalError: unrecognized token\n[SQL: %s]' % sql).encode()
                 _send(self, 500, "text/html; charset=utf-8", body)
             else:
                 _send(self, 200, "application/json", json.dumps({"results": []}).encode())
+        elif u.path == "/api/bsearch":
+            q = parse_qs(u.query).get("q", [""])[0]  # BOOLEAN: always-true condition -> all rows
+            rows = ["item"] * 50 if "'1'='1" in q else []   # no error on a lone quote; size tracks truth
+            _send(self, 200, "application/json", json.dumps({"results": rows}).encode())
+        elif u.path == "/api/usearch":
+            q = parse_qs(u.query).get("q", [""])[0]  # UNION: a concatenation expression executes
+            m = (re.search(r"'([^']*)'\|\|'([^']*)'\|\|'([^']*)'", q)
+                 or re.search(r"CONCAT\('([^']*)','([^']*)','([^']*)'\)", q, re.I))
+            row = "".join(m.groups()) if m else ""
+            _send(self, 200, "application/json", json.dumps({"row": row, "results": []}).encode())
+        elif u.path == "/api/tsearch":
+            q = parse_qs(u.query).get("q", [""])[0]  # TIME: a sleep payload delays the response
+            m = re.search(r"(?:SLEEP|pg_sleep)\((\d+)\)", q, re.IGNORECASE)
+            if m:
+                time.sleep(min(int(m.group(1)), 5))
+            _send(self, 200, "application/json", json.dumps({"results": []}).encode())
         elif u.path == "/api/dump":  # excessive data exposure: returns password material to any caller
             users = [{"username": "alice", "email": "alice@x.com", "password": "hunter2"},
                      {"username": "bob", "email": "bob@x.com", "password": "s3cret!"}]

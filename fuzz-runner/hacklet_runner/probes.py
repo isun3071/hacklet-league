@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import secrets
 import statistics
+import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -266,40 +267,122 @@ def _sqli_targets(profile):
     return targets
 
 
+# SQLi detection techniques — comprehensive coverage of how ONE flaw ("this parameter reaches an
+# unparameterized query") manifests. All share a single finding (the predicate returns once): technique
+# breadth is RECALL, not extra penalty. Ordered cheap->expensive; time-based is a bounded last resort.
+def _do(c, method, req):
+    path, query, body = req
+    return c.request(method, path, params=query or None, json=body)
+
+
+def _tech_error(c, method, reqfn) -> bool:
+    """A lone quote induces a DB-error signature (the app leaks SQL errors)."""
+    return bool(_SQL_ERROR.search(_do(c, method, reqfn(_SQLI_PAYLOAD)).text))
+
+
+_SQLI_TRUE = "1' OR '1'='1' -- "
+_SQLI_FALSE = "1' OR '1'='2' -- "   # SAME length as TRUE; differs only in the boolean's truth value
+
+
+def _diverges(a, b) -> bool:
+    """Two responses differ materially: status, or a body-size gap too large for equal-length reflected
+    payloads to explain."""
+    if a.status_code != b.status_code:
+        return True
+    hi, lo = max(len(a.text), len(b.text)), min(len(a.text), len(b.text))
+    return hi - lo > max(64, hi * 0.15)
+
+
+def _tech_boolean(c, method, reqfn) -> bool:
+    """An always-true vs always-false condition (same-length payloads) changes the result set on an
+    otherwise-stable endpoint — visible or blind boolean injection."""
+    f1 = _do(c, method, reqfn(_SQLI_FALSE))
+    f2 = _do(c, method, reqfn(_SQLI_FALSE))
+    if _diverges(f1, f2):
+        return False  # output not stable across identical calls -> a true/false diff isn't attributable
+    return _diverges(_do(c, method, reqfn(_SQLI_TRUE)), f1)
+
+
+_UNION_MARK = "HLuok42"                                          # the CONCATENATION result; a literal
+_UNION_COLS = ("'HLu'||'ok'||'42'", "CONCAT('HLu','ok','42')")  # echo of the payload can't produce it
+
+
+def _tech_union(c, method, reqfn) -> bool:
+    """A UNION SELECT of a concatenated marker executes — the marker appears only if the SQL ran, not
+    from reflecting the payload literal. Tries ANSI `||` and MySQL CONCAT across column counts."""
+    for expr in _UNION_COLS:
+        for n in range(1, 7):
+            cols = ",".join([expr] + ["NULL"] * (n - 1))
+            if _UNION_MARK in _do(c, method, reqfn("1' UNION SELECT %s -- " % cols)).text:
+                return True
+    return False
+
+
+_TIME_PAYLOADS = ("1' OR SLEEP({d}) -- ", "1'||pg_sleep({d})-- ",
+                  "1'); SELECT pg_sleep({d})-- ", "1' AND SLEEP({d})=0 -- ")
+
+
+def _tech_time(c, method, reqfn, delay) -> bool:
+    """A time-delay payload measurably slows the response (confirmed twice, to reject jitter) — fully
+    blind injection where nothing observable changes but attacker SQL still executes."""
+    def elapsed(p):
+        t0 = time.perf_counter()
+        _do(c, method, reqfn(p))
+        return time.perf_counter() - t0
+    for tmpl in _TIME_PAYLOADS:
+        p = tmpl.format(d=delay)
+        if elapsed(p) >= delay * 0.8 and elapsed(p) >= delay * 0.8:
+            return True
+    return False
+
+
+_DEEP_SLOTS = 6  # UNION + time are expensive/blind -> run them on at most this many slots
+
+
 def api_sqli(ctx, probe) -> bool | None:
-    """Error-based SQLi across the discovered surface (OpenAPI + mined API paths + HTML GET forms, with
-    common-param guessing on param-less searchable GETs). Per injectable slot: benign baseline vs.
-    unbalanced-quote payload; slop iff the payload induces a DB-error signature the baseline lacks.
-    N/A when no injectable GET/POST target exists."""
+    """SQL injection across the discovered surface (OpenAPI + mined API paths + HTML GET forms, with
+    common-param guessing on param-less searchable GETs). Per injectable slot, tries error-, boolean-,
+    UNION-, and time-based detection — one flaw, one finding. N/A when no injectable GET/POST target
+    exists; the SQL-error / stability / double-timing guards keep a parameterized app clean."""
     targets = [e for e in _sqli_targets(ctx.profile)
                if e.method.lower() in ("get", "post") and _sqli_slots(e)]
     if not targets:
         return None
-    budget = probe.probe.get("max_attempts", 80)
+    budget = probe.probe.get("max_attempts", 120)
+    delay = probe.probe.get("time_delay", 3)
     tested = False
-    with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=False,
-                      headers=ctx.headers) as c:
+    deep: list = []  # slots deferred to the UNION/time (blind, last-resort) pass
+    with httpx.Client(base_url=ctx.base_url, timeout=max(15.0, delay + 8),
+                      follow_redirects=False, headers=ctx.headers) as c:
         for ep in targets:
             method = ep.method.upper()
-            bpath, bquery, bbody = _sqli_request(ep, None, _SQLI_BENIGN)
             try:
-                base = c.request(method, bpath, params=bquery, json=bbody)
+                base = _do(c, method, _sqli_request(ep, None, _SQLI_BENIGN))
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
             if _SQL_ERROR.search(base.text):
                 continue  # baseline already errors for unrelated reasons -> can't attribute injection
             for slot in _sqli_slots(ep):
                 if budget <= 0:
-                    return False if tested else None
+                    break
                 budget -= 1
                 tested = True
-                ppath, pquery, pbody = _sqli_request(ep, slot, _SQLI_PAYLOAD)
+                reqfn = (lambda ep=ep, slot=slot: lambda v: _sqli_request(ep, slot, v))()
                 try:
-                    r = c.request(method, ppath, params=pquery, json=pbody)
+                    if _tech_error(c, method, reqfn) or _tech_boolean(c, method, reqfn):
+                        return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
-                if _SQL_ERROR.search(r.text):
-                    return True  # a quote induced a DB error the baseline lacked -> injectable
+                if len(deep) < _DEEP_SLOTS:
+                    deep.append((method, reqfn))
+            if budget <= 0:
+                break
+        for method, reqfn in deep:
+            try:
+                if _tech_union(c, method, reqfn) or _tech_time(c, method, reqfn, delay):
+                    return True
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
     return False if tested else None
 
 
@@ -745,7 +828,7 @@ _MATCHER_REASONS = {
 
 _PREDICATE_REASONS = {
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
-    "api_sqli": "an API parameter is SQL-injectable (an unbalanced quote induced a database error)",
+    "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
