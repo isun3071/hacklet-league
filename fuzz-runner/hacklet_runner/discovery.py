@@ -12,7 +12,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
-from . import openapi
+from . import jsmine, openapi
 from .schema import Form, Profile
 
 _LINK = re.compile(r'(?<![-\w])href=["\']([^"\']+)["\']', re.I)
@@ -65,6 +65,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     queue: list[tuple[str, int]] = [("/", 0)]
     any_response = False
     endpoints: list = []
+    js_urls: list[str] = []           # same-origin .js assets to mine for an SPA's API paths
 
     with httpx.Client(base_url=base_url, timeout=5.0, follow_redirects=True, headers=headers) as c:
         while queue and len(visited) < max_pages:
@@ -91,6 +92,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                 p = _same_origin_path(src, base_url, path)
                 if p:
                     routes.setdefault(p, None)
+                    if p.split("?")[0].endswith(".js"):
+                        js_urls.append(p)
             if depth < max_depth:
                 for href in _LINK.findall(html):
                     p = _same_origin_path(href, base_url, path)
@@ -99,10 +102,13 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                         if p not in visited:
                             queue.append((p, depth + 1))
 
-        # API surface from a served OpenAPI/Swagger spec. A JSON API serves no HTML to crawl, so this
-        # is often the ONLY way to see its endpoints — the fan-out probes (headers/crash/exposure) and
-        # the injection probes all target these. No spec served -> [] (the HTML-only path is unchanged).
-        endpoints = openapi.ingest(base_url, c)
+        # API surface from a served OpenAPI/Swagger spec, plus paths mined from an SPA's JS bundles.
+        # Both surface a form-less API the HTML crawl can't see; the fan-out and injection probes target
+        # them. Neither present -> [] (the HTML-only path is unchanged). Dedup by (method, raw_path).
+        endpoints = openapi.ingest(base_url, c) + jsmine.ingest(c, js_urls)
+        seen_eps: set[tuple] = set()
+        endpoints = [e for e in endpoints
+                     if (e.method, e.raw_path) not in seen_eps and not seen_eps.add((e.method, e.raw_path))]
         for ep in endpoints:
             routes.setdefault(ep.path, None)
 
