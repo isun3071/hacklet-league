@@ -108,6 +108,34 @@ def response_leaks_secret(resp, arg=None) -> bool:
     return any(p.search(resp.text) for p in _SECRET_PATTERNS)
 
 
+# Credential material an API response must never contain: a populated password-family field, or a
+# password-hash signature. High precision by design — password fields are NEVER a legitimate part of
+# a response (unlike access/refresh tokens, which ARE the auth flow and are excluded). Masked values
+# (***, xxxx, [REDACTED]) and the OpenAPI spec's own schema examples are excluded.
+_CRED_FIELD = re.compile(
+    r'"(?:password|passwd|pwd|hashed_password|password_hash|pwd_hash|user_password|'
+    r'plaintext_password)"\s*:\s*"(?!\s*(?:\*{2,}|x{4,}|redacted|hidden|\.{3})\s*")[^"]{2,}"',
+    re.IGNORECASE,
+)
+_CRED_HASH = re.compile(
+    r"\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}"   # bcrypt
+    r"|\$argon2(?:id|i|d)\$"                # argon2
+    r"|\$6\$[./A-Za-z0-9]{8,}"             # sha512crypt
+    r"|\$1\$[./A-Za-z0-9]{6,}"             # md5crypt
+    r"|\bpbkdf2_sha256\$\d+\$"             # Django PBKDF2
+)
+_OPENAPI_DOC = re.compile(r'"(?:openapi|swagger)"\s*:\s*"')
+
+
+def response_leaks_credentials(resp, arg=None) -> bool:
+    if resp.status_code != 200:
+        return False
+    body = resp.text
+    if _OPENAPI_DOC.search(body[:4000]):
+        return False  # a served spec naming a "password" field in its schema isn't a data leak
+    return bool(_CRED_FIELD.search(body) or _CRED_HASH.search(body))
+
+
 # Files that must never be served at the webroot (deploying with .env / .git present is classic
 # slop). Each requires status 200 AND a content signature, so a 404 / redirect reads clean.
 _DOTENV = re.compile(r"(?im)^[ \t]*(?:export[ \t]+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|CREDENTIAL|DATABASE_URL)[A-Z0-9_]*[ \t]*=")
@@ -138,6 +166,7 @@ MATCHERS = {
     "response_has_header": response_has_header,
     "response_is_aws_credentials": response_is_aws_credentials,
     "response_leaks_secret": response_leaks_secret,
+    "response_leaks_credentials": response_leaks_credentials,
     "response_is_dotenv": response_is_dotenv,
     "response_is_git_config": response_is_git_config,
     "response_is_git_head": response_is_git_head,
@@ -571,6 +600,7 @@ _MATCHER_REASONS = {
     "response_uncompressed": "sizeable text served without gzip (no Content-Encoding)",
     "response_has_header": "leaks the {arg} header (stack / version disclosure)",
     "response_is_aws_credentials": "served an AWS credentials file at the webroot",
+    "response_leaks_credentials": "returned password/credential material in a response body",
     "response_leaks_secret": "leaked a secret (private key / cloud or API token)",
     "response_is_dotenv": "served a .env secrets file",
     "response_is_git_config": "served .git/config (source repo exposed)",

@@ -4,8 +4,10 @@ spec-driven discovery + error-based SQLi path that references/vulnerable (HTML-f
 - GET /openapi.json      the spec -> the discoverable API surface (no HTML to crawl)
 - GET /api/items/{id}    INJECTABLE: id is concatenated into SQL; a lone quote -> a leaked DB error
 - GET /api/notes?q=      SAFE: q is parameterized; a quote is inert data, never an error
+- GET /api/dump          LEAKY: returns user records including plaintext "password" fields (data exposure)
 
-api_sqli must fire on /api/items/{id} and stay clean on /api/notes (the differential's precision).
+api_sqli must fire on /api/items/{id} and stay clean on /api/notes (the differential's precision);
+response_leaks_credentials must fire on /api/dump and stay clean on the others.
 """
 import http.server
 import json
@@ -26,6 +28,7 @@ SPEC = {
             "get": {"parameters": [
                 {"in": "query", "name": "q", "schema": {"type": "string"}}]}
         },
+        "/api/dump": {"get": {}},
     },
 }
 
@@ -57,6 +60,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif u.path == "/api/notes":
             q = parse_qs(u.query).get("q", [""])[0]  # parameterized: quote is data, never grammar
             _send(self, 200, "application/json", json.dumps({"query": q, "notes": []}).encode())
+        elif u.path == "/api/dump":  # excessive data exposure: returns password material to any caller
+            users = [{"username": "alice", "email": "alice@x.com", "password": "hunter2"},
+                     {"username": "bob", "email": "bob@x.com", "password": "s3cret!"}]
+            _send(self, 200, "application/json", json.dumps({"users": users}).encode())
         else:
             _send(self, 404, "application/json", b'{"error":"not found"}')
 
