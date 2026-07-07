@@ -6,12 +6,26 @@ fill it heuristically, submit, and hold the resulting session. Reusable by the a
 """
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 
 import httpx
 
 from .schema import Form, Profile
+
+_HIDDEN_INPUT = re.compile(r"<input\b[^>]*>", re.IGNORECASE)
+_INPUT_ATTR = re.compile(r'\b(name|value)\s*=\s*"([^"]*)"', re.IGNORECASE)
+
+
+def _csrf_token(html: str) -> str | None:
+    """Parse the first hidden input whose name looks like a CSRF token and return its value, so a
+    CSRF-protected form POST (Gitea, Django, Rails, ...) is accepted instead of silently rejected."""
+    for tag in _HIDDEN_INPUT.findall(html):
+        attrs = {k.lower(): v for k, v in _INPUT_ATTR.findall(tag)}
+        if "value" in attrs and is_csrf_field(attrs.get("name", "")):
+            return attrs["value"]
+    return None
 
 # Common session cookie names. Excludes CSRF tokens, which are intentionally readable by JS (not
 # HttpOnly) — flagging those would be a false positive.
@@ -42,7 +56,9 @@ def _fill(form: Form, username: str, password: str) -> dict[str, str]:
     data = {}
     for name in form.fields:
         low = name.lower()
-        if "pass" in low:
+        # password + its confirm/retype field (password2, password_confirmation, retype, ...) so a
+        # registration with a "confirm password" input isn't rejected for a mismatch.
+        if "pass" in low or "pwd" in low or "retype" in low or "repeat" in low:
             data[name] = password
         elif "email" in low or "mail" in low:
             data[name] = username + "@example.com"
@@ -52,7 +68,8 @@ def _fill(form: Form, username: str, password: str) -> dict[str, str]:
 
 
 _CREATE_HINTS = ("note", "post", "item", "todo", "comment", "message", "create", "add", "new")
-_NON_CREATE = ("login", "signin", "sign-in", "register", "signup", "sign-up", "search", "query", "logout")
+_NON_CREATE = ("login", "signin", "sign-in", "sign_in", "log_in", "log-in", "register", "signup",
+               "sign-up", "sign_up", "search", "query", "logout", "auth")
 
 
 def create_form(forms: list[Form]) -> Form | None:
@@ -105,8 +122,19 @@ def register_account(base_url: str, profile: Profile, suffix: str = "") -> Accou
     username = "hl_" + secrets.token_hex(5) + suffix
     password = "Hl-Probe-Passw0rd!"
     client = httpx.Client(base_url=base_url, timeout=15.0, follow_redirects=True)
+    data = _fill(form, username, password)
     try:
-        resp = client.request("POST", form.action, data=_fill(form, username, password))
+        # GET the form's page first: sets the CSRF cookie and lets us read the token out of the HTML,
+        # so a CSRF-protected registration (Gitea, Django, Rails, ...) is accepted instead of rejected.
+        try:
+            token = _csrf_token(client.get(form.action).text)
+            if token:
+                for name in form.fields:
+                    if is_csrf_field(name):
+                        data[name] = token
+        except (httpx.HTTPError, httpx.InvalidURL):
+            pass  # form page not GET-able (POST-only endpoint) -> proceed without a token
+        resp = client.request("POST", form.action, data=data)
     except (httpx.HTTPError, httpx.InvalidURL):
         # InvalidURL is NOT a subclass of HTTPError; catching both ensures a control-char form
         # action (hostile target) closes the client here instead of leaking it and crashing run().

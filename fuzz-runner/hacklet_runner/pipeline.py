@@ -87,6 +87,10 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
             # one probe to N/A, never crash the whole grade (run must not DNF). Calibration is the
             # backstop: a predicate that ALWAYS raises fails the suite.
             return [_outcome(probe, "not_applicable", 0, target)]
+        if slop is None:
+            # the predicate couldn't establish the conditions to test (e.g. self-registration failed
+            # on a CSRF/JSON-API app) -> N/A, NOT a false "clean". A false clean is a missed finding.
+            return [_outcome(probe, "not_applicable", 0, target)]
         return [_outcome(probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0,
                          target, reason=describe(probe) if slop else "")]
     na_if_absent = probe.probe.get("na_if_absent", False)

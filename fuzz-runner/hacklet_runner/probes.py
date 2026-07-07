@@ -166,28 +166,32 @@ def sqli_auth_bypass(ctx, probe) -> bool:
     return False
 
 
-def session_cookie_missing_flag(ctx, probe) -> bool:
-    """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if it
-    lacks the hardening flag named in the probe (httponly | samesite)."""
+def session_cookie_missing_flag(ctx, probe) -> bool | None:
+    """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if it lacks
+    the hardening flag named in the probe (httponly | samesite | secure). Returns None (-> N/A) when
+    self-registration couldn't establish a session (CSRF/JSON-API app) — a false 'clean' would be a
+    missed finding, not a pass."""
     flag = probe.probe.get("flag", "httponly")
     account = auth.register_account(ctx.base_url, ctx.profile)
     if account is None:
-        return False  # registration not possible (applicability gates this) -> treat as clean
+        return None  # couldn't self-register -> couldn't test
     try:
         cookie = auth.session_cookie(account.register_response)
-        return cookie is not None and not cookie[flag]
+        if cookie is None:
+            return None  # registration yielded no recognizable session cookie -> couldn't test
+        return not cookie[flag]
     finally:
         account.client.close()
 
 
-def login_no_rate_limit(ctx, probe) -> bool:
+def login_no_rate_limit(ctx, probe) -> bool | None:
     """Self-as-oracle: fire N wrong-password logins at the login form; slop if NONE is throttled
     (HTTP 429/423). With no brute-force protection every attempt returns the same auth-failure status,
     enabling credential stuffing / password spraying. Uses its own username so a per-account lockout
-    can't collide with other probes that hit /login (e.g. sqli_auth_bypass)."""
+    can't collide with other probes that hit /login (e.g. sqli_auth_bypass). N/A when no login form."""
     form = auth.login_form(ctx.profile.forms)
     if form is None:
-        return False
+        return None
     data = {}
     for name in form.fields:
         low = name.lower()
@@ -214,21 +218,24 @@ _CSRF_REJECT_HINTS = ("login", "signin", "sign-in", "sign_in", "auth", "error",
                       "denied", "forbidden", "unauthorized")
 
 
-def csrf_missing(ctx, probe) -> bool:
+def csrf_missing(ctx, probe) -> bool | None:
     """Self-as-oracle: a state-changing POST that succeeds cross-site with no CSRF token and no
     SameSite cookie -> no CSRF defense. Skips when the form carries a token or the session cookie is
-    SameSite (both valid defenses), so only genuinely cross-site-exploitable requests are flagged."""
+    SameSite (both valid defenses), so only genuinely cross-site-exploitable requests are flagged.
+    N/A when there's no form / no session to test against (not a false clean)."""
     form = auth.create_form(ctx.profile.forms)
     if form is None:
-        return False
+        return None  # no state-changing form to test -> N/A
     if any(auth.is_csrf_field(f) for f in form.fields):
-        return False
+        return False  # the form already carries a CSRF token -> defended (clean)
     account = auth.register_account(ctx.base_url, ctx.profile, suffix="_csrf")
     if account is None:
-        return False
+        return None  # couldn't self-register -> couldn't test
     try:
         cookie = auth.session_cookie(account.register_response)
-        if cookie is None or cookie["samesite"]:
+        if cookie is None:
+            return None  # no session established -> couldn't test CSRF
+        if cookie["samesite"]:
             return False  # a SameSite cookie blocks cross-site sending -> already defended
         resp = account.client.request(
             "POST", form.action,
@@ -326,29 +333,37 @@ def open_redirect(ctx, probe) -> bool:
     return False
 
 
-def idor_horizontal(ctx, probe) -> bool:
+def idor_horizontal(ctx, probe) -> bool | None:
     """Self-as-oracle: register A and B, A creates a resource, B fetches it by URL. If B can read
-    A's content, object-level access control is broken (horizontal IDOR)."""
+    A's content, object-level access control is broken (horizontal IDOR). N/A when we can't register
+    both accounts or A can't create a distinct resource to test against (not a false clean)."""
     form = auth.create_form(ctx.profile.forms)
     if form is None:
-        return False
+        return None
     a = auth.register_account(ctx.base_url, ctx.profile, suffix="_a")
     b = auth.register_account(ctx.base_url, ctx.profile, suffix="_b")
     if a is None or b is None:
         for acct in (a, b):
             if acct:
                 acct.client.close()
-        return False
+        return None
+    # extract each session cookie (jar iteration avoids CookieConflict) and re-send it plainly, so an
+    # authed create/read isn't dropped over http when the app sets a Secure cookie (that's tested by
+    # sec-session-003, separately). Same approach race_resource_ids already uses.
+    a_cookies = {c.name: c.value for c in a.client.cookies.jar}
+    b_cookies = {c.name: c.value for c in b.client.cookies.jar}
     try:
         marker = "hl-idor-7a3f9c"
-        created = a.client.request("POST", form.action, data={n: marker for n in form.fields})
-        resource = created.url.path
-        if not resource or resource == form.action:  # no redirect to a distinct resource -> N/A
-            return False
-        leaked = b.client.get(resource)
+        with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=True,
+                          cookies=a_cookies) as ac:
+            resource = ac.post(form.action, data={n: marker for n in form.fields}).url.path
+        if not resource or resource == form.action:  # no distinct resource created -> couldn't test
+            return None
+        with httpx.Client(base_url=ctx.base_url, timeout=10.0, cookies=b_cookies) as bc:
+            leaked = bc.get(resource)
         return leaked.status_code == 200 and marker in leaked.text
     except (httpx.HTTPError, httpx.InvalidURL):
-        return False
+        return None
     finally:
         a.client.close()
         b.client.close()
@@ -371,16 +386,17 @@ def _concurrent_creates(base_url, path, cookies, data, n: int = 12):
     return _fanout(create, n)
 
 
-def race_resource_ids(ctx, probe) -> bool:
+def race_resource_ids(ctx, probe) -> bool | None:
     """Self-as-oracle: register, fire N concurrent resource creates, and inspect the assigned IDs.
     Duplicate IDs mean id allocation isn't atomic under concurrency — a race condition. N distinct
-    creates must yield N distinct ids, so a collision is provable without knowing the app's intent."""
+    creates must yield N distinct ids, so a collision is provable without knowing the app's intent.
+    N/A when there's no create form or we can't self-register (not a false clean)."""
     form = auth.create_form(ctx.profile.forms)
     if form is None:
-        return False
+        return None
     account = auth.register_account(ctx.base_url, ctx.profile, suffix="_race")
     if account is None:
-        return False
+        return None
     try:
         # iterate the jar, not dict(cookies) — dict() raises httpx.CookieConflict when the session
         # cookie was set on multiple paths/domains during the register redirect chain.
@@ -389,8 +405,13 @@ def race_resource_ids(ctx, probe) -> bool:
         # content/body/title would otherwise get an empty POST and the race would never be detected.
         data = {f: "hl-race" for f in form.fields}
         urls = _concurrent_creates(ctx.base_url, form.action, cookies, data)
-        created = [u for u in urls if u and u != form.action]
-        return len(created) >= 2 and len(set(created)) < len(created)
+        # a redirect to a login/error page (an unauthenticated/rejected create) is NOT a created
+        # resource -> exclude it, so uniform redirects don't look like duplicate ids (a false race).
+        created = [u for u in urls if u and u != form.action
+                   and not any(h in u.lower() for h in _CSRF_REJECT_HINTS)]
+        if len(created) < 2:
+            return None  # couldn't create ≥2 resources (CSRF/session) -> couldn't test
+        return len(set(created)) < len(created)
     finally:
         account.client.close()
 
