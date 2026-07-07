@@ -6,7 +6,9 @@ import pathlib
 import pytest
 
 from hacklet_runner.deploy import SubprocessDeployer
-from hacklet_runner.discovery import _ACTION, _FIELD, _LINK, _SRC, discover
+from hacklet_runner.discovery import (
+    _ACTION, _FIELD, _FORM, _LINK, _SRC, _parse_forms, _same_origin_path, discover,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REFS = ROOT / "references"
@@ -40,6 +42,23 @@ def test_discovers_routes_and_login_form(serve):
     assert profile.capabilities["any_endpoint_accepts_text_input"] is True
     assert profile.capabilities["any_form_has_password"] is True
     assert {"/login", "/search", "/register"} <= set(profile.form_endpoints)  # back-compat property
+
+
+def test_self_submitting_form_resolves_to_current_page():
+    # action="#" (DVWA, many CMS forms) submits back to the current page, not a dead fragment
+    html = '<form action="#" method="get"><input name="id"><input type="submit" name="Submit"></form>'
+    forms = _parse_forms(_FORM.findall(html), "http://x", "/vulnerabilities/sqli/")
+    assert len(forms) == 1
+    assert forms[0].action == "/vulnerabilities/sqli/" and forms[0].fields == ["id", "Submit"]
+
+
+def test_logout_links_are_excluded_from_the_crawl():
+    # following a logout link would destroy the runner's own authenticated session
+    for href in ("/logout.php", "logout", "/auth/sign-out", "/user_logout", "/logoff"):
+        assert _same_origin_path(href, "http://x", "/") is None, href
+    # ordinary links (incl. lookalikes that merely contain 'log') are kept
+    assert _same_origin_path("/dashboard", "http://x", "/") == "/dashboard"
+    assert _same_origin_path("/blog/post", "http://x", "/") == "/blog/post"
 
 
 def test_attribute_regexes_ignore_data_attrs():

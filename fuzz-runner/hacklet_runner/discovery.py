@@ -13,6 +13,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from . import jsmine, openapi
+from .net import make_client
 from .schema import Form, Profile
 
 _LINK = re.compile(r'(?<![-\w])href=["\']([^"\']+)["\']', re.I)
@@ -26,8 +27,15 @@ MAX_PAGES = 25
 MAX_DEPTH = 2
 
 
+# A logout/sign-out link must never be crawled or probed: following it destroys the runner's own
+# authenticated session, silently de-authing the rest of an --header'd crawl (the classic auth-crawl
+# footgun — it's why an authed DVWA crawl kept dropping to the login page mid-run).
+_LOGOUT = re.compile(r"(?:^|[/_-])(?:logout|log-?out|log_?out|signout|sign-?out|sign_?out|logoff)\b", re.I)
+
+
 def _same_origin_path(href: str, base_url: str, page_path: str) -> str | None:
-    """Resolve href against the current page; return its path if same-origin, else None."""
+    """Resolve href against the current page; return its path if same-origin (and not a logout link),
+    else None."""
     href = href.split("#")[0].strip()
     if not href or href.startswith(("mailto:", "javascript:", "tel:", "data:")):
         return None
@@ -36,14 +44,19 @@ def _same_origin_path(href: str, base_url: str, page_path: str) -> str | None:
     target = urlparse(urljoin(page_abs, href))
     if target.netloc != base.netloc:
         return None
-    return target.path or "/"
+    path = target.path or "/"
+    if _LOGOUT.search(path):
+        return None  # crawling logout would destroy the authenticated session
+    return path
 
 
 def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
     forms = []
     for attrs, body in matches:
         am, mm = _ACTION.search(attrs), _METHOD.search(attrs)
-        raw_action = am.group(1).strip() if am else ""
+        # a "#..."/empty action submits back to the CURRENT page (very common: DVWA, many CMS forms) —
+        # strip the fragment so it resolves to page_path instead of being dropped as un-resolvable.
+        raw_action = (am.group(1).strip() if am else "").split("#")[0]
         action = _same_origin_path(raw_action, base_url, page_path) if raw_action else page_path
         if action is None:  # cross-origin action — not our target
             continue
@@ -67,7 +80,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     endpoints: list = []
     js_urls: list[str] = []           # same-origin .js assets to mine for an SPA's API paths
 
-    with httpx.Client(base_url=base_url, timeout=5.0, follow_redirects=True, headers=headers) as c:
+    with make_client(base_url, headers, timeout=5.0, follow_redirects=True) as c:
         while queue and len(visited) < max_pages:
             path, depth = queue.pop(0)
             if path in visited:

@@ -19,6 +19,7 @@ from dataclasses import replace
 import httpx
 
 from . import auth, browser
+from .net import make_client
 from .schema import Endpoint
 
 _TRACE = re.compile(
@@ -352,8 +353,8 @@ def api_sqli(ctx, probe) -> bool | None:
     delay = probe.probe.get("time_delay", 3)
     tested = False
     deep: list = []  # slots deferred to the UNION/time (blind, last-resort) pass
-    with httpx.Client(base_url=ctx.base_url, timeout=max(15.0, delay + 8),
-                      follow_redirects=False, headers=ctx.headers) as c:
+    with make_client(ctx.base_url, ctx.headers, timeout=max(15.0, delay + 8),
+                     follow_redirects=False) as c:
         for ep in targets:
             method = ep.method.upper()
             try:
@@ -454,8 +455,7 @@ def api_bola(ctx, probe) -> bool | None:
         return None  # couldn't establish two accounts (no JSON register) -> couldn't test
     tested = False
     try:
-        with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=True,
-                          headers=ctx.headers) as anon:
+        with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as anon:
             for create_ep, read_ep, param, id_field in pairs:
                 id_value = "hlbola" + secrets.token_hex(4)
                 secret_value = "hlsecret" + secrets.token_hex(6)
@@ -537,8 +537,7 @@ def _login_rate_limit_json(ctx, probe) -> bool | None:
     """JSON-API fallback for login_no_rate_limit: find a JSON login endpoint (Juice Shop /rest/user/
     login, /api/login, ...) and hammer it with wrong creds. N/A when no JSON login endpoint responds."""
     attempts = probe.probe.get("attempts", 10)
-    with httpx.Client(base_url=ctx.base_url, timeout=15.0, follow_redirects=False,
-                      headers=ctx.headers) as c:
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
         path, creds, first = auth.find_json_login(c)
         if path is None:
             return None  # no login surface at all -> couldn't test
@@ -658,8 +657,7 @@ def open_redirect(ctx, probe) -> bool:
     host is our foreign probe host. Tests discovered routes plus common redirect endpoints/params."""
     evil = {p: "https://" + _REDIRECT_PROBE_HOST + "/x" for p in _REDIRECT_PARAMS}
     seen = set()
-    with httpx.Client(base_url=ctx.base_url, timeout=10.0, follow_redirects=False,
-                      headers=ctx.headers) as c:
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=False) as c:
         for path in list(ctx.profile.routes) + list(_REDIRECT_ENDPOINTS):
             if path in seen:
                 continue
@@ -760,7 +758,7 @@ def race_resource_ids(ctx, probe) -> bool | None:
 def _concurrent_get(base_url, path, n: int = 20, headers=None):
     def get():
         try:
-            with httpx.Client(base_url=base_url, timeout=15.0, headers=headers) as c:
+            with make_client(base_url, headers, timeout=15.0) as c:
                 return c.get(path).status_code
         except Exception:
             return None

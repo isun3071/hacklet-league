@@ -14,6 +14,7 @@ import httpx
 from .aggregate import compute_slop_score
 from .deploy import Deployer
 from .discovery import discover
+from .net import make_client
 from .probes import MATCHERS, PREDICATES, describe
 from .schema import Form, Outcome, Probe, Profile, Report
 
@@ -123,8 +124,7 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         profile = discover(handle.base_url, render=render, headers=headers)
         outcomes: list[Outcome] = []
         total = len(catalog)
-        with httpx.Client(base_url=handle.base_url, timeout=15.0, follow_redirects=True,
-                          headers=headers) as client:
+        with make_client(handle.base_url, headers, timeout=15.0, follow_redirects=True) as client:
             ctx = _Ctx(handle.base_url, client, profile, headers)
             for i, probe in enumerate(catalog):
                 if on_progress:
