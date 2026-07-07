@@ -63,6 +63,28 @@ def test_api_sqli_na_when_no_endpoints(jsonapi):
     assert api_sqli(_Ctx(jsonapi, Profile(base_url=jsonapi, endpoints=[])), _Probe()) is None
 
 
+def test_sqli_targets_folds_forms_and_common_params():
+    from hacklet_runner.probes import _COMMON_PARAMS, _sqli_targets
+    from hacklet_runner.schema import Form
+    prof = Profile(
+        base_url="http://x",
+        endpoints=[Endpoint(path="/api/search", method="get", raw_path="/api/search"),   # searchable, param-less
+                   Endpoint(path="/api/health", method="get", raw_path="/api/health")],   # not searchable
+        forms=[Form(action="/vulnerabilities/sqli/", method="get", fields=["id"])])
+    t = _sqli_targets(prof)
+    assert next(e for e in t if e.raw_path == "/api/search").query_params == list(_COMMON_PARAMS)
+    assert next(e for e in t if e.raw_path == "/api/health").query_params == []  # left alone
+    form_ep = next(e for e in t if e.raw_path == "/vulnerabilities/sqli/")
+    assert form_ep.method == "get" and form_ep.query_params == ["id"]  # GET form -> query-param endpoint
+
+
+def test_api_sqli_common_param_guessing_on_searchable_get(jsonapi):
+    # a param-less searchable GET (declares NO params) -> common-param guessing finds the injectable ?q=
+    prof = Profile(base_url=jsonapi, endpoints=[
+        Endpoint(path="/api/search", method="get", raw_path="/api/search")])
+    assert api_sqli(_Ctx(jsonapi, prof), _Probe()) is True
+
+
 # --- excessive data exposure (response_leaks_credentials) ---
 
 def _resp(text, status=200, ctype="application/json"):

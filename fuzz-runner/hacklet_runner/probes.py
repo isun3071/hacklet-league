@@ -13,10 +13,12 @@ import secrets
 import statistics
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 
 import httpx
 
 from . import auth, browser
+from .schema import Endpoint
 
 _TRACE = re.compile(
     r"Traceback \(most recent call last\)|File \"[^\"]+\", line \d+, in |"
@@ -239,11 +241,37 @@ def _sqli_request(ep, poison, value: str):
     return path, query, body
 
 
+# Common query-parameter names to try on a GET endpoint that declares none — a mined SPA path
+# (/rest/products/search) or an HTML search form exposes no param schema, so we probe likely names.
+_COMMON_PARAMS = ("q", "query", "search", "id", "name", "term", "keyword", "filter")
+# Only guess params on GET paths that plausibly take input — keeps the extra requests bounded/precise.
+_SEARCHABLE = re.compile(r"search|find|query|filter|lookup|list|products?|items?|users?|orders?", re.I)
+
+
+def _sqli_targets(profile):
+    """Injection targets: OpenAPI/mined endpoints as-is, plus GET HTML forms (fields -> query params)
+    and param-less searchable GET endpoints probed with common param names — so a mined
+    /rest/products/search and a DVWA-style `?id=` GET form both get exercised, not just declared params."""
+    targets = []
+    for e in profile.endpoints:
+        if (e.method.lower() == "get" and not e.query_params and not e.path_params
+                and _SEARCHABLE.search(e.raw_path)):
+            targets.append(replace(e, query_params=list(_COMMON_PARAMS)))
+        else:
+            targets.append(e)
+    for f in profile.forms:
+        if f.fields and (f.method or "get").lower() == "get":
+            targets.append(Endpoint(path=f.action, method="get",
+                                    query_params=list(f.fields), raw_path=f.action))
+    return targets
+
+
 def api_sqli(ctx, probe) -> bool | None:
-    """Error-based SQLi across spec-discovered API endpoints. Per injectable slot: benign baseline vs.
+    """Error-based SQLi across the discovered surface (OpenAPI + mined API paths + HTML GET forms, with
+    common-param guessing on param-less searchable GETs). Per injectable slot: benign baseline vs.
     unbalanced-quote payload; slop iff the payload induces a DB-error signature the baseline lacks.
-    N/A when no injectable GET/POST endpoint exists (e.g. no spec, or a purely form-based app)."""
-    targets = [e for e in ctx.profile.endpoints
+    N/A when no injectable GET/POST target exists."""
+    targets = [e for e in _sqli_targets(ctx.profile)
                if e.method.lower() in ("get", "post") and _sqli_slots(e)]
     if not targets:
         return None

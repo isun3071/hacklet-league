@@ -9,4 +9,4 @@ applicability:
   requires: [any_endpoint_accepts_text_input]
 probe:
   predicate: api_sqli
-  max_attempts: 80   # injectable slots to test (baseline + unbalanced-quote per slot) before stopping
+  max_attempts: 150   # injectable slots to test (declared + common-param guesses) before stopping

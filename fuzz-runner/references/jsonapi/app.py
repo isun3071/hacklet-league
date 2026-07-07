@@ -35,6 +35,7 @@ SPEC = {
         "/api/notes": {
             "get": {"parameters": [{"in": "query", "name": "q", "schema": _STR}]}
         },
+        "/api/search": {"get": {}},   # searchable, but declares NO params -> exercises common-param guessing
         "/api/dump": {"get": {}},
         "/api/register": {"post": {"requestBody": {"content": {"application/json": {
             "schema": {"properties": {"username": _STR, "email": _STR, "password": _STR}}}}}}},
@@ -76,6 +77,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif u.path == "/api/notes":
             q = parse_qs(u.query).get("q", [""])[0]  # parameterized: quote is data, never grammar
             _send(self, 200, "application/json", json.dumps({"query": q, "notes": []}).encode())
+        elif u.path == "/api/search":
+            q = parse_qs(u.query).get("q", [""])[0]  # INJECTABLE via the undeclared ?q= (common-param guess)
+            sql = "SELECT * FROM products WHERE name LIKE '%%%s%%'" % q
+            if "'" in q:
+                body = ('sqlite3.OperationalError: unrecognized token\n[SQL: %s]' % sql).encode()
+                _send(self, 500, "text/html; charset=utf-8", body)
+            else:
+                _send(self, 200, "application/json", json.dumps({"results": []}).encode())
         elif u.path == "/api/dump":  # excessive data exposure: returns password material to any caller
             users = [{"username": "alice", "email": "alice@x.com", "password": "hunter2"},
                      {"username": "bob", "email": "bob@x.com", "password": "s3cret!"}]
