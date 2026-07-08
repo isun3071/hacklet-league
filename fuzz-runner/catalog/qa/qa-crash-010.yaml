@@ -1,0 +1,12 @@
+id: qa-crash-010
+bundle: qa
+category: crash-resistance
+pool: public
+evidence_model: provable
+penalty: 15   # unhandled 5xx on malformed input (missing input validation) — general, fans the surface
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  # malformed field values / malformed JSON / decode-crashing paths; fires on a 5xx (not a graceful 4xx)
+  predicate: crash_resistance
+  max_attempts: 120

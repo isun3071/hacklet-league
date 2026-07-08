@@ -1363,6 +1363,82 @@ def perf_load_time(ctx, probe) -> bool:
     return perf.computed_load_time(ttfb, weight, reqs) >= perf.LOADTIME_CEILING
 
 
+# Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
+# it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
+# Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
+# endpoint didn't 5xx (so the crash is attributable to the input, not a generally-broken endpoint).
+_CRASH_VALUES = (
+    "A" * 20_000,                          # oversized string
+    "9" * 400,                             # oversized / overflow number
+    "\x00\x01\x02\x03\x1f",                # null + control bytes
+    "%s%n%x%p" * 25,                       # format-string specifiers
+    "[" * 3000,                            # deeply nested / unbalanced brackets
+    "﻿‮​\U0001f4a9",        # BOM + RTL-override + zero-width + astral emoji
+    "-999999999999999999999999999",       # huge negative number
+)
+_CRASH_JSON = (
+    b"{not valid json",                    # malformed syntax
+    b"[" * 2000 + b"]" * 2000,             # deeply nested
+    b'{"x": 1e999}',                       # out-of-range number
+    b'{"x":"' + b"A" * 20_000 + b'"}',     # oversized value
+    b'{"x": [1, 2, {"y":',                 # truncated
+    b'{"x": "\\ud834"}',                   # lone-surrogate escape
+)
+_CRASH_PATHS = ("/%ff%fe", "/%c0%ae%c0%ae", "/%00", "/%e0%80%80")
+
+
+def crash_resistance(ctx, probe) -> bool | None:
+    """Fuzz discovered forms/params with malformed values, POST malformed JSON to POST endpoints, and
+    request decode-crashing paths; fire if any yields a 5xx (an unhandled exception) rather than a
+    graceful 4xx. N/A when there's no surface to exercise."""
+    budget = probe.probe.get("max_attempts", 120)
+    tested = False
+    targets = ([(f.action, (f.method or "get").lower(), list(f.fields)) for f in ctx.profile.forms if f.fields]
+               + [(e.raw_path, "get", list(e.query_params)) for e in ctx.profile.endpoints
+                  if e.method.lower() == "get" and e.query_params])
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
+        for action, method, fields in targets:            # 1. malformed field values
+            try:
+                if _xss_send(c, method, action, {fn: "1" for fn in fields}).status_code >= 500:
+                    continue                               # already 5xx on benign input -> unattributable
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            for field in fields:
+                for val in _CRASH_VALUES:
+                    if budget <= 0:
+                        break
+                    budget -= 1
+                    tested = True
+                    data = {fn: (val if fn == field else "1") for fn in fields}
+                    try:
+                        if _xss_send(c, method, action, data).status_code >= 500:
+                            return True                    # malformed input -> unhandled 5xx
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+        posts = list(dict.fromkeys(                        # 2. malformed JSON to POST endpoints
+            [f.action for f in ctx.profile.forms if (f.method or "").lower() == "post"]
+            + [e.path for e in ctx.profile.endpoints if e.method.lower() == "post"]))
+        for path in posts:
+            for body in _CRASH_JSON:
+                if budget <= 0:
+                    break
+                budget -= 1
+                tested = True
+                try:
+                    if c.post(path, content=body, headers={"Content-Type": "application/json"}).status_code >= 500:
+                        return True
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+        for p in _CRASH_PATHS:                             # 3. decode-crashing paths (naive router -> 500)
+            tested = True
+            try:
+                if c.get(p).status_code >= 500:
+                    return True
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+    return False if tested else None
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
@@ -1382,6 +1458,7 @@ PREDICATES = {
     "dom_xss": dom_xss,
     "race_resource_ids": race_resource_ids,
     "load_resilience": load_resilience,
+    "crash_resistance": crash_resistance,
     "perf_ttfb": perf_ttfb,
     "perf_page_weight": perf_page_weight,
     "perf_request_count": perf_request_count,
@@ -1430,6 +1507,7 @@ _PREDICATE_REASONS = {
     "dom_xss": "an injected payload executed in the DOM",
     "race_resource_ids": "concurrent creates collided on one id (non-atomic allocation)",
     "load_resilience": "endpoint 5xx'd under a concurrent burst",
+    "crash_resistance": "malformed input caused an unhandled 5xx instead of a graceful 4xx",
     "perf_ttfb": "slow server response (time-to-first-byte over the perf budget)",
     "perf_page_weight": "heavy page (transfer weight over the perf budget)",
     "perf_request_count": "too many requests to render the homepage (over the perf budget)",

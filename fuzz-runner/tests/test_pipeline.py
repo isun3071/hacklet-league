@@ -24,9 +24,7 @@ ALL_PROBES = [
     "qa-errhyg-001", "perf-ttfb-001",
     "sec-exposure-001", "sec-exposure-002", "sec-exposure-003", "sec-exposure-004",  # .env + .git + .aws/credentials
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
-    "qa-crash-001", "qa-crash-002", "qa-crash-003",  # crash-resistance: /profile (form)
-    "qa-crash-004", "qa-crash-005", "qa-crash-006",  # crash-resistance: /api/items (JSON gauntlet)
-    "qa-crash-007",  # crash-resistance: 5xx on a malformed-encoding path (routing)
+    "qa-crash-010",  # crash-resistance: malformed input (values / JSON / decode-crashing path) -> 5xx
     "qa-race-001",  # race condition: concurrent creates collide on the same id
     "perf-load-001",  # load resilience: 5xx under a concurrent burst
     "perf-compress-001",  # no gzip on a sizeable text response
@@ -78,8 +76,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["perf-load-001"] == "slop_detected"
     # perf-compress-001: the homepage HTML is served uncompressed (no Content-Encoding):
     assert o["perf-compress-001"] == "slop_detected"
-    # qa-crash-007: a malformed-encoding path 500s instead of a graceful 404:
-    assert o["qa-crash-007"] == "slop_detected"
+    # qa-crash-010: malformed input (nasty field values / JSON / decode-crashing path) -> unhandled 5xx:
+    assert o["qa-crash-010"] == "slop_detected"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):
@@ -94,8 +92,9 @@ def test_vulnerable_app_accrues_slop():
     # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + redirect 20 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10 + compress 5.
     # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
     # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2 + X-Powered-By 2, sorted-desc decay.
-    # crash-resistance: 7 fires -> 14.58. exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 412.
-    assert report.slop_score == 412
+    # crash-resistance: ONE general finding -> 15 (was 7 reference-specific probes damped to ~14.58).
+    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 413.
+    assert report.slop_score == 413
 
 
 def test_hardened_app_is_clean():
@@ -123,7 +122,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-ratelimit-001"] == "not_applicable"  # no password form -> no login to brute-force
     assert o["sec-cors-001"] == "clean"  # applies (any endpoint) but minimal doesn't reflect Origin
     assert o["perf-compress-001"] == "clean"  # tiny homepage -> too small to need compression
-    assert o["qa-crash-007"] == "clean"       # robust 404 on the malformed-encoding path
+    assert o["qa-crash-010"] == "clean"       # robust: malformed input -> graceful 4xx / 404
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
     assert o["sec-headers-006"] == "clean"    # no X-Powered-By header

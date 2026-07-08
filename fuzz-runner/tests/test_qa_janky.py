@@ -14,7 +14,7 @@ def test_qa_janky_fires_qa_and_perf_but_not_security():
                  load_catalog(ROOT / "catalog"))
     fired = {o.probe_id for o in report.outcomes if o.outcome == "slop_detected"}
     # QA + performance jank is caught (non-browser subset; console/a11y/cwv need --browser)
-    assert {"qa-crash-001", "qa-crash-007", "qa-errhyg-001"} <= fired          # crash + error hygiene
+    assert {"qa-crash-010", "qa-errhyg-001"} <= fired          # crash-resistance + error hygiene
     assert {"perf-compress-001", "perf-load-001"} <= fired                     # compression / load
     # the two-tier perf RUBRIC: slow homepage breaches the profile TTFB tier (not the absolute ceiling)
     # and the chatty homepage blows the request budget
