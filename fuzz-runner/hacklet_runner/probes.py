@@ -1363,6 +1363,73 @@ def perf_load_time(ctx, probe) -> bool:
     return perf.computed_load_time(ttfb, weight, reqs) >= perf.LOADTIME_CEILING
 
 
+# Caching — a static asset (JS/CSS/image/font) that carries no cache validators forces a full refetch
+# on every page load; a validator the server won't honor with a 304 is decorative. Static assets only:
+# HTML documents legitimately go uncached, so checking them would false-fire.
+_STATIC_EXT = (".js", ".mjs", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+               ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".webm")
+_STATIC_CTYPE = ("javascript", "css", "image/", "font/", "application/font", "svg")
+
+
+def _static_assets(c, base_url, path="/"):
+    """Same-origin static-asset paths (by extension) referenced by the homepage's src/href attrs."""
+    try:
+        r = c.get(path)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return []
+    if "html" not in r.headers.get("content-type", "").lower():
+        return []                                   # a JSON/asset homepage references no page assets
+    base = urllib.parse.urlparse(base_url)
+    out = []
+    for ref in _ASSET_REF.findall(r.text):
+        ref = ref.split("#")[0].strip()
+        if not ref or ref.startswith(("data:", "javascript:", "mailto:", "tel:")):
+            continue
+        t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, path), ref))
+        if t.netloc != base.netloc or not t.path.lower().endswith(_STATIC_EXT):
+            continue
+        out.append(t.path + ("?" + t.query if t.query else ""))
+    return list(dict.fromkeys(out))
+
+
+def caching_ineffective(ctx, probe) -> bool | None:
+    """Fetch each same-origin static asset and check it is actually cacheable: it must carry a validator
+    (ETag / Last-Modified) or explicit freshness (Cache-Control max-age / Expires), must not say
+    no-store, and any validator it advertises must yield a 304 on revalidation (else it's decorative and
+    saves nothing). Fires on the first asset that fails. N/A when the page references no static asset."""
+    budget = probe.probe.get("max_attempts", 20)
+    tested = False
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        for path in _static_assets(c, ctx.base_url, probe.probe.get("target", "/")):
+            if budget <= 0:
+                break
+            budget -= 1
+            try:
+                r = c.get(path)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            ctype = r.headers.get("content-type", "").lower()
+            if r.status_code != 200 or not any(t in ctype for t in _STATIC_CTYPE):
+                continue                            # 404/redirect or an SPA catch-all HTML shell -> not an asset
+            tested = True
+            cc = r.headers.get("cache-control", "").lower()
+            etag, lastmod = r.headers.get("etag", ""), r.headers.get("last-modified", "")
+            has_fresh = any(k in cc for k in ("max-age", "public", "immutable")) or "expires" in r.headers
+            if "no-store" in cc:
+                return True                         # actively un-cacheable -> refetched every load
+            if not (etag or lastmod or has_fresh):
+                return True                         # no caching affordance at all
+            try:                                    # decorative validator: advertised but not honored
+                if etag and c.get(path, headers={"If-None-Match": etag}).status_code != 304:
+                    return True
+                if not etag and lastmod and \
+                        c.get(path, headers={"If-Modified-Since": lastmod}).status_code != 304:
+                    return True
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+    return False if tested else None
+
+
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
 # it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
 # Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
@@ -1463,6 +1530,7 @@ PREDICATES = {
     "perf_page_weight": perf_page_weight,
     "perf_request_count": perf_request_count,
     "perf_load_time": perf_load_time,
+    "caching_ineffective": caching_ineffective,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1512,6 +1580,7 @@ _PREDICATE_REASONS = {
     "perf_page_weight": "heavy page (transfer weight over the perf budget)",
     "perf_request_count": "too many requests to render the homepage (over the perf budget)",
     "perf_load_time": "homepage load time crosses the ~5s user-abandonment ceiling",
+    "caching_ineffective": "static asset not cacheable (no validator / no-store / ignored revalidation) -> refetched every load",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",

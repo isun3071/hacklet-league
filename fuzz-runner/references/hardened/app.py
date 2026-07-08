@@ -5,6 +5,7 @@ reflection, security headers set, generic errors (no stack traces), fast endpoin
 must read clean here.
 """
 import gzip
+import hashlib
 import html
 import http.server
 import json
@@ -67,7 +68,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, code, body, ctype="text/html; charset=utf-8", cookie=None):
+    def _send(self, code, body, ctype="text/html; charset=utf-8", cookie=None, cache=None, etag=None):
         if isinstance(body, str):
             body = body.encode()
         encoding = None
@@ -79,6 +80,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         if encoding:
             self.send_header("Content-Encoding", encoding)
+        if cache:                                 # static assets are cacheable + revalidatable
+            self.send_header("Cache-Control", cache)
+        if etag:
+            self.send_header("ETag", etag)
         self.send_header("X-Content-Type-Options", "nosniff")  # security headers set
         self.send_header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
         self.send_header("X-Frame-Options", "DENY")
@@ -92,7 +97,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == "/":
             return self._send(200, HOME)
         if self.path == "/config.js":  # same surface, no secret in client code
-            return self._send(200, 'const CONFIG = { api: "/api" };\n', "application/javascript")
+            body = b'const CONFIG = { api: "/api" };\n'
+            etag = '"%s"' % hashlib.md5(body).hexdigest()   # cacheable static asset with a real validator
+            if self.headers.get("If-None-Match") == etag:   # honor revalidation -> cheap 304, no refetch
+                return self._send(304, b"", "application/javascript", cache="public, max-age=3600", etag=etag)
+            return self._send(200, body, "application/javascript", cache="public, max-age=3600", etag=etag)
         if self.path.startswith("/notes/"):
             try:
                 note_id = int(self.path.rsplit("/", 1)[1])

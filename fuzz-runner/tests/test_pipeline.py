@@ -28,6 +28,7 @@ ALL_PROBES = [
     "qa-race-001",  # race condition: concurrent creates collide on the same id
     "perf-load-001",  # load resilience: 5xx under a concurrent burst
     "perf-compress-001",  # no gzip on a sizeable text response
+    "perf-cache-001",  # static asset served with no cache validators -> refetched every load
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -78,6 +79,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["perf-compress-001"] == "slop_detected"
     # qa-crash-010: malformed input (nasty field values / JSON / decode-crashing path) -> unhandled 5xx:
     assert o["qa-crash-010"] == "slop_detected"
+    # perf-cache-001: /config.js (a static asset) ships no Cache-Control / ETag -> refetched every load:
+    assert o["perf-cache-001"] == "slop_detected"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):
@@ -93,8 +96,9 @@ def test_vulnerable_app_accrues_slop():
     # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
     # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2 + X-Powered-By 2, sorted-desc decay.
     # crash-resistance: ONE general finding -> 15 (was 7 reference-specific probes damped to ~14.58).
-    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 413.
-    assert report.slop_score == 413
+    # caching: /config.js uncacheable -> 8 (own category, no decay).
+    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 421.
+    assert report.slop_score == 421
 
 
 def test_hardened_app_is_clean():
@@ -123,6 +127,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-cors-001"] == "clean"  # applies (any endpoint) but minimal doesn't reflect Origin
     assert o["perf-compress-001"] == "clean"  # tiny homepage -> too small to need compression
     assert o["qa-crash-010"] == "clean"       # robust: malformed input -> graceful 4xx / 404
+    assert o["perf-cache-001"] == "not_applicable"  # homepage references no static asset to cache
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
     assert o["sec-headers-006"] == "clean"    # no X-Powered-By header
