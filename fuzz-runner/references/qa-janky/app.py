@@ -22,6 +22,7 @@ HOME = ("<!doctype html><html><head><title>janky dashboard</title></head><body>"
         "<form action='/' method='get'><input name='q'><button>search</button></form>"
         "<img src='/logo.png'>"
         "<script>nonexistent_function_boom();</script>"
+        + "".join("<img src='/img%d.png'>" % i for i in range(60))   # chatty: >50 requests to render
         + "<p>filler paragraph of representative body text. </p>" * 40
         + "</body></html>").encode()
 
@@ -53,7 +54,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(500, b"decode error")               # /%ff%fe -> 500 (qa-crash-007)
             return
         if path == "/":
-            self._send(200, HOME)                           # uncompressed, inaccessible, throws (browser)
+            time.sleep(0.9)                                 # slow homepage TTFB (> perf profile 0.8s)
+            self._send(200, HOME)                           # + uncompressed, chatty, inaccessible, throws
         elif path in ("/heavy", "/slow"):
             time.sleep(1.6)                                 # slow TTFB / first paint
             self._send(200, b"<html><body>slow response</body></html>")

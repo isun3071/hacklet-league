@@ -1,0 +1,13 @@
+id: perf-ttfb-002
+bundle: performance
+category: speed
+variant_group_id: perf-ttfb        # profile + ceiling tiers are one flaw -> the worse tier fires once
+pool: public
+evidence_model: provable
+penalty: 5    # standardized-profile TTFB threshold (>800ms backend on 1 vCPU) — see perf.py
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  predicate: perf_ttfb
+  tier: profile
+  target: /

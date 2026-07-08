@@ -1,0 +1,13 @@
+id: perf-weight-001
+bundle: performance
+category: page-weight
+variant_group_id: perf-weight
+pool: public
+evidence_model: provable
+penalty: 5    # standardized-profile page weight (>2MB total transfer)
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  predicate: perf_page_weight
+  tier: profile
+  target: /

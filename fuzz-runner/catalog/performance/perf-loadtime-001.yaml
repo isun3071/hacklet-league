@@ -1,0 +1,11 @@
+id: perf-loadtime-001
+bundle: performance
+category: load-time
+pool: public
+evidence_model: provable
+penalty: 15   # the flagship user-facing metric: computed load time crosses the ~5s abandonment ceiling
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  predicate: perf_load_time
+  target: /

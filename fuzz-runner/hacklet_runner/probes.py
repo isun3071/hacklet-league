@@ -18,7 +18,7 @@ from dataclasses import replace
 
 import httpx
 
-from . import auth, browser, oob
+from . import auth, browser, oob, perf
 from .net import make_client
 from .schema import Endpoint
 
@@ -1298,6 +1298,71 @@ def load_resilience(ctx, probe) -> bool:
     return statistics.median(ratios) > 0.1
 
 
+# Performance rubric (see perf.py): measure objective primitives on the homepage and grade against the
+# tiered, published thresholds. `tier` = "profile" (tight, standardized-sandbox) or "ceiling" (absolute,
+# environment-robust); the two are separate catalog probes sharing a variant_group -> the worse tier
+# fires once. The homepage is the representative always-present target (real apps have no /heavy).
+_ASSET_REF = re.compile(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
+
+
+def _page_weight(c, base_url, path="/"):
+    """(total bytes, request count) for the homepage + up to 40 same-origin CSS/JS/img/media assets."""
+    try:
+        r = c.get(path)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return 0, 0
+    total, reqs = len(r.content), 1
+    if "html" not in r.headers.get("content-type", "").lower():
+        return total, reqs                      # non-HTML homepage (JSON API) -> just the body
+    base = urllib.parse.urlparse(base_url)
+    assets = []
+    for ref in _ASSET_REF.findall(r.text):
+        ref = ref.split("#")[0].strip()
+        if not ref or ref.startswith(("data:", "javascript:", "mailto:", "tel:")):
+            continue
+        t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, path), ref))
+        if t.netloc == base.netloc and t.path:
+            assets.append(t.path)
+    uniq = list(dict.fromkeys(assets))
+    reqs += len(uniq)                         # request count = homepage + EVERY referenced asset
+    for a in uniq[:40]:                       # fetch a bounded subset for the weight number
+        try:
+            total += len(c.get(a).content)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+    return total, reqs
+
+
+def perf_ttfb(ctx, probe) -> bool:
+    """Homepage time-to-first-byte (server compute) exceeds the tier threshold — p90 over samples."""
+    thresh = perf.TTFB_CEILING if probe.probe.get("tier") == "ceiling" else perf.TTFB_PROFILE
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        return perf.sample_ttfb(c, probe.probe.get("target", "/")) >= thresh
+
+
+def perf_page_weight(ctx, probe) -> bool:
+    """Total homepage transfer weight (HTML + critical assets) exceeds the tier threshold."""
+    thresh = perf.WEIGHT_CEILING if probe.probe.get("tier") == "ceiling" else perf.WEIGHT_PROFILE
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        return _page_weight(c, ctx.base_url, probe.probe.get("target", "/"))[0] >= thresh
+
+
+def perf_request_count(ctx, probe) -> bool:
+    """The homepage needs more than the profile's round-trip budget to render (too chatty)."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        return _page_weight(c, ctx.base_url, probe.probe.get("target", "/"))[1] > perf.REQUESTS_PROFILE
+
+
+def perf_load_time(ctx, probe) -> bool:
+    """Computed end-to-end load time on the published profile crosses the absolute abandonment ceiling
+    (~5s) -> most users leave. Deterministic: TTFB + weight/bandwidth + round-trips."""
+    target = probe.probe.get("target", "/")
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        ttfb = perf.sample_ttfb(c, target, n=3)
+        weight, reqs = _page_weight(c, ctx.base_url, target)
+    return perf.computed_load_time(ttfb, weight, reqs) >= perf.LOADTIME_CEILING
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
@@ -1317,6 +1382,10 @@ PREDICATES = {
     "dom_xss": dom_xss,
     "race_resource_ids": race_resource_ids,
     "load_resilience": load_resilience,
+    "perf_ttfb": perf_ttfb,
+    "perf_page_weight": perf_page_weight,
+    "perf_request_count": perf_request_count,
+    "perf_load_time": perf_load_time,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1361,6 +1430,10 @@ _PREDICATE_REASONS = {
     "dom_xss": "an injected payload executed in the DOM",
     "race_resource_ids": "concurrent creates collided on one id (non-atomic allocation)",
     "load_resilience": "endpoint 5xx'd under a concurrent burst",
+    "perf_ttfb": "slow server response (time-to-first-byte over the perf budget)",
+    "perf_page_weight": "heavy page (transfer weight over the perf budget)",
+    "perf_request_count": "too many requests to render the homepage (over the perf budget)",
+    "perf_load_time": "homepage load time crosses the ~5s user-abandonment ceiling",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",
