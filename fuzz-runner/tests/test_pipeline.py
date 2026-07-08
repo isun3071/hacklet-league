@@ -91,6 +91,9 @@ def test_vulnerable_app_accrues_slop():
     assert o["qa-a11y-002"] == "slop_detected"
     # qa-links-001: the homepage's <a href="/login"> dead-ends on a 404 (login is POST-only) -> broken nav:
     assert o["qa-links-001"] == "slop_detected"
+    # sec-mixed-001 is https-gated: over the plain-http reference there's nothing to be "mixed" -> N/A
+    # (fire/clean is CI-locked against a self-signed HTTPS server in test_mixed_content):
+    assert o["sec-mixed-001"] == "not_applicable"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):

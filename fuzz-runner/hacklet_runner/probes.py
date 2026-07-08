@@ -1588,6 +1588,41 @@ def broken_links(ctx, probe) -> bool | None:
     return False
 
 
+# Mixed content — an HTTPS page that LOADS a subresource over plain http:// . A man-in-the-middle can
+# read/tamper the cleartext resource (an http:// <script> lets them own the DOM), so browsers hard-block
+# active mixed content -> the page breaks. Subresources only (<script>/<img>/<link rel=stylesheet>/...),
+# never <a href> (that's a navigation the user chooses, not a resource the page loads).
+def _http_subresources(html: str, page_url: str) -> list[str]:
+    """URLs of subresources the page loads that resolve to an insecure http:// origin. Protocol-relative
+    (//host) and relative refs inherit the page's https scheme -> not mixed; only absolute http:// is."""
+    refs = [m.group(2) for m in re.finditer(
+        r"<(script|img|iframe|embed|audio|video|source|track)\b[^>]*\bsrc\s*=\s*[\"']([^\"']+)[\"']", html, re.I)]
+    refs += re.findall(r"<object\b[^>]*\bdata\s*=\s*[\"']([^\"']+)[\"']", html, re.I)
+    for m in re.finditer(r"<link\b([^>]*)>", html, re.I):     # stylesheets/preload are loaded; canonical isn't
+        rel = re.search(r"\brel\s*=\s*[\"']?([^\"'>\s]+)", m.group(1), re.I)
+        href = re.search(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", m.group(1), re.I)
+        if href and rel and rel.group(1).lower() in ("stylesheet", "preload", "prefetch", "modulepreload"):
+            refs.append(href.group(1))
+    insecure = [urllib.parse.urljoin(page_url, r.strip()) for r in refs]
+    return list(dict.fromkeys(u for u in insecure if urllib.parse.urlparse(u).scheme == "http"))
+
+
+def mixed_content(ctx, probe) -> bool | None:
+    """On an HTTPS page, any subresource loaded over plain http:// is mixed content. N/A when the page
+    itself isn't served over https (nothing can be 'mixed'). verify=False: a black-box grader connects to
+    whatever cert the target presents (cert validity is a separate concern)."""
+    if urllib.parse.urlparse(ctx.base_url).scheme != "https":
+        return None
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True, verify=False) as c:
+        try:
+            r = c.get(probe.probe.get("target", "/"))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+    if "html" not in r.headers.get("content-type", "").lower():
+        return None
+    return True if _http_subresources(r.text, str(r.url)) else False
+
+
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
 # it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
 # Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
@@ -1692,6 +1727,7 @@ PREDICATES = {
     "http_soft_404": http_soft_404,
     "a11y_hard_fails": a11y_hard_fails,
     "broken_links": broken_links,
+    "mixed_content": mixed_content,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1745,6 +1781,7 @@ _PREDICATE_REASONS = {
     "http_soft_404": "a nonexistent static asset returned 2xx instead of 404 (soft-404 -> pollutes caches / crawlers / monitoring)",
     "a11y_hard_fails": "accessibility hard-fail (missing lang / alt / form-control name / page title, or text below the 3:1 contrast floor)",
     "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
+    "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",
