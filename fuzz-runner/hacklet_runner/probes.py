@@ -556,6 +556,57 @@ def command_injection(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+# Server-Side Template Injection + eval-based code injection — user input evaluated as CODE (a template
+# expression or an eval'd statement) instead of treated as data -> RCE. Comprehensive across template
+# engines AND eval sinks; one finding. Precision by the arithmetic-marker trick (as in command
+# injection): the RESULT "<marker>49" appears only if the input was EVALUATED; reflecting the literal
+# shows "<marker>{{7*7}}". The unique random marker makes a coincidental "...49" impossible.
+_SSTI_EXPRS = (
+    "{{7*7}}", "${7*7}", "<%= 7*7 %>", "#{7*7}", "{7*7}", "@(7*7)", "*{7*7}", "${{7*7}}",  # template engines
+    ";echo 7*7;", "';echo 7*7;//", '";echo 7*7;//', ";print(7*7)#", "<?php echo 7*7;?>",   # eval code sinks
+)
+
+
+def ssti_injectable(ctx, probe) -> bool | None:
+    """Template / eval code injection across query params and forms. Injects <marker> + 7*7 in each
+    template syntax (Jinja/Twig/Freemarker/ERB/Smarty/Razor/...) and each eval shape (PHP/Python);
+    fires when "<marker>49" reflects — the value was computed server-side. N/A when no input surface.
+    Query params are tested before forms (template/render sinks are usually GET params)."""
+    q = [(e.raw_path, "get", list(e.query_params)) for e in ctx.profile.endpoints
+         if e.method.lower() == "get" and e.query_params]
+    forms = [(f.action, (f.method or "get").lower(), list(f.fields)) for f in ctx.profile.forms if f.fields]
+    s = [(e.raw_path, "get", list(_COMMON_PARAMS)) for e in ctx.profile.endpoints
+         if e.method.lower() == "get" and not e.query_params and not e.path_params
+         and _SEARCHABLE.search(e.raw_path)]
+    targets = q + forms + s
+    if not targets:
+        return None
+    m = "hlssti" + secrets.token_hex(3)
+    detect = m + "49"
+    payloads = [m + e for e in _SSTI_EXPRS]
+    budget = probe.probe.get("max_attempts", 160)
+    tested = False
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
+        for action, method, fields in targets:
+            for field in fields:
+                for p in payloads:
+                    if budget <= 0:
+                        break
+                    budget -= 1
+                    tested = True
+                    data = {fn: (p if fn == field else _XSS_FILLER) for fn in fields}
+                    try:
+                        if detect in _xss_send(c, method, action, data).text:
+                            return True  # 7*7 was evaluated server-side -> template/code injection
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+                if budget <= 0:
+                    break
+            if budget <= 0:
+                break
+    return False if tested else None
+
+
 # Path traversal / local file inclusion — read a file outside the intended directory via a filename
 # param. Comprehensive: absolute paths, ../ traversal (raw / doubled / URL-encoded), null-byte, php://
 # wrapper; Unix (/etc/passwd) + Windows (win.ini). Detection = the target file's unmistakable content
@@ -1168,6 +1219,7 @@ PREDICATES = {
     "api_sqli": api_sqli,
     "xss_injectable": xss_injectable,
     "command_injection": command_injection,
+    "ssti_injectable": ssti_injectable,
     "path_traversal": path_traversal,
     "file_upload": file_upload,
     "weak_session_id": weak_session_id,
@@ -1210,6 +1262,7 @@ _PREDICATE_REASONS = {
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
     "command_injection": "an input reaches an OS shell (injected command executed: separator / substitution / time-based)",
+    "ssti_injectable": "an input is evaluated by a server-side template engine (SSTI -> code execution)",
     "path_traversal": "a filename param served a file outside the web root (path traversal / local file inclusion)",
     "file_upload": "an uploaded webshell was accepted and executed server-side (insecure file upload -> RCE)",
     "weak_session_id": "session identifiers are weak/predictable (short / numeric / sequential)",
