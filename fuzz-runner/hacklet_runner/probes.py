@@ -839,42 +839,137 @@ _CSRF_REJECT_HINTS = ("login", "signin", "sign-in", "sign_in", "auth", "error",
                       "denied", "forbidden", "unauthorized")
 
 
+_CSRF_SKIP = ("login", "signin", "sign-in", "sign_in", "log-in", "logout", "logoff",
+              "search", "query", "register", "signup", "sign-up")
+_CSRF_STATE = ("password", "passwd", "pwd", "email", "delete", "remove", "update", "change",
+               "settings", "profile", "transfer", "role", "account", "new_", "edit", "save", "admin")
+
+
+def _is_login_form(action_low: str, fields_low: str) -> bool:
+    """A plain authentication form (username/email + password, no change/reset indicator) — its cross-
+    site submission is login-CSRF (a distinct, lesser issue), not the state-change CSRF we grade."""
+    has_pw = "pass" in fields_low
+    has_user = any(h in fields_low for h in ("user", "email", "login"))
+    changes = any(h in action_low + " " + fields_low
+                  for h in ("new", "change", "update", "confirm", "reset", "current", "old"))
+    return has_pw and has_user and not changes
+
+
+def _csrf_candidates(profile):
+    """State-changing forms that carry NO anti-CSRF token: a POST, or a form whose action/fields name a
+    state change (password/email/delete/settings/...). Login/search/logout/register are excluded."""
+    out = []
+    for f in profile.forms:
+        low, fields_low = f.action.lower(), " ".join(f.fields).lower()
+        if any(h in low for h in _CSRF_SKIP) or _is_login_form(low, fields_low):
+            continue
+        if ((f.method or "get").lower() == "post" or any(h in low + " " + fields_low for h in _CSRF_STATE)) \
+                and not any(auth.is_csrf_field(x) for x in f.fields):
+            out.append(f)
+    return out
+
+
 def csrf_missing(ctx, probe) -> bool | None:
-    """Self-as-oracle: a state-changing POST that succeeds cross-site with no CSRF token and no
-    SameSite cookie -> no CSRF defense. Skips when the form carries a token or the session cookie is
-    SameSite (both valid defenses), so only genuinely cross-site-exploitable requests are flagged.
-    N/A when there's no form / no session to test against (not a false clean)."""
-    form = auth.create_form(ctx.profile.forms)
-    if form is None:
-        return None  # no state-changing form to test -> N/A
-    if any(auth.is_csrf_field(f) for f in form.fields):
-        return False  # the form already carries a CSRF token -> defended (clean)
-    account = auth.register_account(ctx.base_url, ctx.profile, suffix="_csrf")
-    if account is None:
-        return None  # couldn't self-register -> couldn't test
-    try:
+    """A state-changing request accepted cross-site with no CSRF token and no SameSite cookie -> no
+    CSRF defense. Works with a provided --header session OR a self-registered one. Skips forms that
+    carry a token; in self-register mode also skips a SameSite session (both valid defenses). N/A when
+    there's no candidate form or no session to test with."""
+    candidates = _csrf_candidates(ctx.profile)
+    if not candidates:
+        return None  # no tokenless state-changing form -> N/A
+    account = None
+    if ctx.headers:                                   # grade the authenticated surface as the given user
+        client = make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=False)
+    else:                                             # open-registration app: be our own user
+        account = auth.register_account(ctx.base_url, ctx.profile, suffix="_csrf")
+        if account is None:
+            return None
         cookie = auth.session_cookie(account.register_response)
-        if cookie is None:
-            return None  # no session established -> couldn't test CSRF
-        if cookie["samesite"]:
-            return False  # a SameSite cookie blocks cross-site sending -> already defended
-        resp = account.client.request(
-            "POST", form.action,
-            data={f: "hl-csrf" for f in form.fields},
-            headers={"Origin": "https://evil.example"},
-            follow_redirects=False,
-        )
-        if resp.is_redirect:
-            # a redirect to a login/auth/error page is a CSRF REJECTION, not an accepted state change
-            # (the vulnerable success path redirects to the created resource instead). Without this,
-            # a defended app that 302s a forged POST to /login is falsely flagged (false-positive 25).
-            dest = resp.headers.get("location", "").lower()
-            return not any(h in dest for h in _CSRF_REJECT_HINTS)
-        return resp.status_code < 400  # 2xx, no token, no SameSite -> accepted cross-site -> CSRF
-    except (httpx.HTTPError, httpx.InvalidURL):
-        return False  # transport/URL failure mid-POST -> can't prove CSRF (clean), don't crash run()
+        if cookie is not None and cookie["samesite"]:
+            account.client.close()
+            return False  # a SameSite session blocks cross-site sending -> already defended
+        client = account.client
+    try:
+        for form in candidates:
+            method = (form.method or "post").upper()
+            data = {f: ("password" if "pass" in f.lower() else "hl-csrf") for f in form.fields}
+            kw = {"params": data} if method == "GET" else {"data": data}
+            try:
+                resp = client.request(method, form.action, headers={"Origin": "https://evil.example"},
+                                      follow_redirects=False, **kw)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if resp.is_redirect:
+                # a redirect to login/auth/error is a CSRF REJECTION, not an accepted state change
+                if any(h in resp.headers.get("location", "").lower() for h in _CSRF_REJECT_HINTS):
+                    continue
+                return True
+            if resp.status_code < 400:
+                return True  # state-changing, no token, accepted cross-site -> CSRF
+        return False
     finally:
-        account.client.close()
+        if account is not None:
+            account.client.close()
+        else:
+            client.close()
+
+
+def _set_cookie_values(resp):
+    out = []
+    for raw in resp.headers.get_list("set-cookie"):
+        first = raw.split(";", 1)[0]
+        if "=" in first:
+            name, val = first.split("=", 1)
+            out.append((name.strip(), val.strip()))
+    return out
+
+
+def _weak_token(values) -> bool:
+    """A session token is weak if it's too short, a short numeric counter/timestamp, or sequential."""
+    distinct = [v for v in dict.fromkeys(values) if v]
+    if not distinct:
+        return False
+    if all(len(v) <= 8 for v in distinct):
+        return True                                     # < ~48 bits -> brute-forceable
+    numeric = [v for v in distinct if v.isdigit()]
+    if len(numeric) == len(distinct):                   # every token is purely numeric
+        if all(len(v) <= 12 for v in distinct):
+            return True                                 # a short numeric counter / timestamp
+        if len(numeric) >= 3:
+            ints = sorted(int(v) for v in numeric)
+            if all(0 < ints[i + 1] - ints[i] <= 5 for i in range(len(ints) - 1)):
+                return True                             # sequential -> the next id is guessable
+    return False
+
+
+def weak_session_id(ctx, probe) -> bool | None:
+    """Weak / predictable session identifiers: collect the session tokens the app issues (across fresh,
+    cookieless requests) plus any provided one, and flag short / purely-numeric / sequential values. A
+    strong random token (long, mixed alphabet) reads clean. N/A when no session token is observed."""
+    samples: dict[str, list] = {}
+
+    def add(name, val):
+        if auth._is_session_cookie(name):
+            samples.setdefault(name, []).append(val)
+
+    routes = ["/"] + [r for r in ctx.profile.routes
+                      if re.search(r"session|login|token|weak|sess|auth", r, re.IGNORECASE)]
+    for route in list(dict.fromkeys(routes))[:6]:
+        for _ in range(8):
+            with make_client(ctx.base_url, ctx.headers, timeout=8.0, follow_redirects=True) as c:
+                try:
+                    resp = c.get(route)
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                for name, val in _set_cookie_values(resp):
+                    add(name, val)
+    for hv in [v for k, v in (ctx.headers or {}).items() if k.lower() == "cookie"]:
+        for part in hv.split(";"):
+            if "=" in part:
+                add(part.split("=", 1)[0].strip(), part.split("=", 1)[1].strip())
+    if not samples:
+        return None
+    return True if any(_weak_token(vals) for vals in samples.values()) else False
 
 
 def dom_xss(ctx, probe) -> bool:
@@ -1075,6 +1170,7 @@ PREDICATES = {
     "command_injection": command_injection,
     "path_traversal": path_traversal,
     "file_upload": file_upload,
+    "weak_session_id": weak_session_id,
     "api_bola": api_bola,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
@@ -1116,6 +1212,7 @@ _PREDICATE_REASONS = {
     "command_injection": "an input reaches an OS shell (injected command executed: separator / substitution / time-based)",
     "path_traversal": "a filename param served a file outside the web root (path traversal / local file inclusion)",
     "file_upload": "an uploaded webshell was accepted and executed server-side (insecure file upload -> RCE)",
+    "weak_session_id": "session identifiers are weak/predictable (short / numeric / sequential)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
