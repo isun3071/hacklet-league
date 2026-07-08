@@ -32,7 +32,7 @@ def test_ignores_secure_relative_and_navigation():
 
 def test_na_when_page_is_not_https():
     # the scheme gate returns N/A before any fetch -> no server needed
-    ctx = type("C", (), {"base_url": "http://127.0.0.1:1", "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": "http://127.0.0.1:1", "headers": None, "client": None, "evidence": {}})()
     assert mixed_content(ctx, type("P", (), {"probe": {}})()) is None
 
 
@@ -78,7 +78,7 @@ class _Probe:
 
 
 def _ctx(url):
-    return type("C", (), {"base_url": url, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "headers": None, "client": None, "evidence": {}})()
 
 
 @pytest.mark.skipif(not HAVE_OPENSSL, reason="no openssl to mint a self-signed cert")

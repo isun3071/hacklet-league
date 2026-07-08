@@ -66,7 +66,7 @@ class _Probe:
 
 def _ctx(url, form):
     prof = Profile(base_url=url, forms=[form])
-    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_command_injection_output_based(app):
@@ -80,5 +80,5 @@ def test_command_injection_clean_on_reflection_only(app):
 
 
 def test_command_injection_na_when_no_input(app):
-    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None, "evidence": {}})()
     assert command_injection(ctx, _Probe()) is None

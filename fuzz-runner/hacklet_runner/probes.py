@@ -196,13 +196,16 @@ def sqli_auth_bypass(ctx, probe) -> bool:
     The payload comes from the probe, so variant-group members reuse one oracle with different
     syntaxes."""
     payload = probe.probe.get("payload", "' OR '1'='1' -- ")
-    for endpoint in ctx.profile.form_endpoints or ["/login"]:
+    endpoints = ctx.profile.form_endpoints or ["/login"]
+    for endpoint in endpoints:
         baseline = ctx.client.post(
             endpoint, data={"username": "zzz_no_such_user", "password": "x"}
         )
         attack = ctx.client.post(endpoint, data={"username": payload, "password": "x"})
         if _authed(attack) and not _authed(baseline):
+            ctx.evidence.update(bypassed=True, endpoint=endpoint, payload=payload)
             return True
+    ctx.evidence.update(bypassed=False, endpoints_tried=len(endpoints), payload=payload)
     return False
 
 
@@ -456,6 +459,7 @@ def xss_injectable(ctx, probe) -> bool | None:
     payloads = _xss_payloads(m)
     budget = probe.probe.get("max_attempts", 150)
     tested = False
+    checked = 0
     with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
         for action, method, fields in targets:
             for field in fields:
@@ -463,6 +467,7 @@ def xss_injectable(ctx, probe) -> bool | None:
                     break
                 budget -= 1
                 tested = True
+                checked += 1
                 # Cheap gate: does this field echo the marker into an HTML response at all? If not, no
                 # reflected XSS is possible here -> skip the 8 payload shapes. Keeps breadth across every
                 # form affordable (a non-reflecting form costs 1 request/field, not 8).
@@ -479,6 +484,7 @@ def xss_injectable(ctx, probe) -> bool | None:
                     data = {fn: (inject if fn == field else _XSS_FILLER) for fn in fields}
                     try:
                         if _reflects(_xss_send(c, method, action, data), detect):
+                            ctx.evidence.update(injectable=True, kind="reflected", target=action, field=field)
                             return True  # reflected unescaped in an HTML (executable) context -> XSS
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -491,9 +497,11 @@ def xss_injectable(ctx, probe) -> bool | None:
                 try:
                     _xss_send(c, "post", action, {fn: inject for fn in fields})
                     if _reflects(c.get(action), detect):
+                        ctx.evidence.update(injectable=True, kind="stored", target=action)
                         return True  # persisted across a fresh request -> stored XSS
                 except (httpx.HTTPError, httpx.InvalidURL):
                     pass
+    ctx.evidence.update(injectable=False, fields_tested=checked, payload_shapes=len(payloads))
     return False if tested else None
 
 
@@ -528,6 +536,7 @@ def command_injection(ctx, probe) -> bool | None:
     budget = probe.probe.get("max_attempts", 120)
     delay = probe.probe.get("time_delay", 3)
     tested = False
+    checked = 0
     deep: list = []
     with make_client(ctx.base_url, ctx.headers, timeout=max(15.0, delay + 8), follow_redirects=True) as c:
         for action, method, fields in targets:
@@ -540,6 +549,7 @@ def command_injection(ctx, probe) -> bool | None:
                     continue
                 if _CMD_OUT in baseline.text:
                     continue  # already present -> can't attribute to the injection
+                checked += 1
                 for sep in _CMD_SEPS:
                     if budget <= 0:
                         break
@@ -549,6 +559,8 @@ def command_injection(ctx, probe) -> bool | None:
                     data = {fn: (inject if fn == field else _XSS_FILLER) for fn in fields}
                     try:
                         if _CMD_OUT in _xss_send(c, method, action, data).text:
+                            ctx.evidence.update(injectable=True, via="separator/substitution",
+                                                target=action, field=field)
                             return True  # a shell evaluated echo hlci$((13*13)) -> hlci169 -> injectable
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -563,7 +575,10 @@ def command_injection(ctx, probe) -> bool | None:
                 # delta vs THIS slot's baseline (the host command itself may be slow, e.g. ping) so a
                 # naturally-slow endpoint can't false-positive; confirm twice to reject jitter
                 if all(_elapsed(c, method, action, data) - base_time >= delay * 0.7 for _ in range(2)):
+                    ctx.evidence.update(injectable=True, via="time-based", target=action, field=field)
                     return True
+    ctx.evidence.update(injectable=False, fields_tested=checked,
+                        techniques=["separator", "substitution", "time-based"])
     return False if tested else None
 
 
@@ -597,6 +612,7 @@ def ssti_injectable(ctx, probe) -> bool | None:
     payloads = [m + e for e in _SSTI_EXPRS]
     budget = probe.probe.get("max_attempts", 160)
     tested = False
+    fields_seen = set()
     with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
         for action, method, fields in targets:
             for field in fields:
@@ -605,9 +621,11 @@ def ssti_injectable(ctx, probe) -> bool | None:
                         break
                     budget -= 1
                     tested = True
+                    fields_seen.add((action, field))
                     data = {fn: (p if fn == field else _XSS_FILLER) for fn in fields}
                     try:
                         if detect in _xss_send(c, method, action, data).text:
+                            ctx.evidence.update(injectable=True, target=action, field=field)
                             return True  # 7*7 was evaluated server-side -> template/code injection
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -615,6 +633,7 @@ def ssti_injectable(ctx, probe) -> bool | None:
                     break
             if budget <= 0:
                 break
+    ctx.evidence.update(injectable=False, fields_tested=len(fields_seen), expr_shapes=len(_SSTI_EXPRS))
     return False if tested else None
 
 
@@ -665,7 +684,10 @@ def ssrf(ctx, probe) -> bool | None:
                         except (httpx.HTTPError, httpx.InvalidURL):
                             continue
         _await_callback(collab, tokens, probe)
-        return True if any(collab.received(t) for t in tokens) else False
+        fired = any(collab.received(t) for t in tokens)
+        ctx.evidence.update(callback_received=fired, url_params=sorted({f for _, _, uf, _ in targets for f in uf}),
+                            probes_sent=len(tokens))
+        return True if fired else False
     finally:
         collab.close()
 
@@ -697,7 +719,9 @@ def xxe(ctx, probe) -> bool | None:
                         except (httpx.HTTPError, httpx.InvalidURL):
                             continue
         _await_callback(collab, tokens, probe)
-        return True if any(collab.received(t) for t in tokens) else False
+        fired = any(collab.received(t) for t in tokens)
+        ctx.evidence.update(callback_received=fired, post_endpoints=len(posts), probes_sent=len(tokens))
+        return True if fired else False
     finally:
         collab.close()
 
@@ -732,6 +756,7 @@ def path_traversal(ctx, probe) -> bool | None:
         return None
     budget = probe.probe.get("max_attempts", 200)
     tested = False
+    fields_seen = set()
     with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
         for action, method, fields in targets:
             for field in fields:
@@ -740,9 +765,11 @@ def path_traversal(ctx, probe) -> bool | None:
                         break
                     budget -= 1
                     tested = True
+                    fields_seen.add((action, field))
                     data = {fn: (payload if fn == field else _XSS_FILLER) for fn in fields}
                     try:
                         if _LFI_SIG.search(_xss_send(c, method, action, data).text):
+                            ctx.evidence.update(found=True, target=action, field=field)
                             return True  # returned the contents of a system file -> traversal/LFI
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -750,6 +777,7 @@ def path_traversal(ctx, probe) -> bool | None:
                     break
             if budget <= 0:
                 break
+    ctx.evidence.update(found=False, fields_tested=len(fields_seen), payloads=len(_LFI_PAYLOADS))
     return False if tested else None
 
 
@@ -808,9 +836,11 @@ def file_upload(ctx, probe) -> bool | None:
                 for url in _locate_upload(resp.text, filename):
                     try:
                         if _UPLOAD_MARK in c.get(url).text:
+                            ctx.evidence.update(rce=True, form=f.action, filename=filename)
                             return True  # the uploaded PHP executed server-side -> RCE via upload
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
+    ctx.evidence.update(rce=False, forms=len(forms), variants=len(_upload_variants()))
     return False if tested else None
 
 
@@ -906,7 +936,9 @@ def api_bola(ctx, probe) -> bool | None:
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
                 if b_read.status_code == 200 and secret_value in b_read.text:
+                    ctx.evidence.update(cross_read=True, endpoint=read_path)
                     return True  # B read A's object AND saw A's planted secret -> broken object auth
+        ctx.evidence.update(cross_read=False, pairs_tested=len(pairs))
         return False if tested else None
     finally:
         a.client.close()
@@ -926,6 +958,7 @@ def session_cookie_missing_flag(ctx, probe) -> bool | None:
         cookie = auth.session_cookie(account.register_response)
         if cookie is None:
             return None  # registration yielded no recognizable session cookie -> couldn't test
+        ctx.evidence.update(flag=flag, present=cookie[flag])
         return not cookie[flag]
     finally:
         account.client.close()
@@ -950,13 +983,15 @@ def login_no_rate_limit(ctx, probe) -> bool | None:
             data[name] = "hacklet_probe_rl"
     attempts = probe.probe.get("attempts", 10)
     with httpx.Client(base_url=ctx.base_url, timeout=15.0, follow_redirects=False) as c:
-        for _ in range(attempts):
+        for n in range(attempts):
             try:
                 resp = c.request((form.method or "post").upper(), form.action, data=data)
             except (httpx.HTTPError, httpx.InvalidURL):
                 return None  # login endpoint unreachable -> couldn't test
             if resp.status_code in (429, 423):
+                ctx.evidence.update(throttled=True, after_attempts=n + 1)
                 return False  # throttled -> brute-force protection present -> clean
+    ctx.evidence.update(throttled=False, attempts=attempts, via="html-form")
     return True  # N attempts, never throttled -> no rate limiting -> slop
 
 
@@ -969,6 +1004,7 @@ def _login_rate_limit_json(ctx, probe) -> bool | None:
         if path is None:
             return None  # no login surface at all -> couldn't test
         if first.status_code in (429, 423):
+            ctx.evidence.update(throttled=True, after_attempts=1, via="json-login")
             return False  # already throttling
         for _ in range(attempts - 1):  # find_json_login already made the first attempt
             try:
@@ -976,7 +1012,9 @@ def _login_rate_limit_json(ctx, probe) -> bool | None:
             except (httpx.HTTPError, httpx.InvalidURL):
                 return None
             if r.status_code in (429, 423):
+                ctx.evidence.update(throttled=True, via="json-login")
                 return False
+    ctx.evidence.update(throttled=False, attempts=attempts, via="json-login")
     return True
 
 
@@ -1033,6 +1071,7 @@ def csrf_missing(ctx, probe) -> bool | None:
         cookie = auth.session_cookie(account.register_response)
         if cookie is not None and cookie["samesite"]:
             account.client.close()
+            ctx.evidence.update(vulnerable=False, defense="samesite-cookie")
             return False  # a SameSite session blocks cross-site sending -> already defended
         client = account.client
     try:
@@ -1049,9 +1088,12 @@ def csrf_missing(ctx, probe) -> bool | None:
                 # a redirect to login/auth/error is a CSRF REJECTION, not an accepted state change
                 if any(h in resp.headers.get("location", "").lower() for h in _CSRF_REJECT_HINTS):
                     continue
+                ctx.evidence.update(vulnerable=True, form=form.action)
                 return True
             if resp.status_code < 400:
+                ctx.evidence.update(vulnerable=True, form=form.action)
                 return True  # state-changing, no token, accepted cross-site -> CSRF
+        ctx.evidence.update(vulnerable=False, forms_tested=len(candidates))
         return False
     finally:
         if account is not None:
@@ -1115,14 +1157,19 @@ def weak_session_id(ctx, probe) -> bool | None:
                 add(part.split("=", 1)[0].strip(), part.split("=", 1)[1].strip())
     if not samples:
         return None
-    return True if any(_weak_token(vals) for vals in samples.values()) else False
+    weak = any(_weak_token(vals) for vals in samples.values())
+    ctx.evidence.update(weak=weak, cookies=list(samples.keys()),
+                        samples=sum(len(v) for v in samples.values()))
+    return True if weak else False
 
 
 def dom_xss(ctx, probe) -> bool:
     """Browser oracle: inject an executing payload across discovered routes and render — fires when
     it runs in the DOM, catching reflected-that-executes and DOM-sink XSS a source check misses.
     Gated on the `browser` capability, so it's N/A unless the run enabled rendering."""
-    return browser.dom_xss_executes(ctx.base_url, ctx.profile.routes, headers=ctx.headers)
+    executed = browser.dom_xss_executes(ctx.base_url, ctx.profile.routes, headers=ctx.headers)
+    ctx.evidence.update(executed=bool(executed), routes_rendered=len(ctx.profile.routes))
+    return executed
 
 
 def _served(ctx, path: str) -> bool:
@@ -1149,7 +1196,10 @@ def slow_first_paint(ctx, probe) -> bool:
     vals = [s for s in samples if isinstance(s, (int, float))]
     if not vals:
         return False
-    return statistics.median(vals) > probe.probe.get("threshold_ms", 1000)
+    fcp = statistics.median(vals)
+    threshold = probe.probe.get("threshold_ms", 1000)
+    ctx.evidence.update(fcp_ms=round(fcp), threshold_ms=threshold)
+    return fcp > threshold
 
 
 def console_errors_present(ctx, probe) -> bool:
@@ -1157,6 +1207,8 @@ def console_errors_present(ctx, probe) -> bool:
     intent. Browser-gated."""
     url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
     n = browser.console_errors(url, headers=ctx.headers)
+    if isinstance(n, (int, float)):
+        ctx.evidence.update(js_errors=n)
     return isinstance(n, (int, float)) and n > 0
 
 
@@ -1165,6 +1217,8 @@ def a11y_violations_present(ctx, probe) -> bool:
     control name) above the threshold. Browser-gated; presence only, so intent-independent."""
     url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
     n = browser.a11y_violations(url, headers=ctx.headers)
+    if isinstance(n, (int, float)):
+        ctx.evidence.update(violations=n, threshold=probe.probe.get("threshold", 0))
     return isinstance(n, (int, float)) and n > probe.probe.get("threshold", 0)
 
 
@@ -1190,7 +1244,9 @@ def open_redirect(ctx, probe) -> bool:
                 continue
             if resp.is_redirect and urllib.parse.urlparse(
                     resp.headers.get("location", "")).hostname == _REDIRECT_PROBE_HOST:
+                ctx.evidence.update(vulnerable=True, endpoint=path)
                 return True
+    ctx.evidence.update(vulnerable=False, endpoints_tested=len(seen))
     return False
 
 
@@ -1222,7 +1278,9 @@ def idor_horizontal(ctx, probe) -> bool | None:
             return None
         with httpx.Client(base_url=ctx.base_url, timeout=10.0, cookies=b_cookies) as bc:
             leaked = bc.get(resource)
-        return leaked.status_code == 200 and marker in leaked.text
+        cross = leaked.status_code == 200 and marker in leaked.text
+        ctx.evidence.update(cross_read=cross, resource=resource)
+        return cross
     except (httpx.HTTPError, httpx.InvalidURL):
         return None
     finally:
@@ -1272,7 +1330,9 @@ def race_resource_ids(ctx, probe) -> bool | None:
                    and not any(h in u.lower() for h in _CSRF_REJECT_HINTS)]
         if len(created) < 2:
             return None  # couldn't create ≥2 resources (CSRF/session) -> couldn't test
-        return len(set(created)) < len(created)
+        dup = len(set(created)) < len(created)
+        ctx.evidence.update(race=dup, creates=len(created), distinct_ids=len(set(created)))
+        return dup
     finally:
         account.client.close()
 
@@ -1306,7 +1366,9 @@ def load_resilience(ctx, probe) -> bool:
             ratios.append(failures / len(statuses))
     if not ratios:
         return False
-    return statistics.median(ratios) > 0.1
+    med = statistics.median(ratios)
+    ctx.evidence.update(fail_ratio=round(med, 3), threshold=0.1, target=target)
+    return med > 0.1
 
 
 # Performance rubric (see perf.py): measure objective primitives on the homepage and grade against the
@@ -1421,6 +1483,7 @@ def caching_ineffective(ctx, probe) -> bool | None:
     saves nothing). Fires on the first asset that fails. N/A when the page references no static asset."""
     budget = probe.probe.get("max_attempts", 20)
     tested = False
+    n_assets = 0
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
         for path in _static_assets(c, ctx.base_url, probe.probe.get("target", "/")):
             if budget <= 0:
@@ -1434,21 +1497,28 @@ def caching_ineffective(ctx, probe) -> bool | None:
             if r.status_code != 200 or not any(t in ctype for t in _STATIC_CTYPE):
                 continue                            # 404/redirect or an SPA catch-all HTML shell -> not an asset
             tested = True
+            n_assets += 1
             cc = r.headers.get("cache-control", "").lower()
             etag, lastmod = r.headers.get("etag", ""), r.headers.get("last-modified", "")
             has_fresh = any(k in cc for k in ("max-age", "public", "immutable")) or "expires" in r.headers
             if "no-store" in cc:
+                ctx.evidence.update(cacheable=False, asset=path, issue="no-store")
                 return True                         # actively un-cacheable -> refetched every load
             if not (etag or lastmod or has_fresh):
+                ctx.evidence.update(cacheable=False, asset=path, issue="no-validator")
                 return True                         # no caching affordance at all
             try:                                    # decorative validator: advertised but not honored
                 if etag and c.get(path, headers={"If-None-Match": etag}).status_code != 304:
+                    ctx.evidence.update(cacheable=False, asset=path, issue="etag-not-honored")
                     return True
                 if not etag and lastmod and \
                         c.get(path, headers={"If-Modified-Since": lastmod}).status_code != 304:
+                    ctx.evidence.update(cacheable=False, asset=path, issue="last-modified-not-honored")
                     return True
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
+    if tested:
+        ctx.evidence.update(cacheable=True, assets_checked=n_assets)
     return False if tested else None
 
 
@@ -1470,7 +1540,9 @@ def http_soft_404(ctx, probe) -> bool:
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
             if 200 <= r.status_code < 300:
+                ctx.evidence.update(soft_404=True, ext=ext, status=r.status_code)
                 return True                          # nonexistent asset served as success -> soft-404
+    ctx.evidence.update(soft_404=False, exts_tested=len(_SOFT404_EXT))
     return False
 
 
@@ -1532,12 +1604,15 @@ def a11y_hard_fails(ctx, probe) -> bool | None:
     doc = r.text
     m = re.search(r"<html\b([^>]*)>", doc, re.IGNORECASE)          # 1. <html> missing lang
     if m and not re.search(r"\blang\s*=", m.group(1), re.IGNORECASE):
+        ctx.evidence.update(fail="missing-lang")
         return True
     for tag in re.findall(r"<img\b[^>]*>", doc, re.IGNORECASE):    # 2. <img> missing alt
         if not re.search(r"\balt\s*=", tag, re.IGNORECASE):
+            ctx.evidence.update(fail="img-missing-alt")
             return True
     tm = re.search(r"<title\b[^>]*>(.*?)</title>", doc, re.IGNORECASE | re.DOTALL)  # 3. missing/empty <title>
     if not tm or not tm.group(1).strip():
+        ctx.evidence.update(fail="missing-title")
         return True
     label_fors = set(re.findall(r"""<label\b[^>]*\bfor\s*=\s*["']?([^"'>\s]+)""", doc, re.IGNORECASE))
     label_spans = [(mm.start(), mm.end())                          # 4. control with no accessible name
@@ -1554,6 +1629,7 @@ def a11y_hard_fails(ctx, probe) -> bool | None:
             continue
         if any(s <= mm.start() < e for s, e in label_spans):
             continue
+        ctx.evidence.update(fail="control-no-accessible-name")
         return True
     for mm in re.finditer(r"""<([a-z0-9]+)\b[^>]*\bstyle\s*=\s*["']([^"']*)["'][^>]*>(.*?)</\1>""",
                           doc, re.IGNORECASE | re.DOTALL):         # 5. inline-style contrast < 3:1 floor
@@ -1565,7 +1641,9 @@ def a11y_hard_fails(ctx, probe) -> bool | None:
         if cm and bm:
             fg, bg = _parse_color(cm.group(1)), _parse_color(bm.group(1))
             if fg and bg and _contrast_ratio(fg, bg) < 3.0:
+                ctx.evidence.update(fail="low-contrast", ratio=round(_contrast_ratio(fg, bg), 2))
                 return True
+    ctx.evidence.update(fail=None)   # all objective WCAG hard-fails passed
     return False
 
 
@@ -1603,10 +1681,13 @@ def broken_links(ctx, probe) -> bool | None:
             return None
         for path in links[:budget]:
             try:
-                if 400 <= c.get(path).status_code < 500:
+                st = c.get(path).status_code
+                if 400 <= st < 500:
+                    ctx.evidence.update(broken=True, link=path, status=st)
                     return True                            # dead link: an internal href leads to a 4xx
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
+    ctx.evidence.update(broken=False, links_checked=len(links[:budget]))
     return False
 
 
@@ -1642,7 +1723,9 @@ def mixed_content(ctx, probe) -> bool | None:
             return None
     if "html" not in r.headers.get("content-type", "").lower():
         return None
-    return True if _http_subresources(r.text, str(r.url)) else False
+    insecure = _http_subresources(r.text, str(r.url))
+    ctx.evidence.update(mixed=bool(insecure), http_subresources=insecure[:5])
+    return True if insecure else False
 
 
 # SEO / discoverability meta — objective presence checks on best-practice head tags. Viewport is the
@@ -1660,6 +1743,7 @@ def seo_meta_missing(ctx, probe) -> bool | None:
     doc = r.text
     has_viewport = re.search(r"""<meta\b[^>]*\bname\s*=\s*["']?viewport\b""", doc, re.IGNORECASE)
     has_desc = re.search(r"""<meta\b[^>]*\bname\s*=\s*["']?description\b""", doc, re.IGNORECASE)
+    ctx.evidence.update(viewport=bool(has_viewport), description=bool(has_desc))
     return not (has_viewport and has_desc)
 
 
@@ -1677,7 +1761,9 @@ def http_conformance(ctx, probe) -> bool | None:
     ctype = r.headers.get("content-type", "").lower()
     if "text/html" not in ctype:
         return None                                       # only HTML documents declare a page charset
-    return "charset=" not in ctype
+    has_charset = "charset=" in ctype
+    ctx.evidence.update(charset=has_charset)
+    return not has_charset
 
 
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
@@ -1728,7 +1814,9 @@ def crash_resistance(ctx, probe) -> bool | None:
                     tested = True
                     data = {fn: (val if fn == field else "1") for fn in fields}
                     try:
-                        if _xss_send(c, method, action, data).status_code >= 500:
+                        st = _xss_send(c, method, action, data).status_code
+                        if st >= 500:
+                            ctx.evidence.update(crashed=True, via="malformed-field", target=action, status=st)
                             return True                    # malformed input -> unhandled 5xx
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -1742,17 +1830,23 @@ def crash_resistance(ctx, probe) -> bool | None:
                 budget -= 1
                 tested = True
                 try:
-                    if c.post(path, content=body, headers={"Content-Type": "application/json"}).status_code >= 500:
+                    st = c.post(path, content=body, headers={"Content-Type": "application/json"}).status_code
+                    if st >= 500:
+                        ctx.evidence.update(crashed=True, via="malformed-json", target=path, status=st)
                         return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
         for p in _CRASH_PATHS:                             # 3. decode-crashing paths (naive router -> 500)
             tested = True
             try:
-                if c.get(p).status_code >= 500:
+                st = c.get(p).status_code
+                if st >= 500:
+                    ctx.evidence.update(crashed=True, via="decode-path", target=p, status=st)
                     return True
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
+    if tested:
+        ctx.evidence.update(crashed=False)
     return False if tested else None
 
 

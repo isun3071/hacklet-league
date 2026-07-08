@@ -60,7 +60,7 @@ class _Probe:
 
 def _ctx(url, path):
     prof = Profile(base_url=url, endpoints=[Endpoint(path=path, method="get", query_params=["page"], raw_path=path)])
-    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_lfi_reads_system_file(app):
@@ -72,5 +72,5 @@ def test_lfi_clean_on_whitelisting_app(app):
 
 
 def test_lfi_na_when_no_surface(app):
-    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None, "evidence": {}})()
     assert path_traversal(ctx, _Probe()) is None

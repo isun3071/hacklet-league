@@ -49,7 +49,7 @@ class _Probe:
 
 def _ctx(url, routes):
     return type("C", (), {"base_url": url, "profile": Profile(base_url=url, routes=routes),
-                          "headers": None, "client": None})()
+                          "headers": None, "client": None, "evidence": {}})()
 
 
 def test_weak_session_sequential(app):

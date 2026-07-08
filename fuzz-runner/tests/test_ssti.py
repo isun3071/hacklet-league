@@ -57,7 +57,7 @@ class _Probe:
 
 def _ctx(url, path):
     prof = Profile(base_url=url, endpoints=[Endpoint(path=path, method="get", query_params=["name"], raw_path=path)])
-    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_ssti_fires_when_expression_is_evaluated(app):
@@ -70,5 +70,5 @@ def test_ssti_clean_on_reflection_only(app):
 
 
 def test_ssti_na_when_no_input(app):
-    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None, "evidence": {}})()
     assert ssti_injectable(ctx, _Probe()) is None

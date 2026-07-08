@@ -43,7 +43,7 @@ class _Probe:
 
 
 def _ctx(url):
-    return type("C", (), {"base_url": url, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_conformance_fires_on_html_without_charset(server):

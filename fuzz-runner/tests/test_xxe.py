@@ -45,7 +45,7 @@ class _Probe:
 
 def _ctx(url, action):
     prof = Profile(base_url=url, forms=[Form(action=action, method="post", fields=["data"])])
-    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_xxe_fires_on_external_entity_resolution(app):
@@ -57,5 +57,5 @@ def test_xxe_clean_when_entities_ignored(app):
 
 
 def test_xxe_na_without_post_endpoint(app):
-    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None, "evidence": {}})()
     assert xxe(ctx, _Probe()) is None

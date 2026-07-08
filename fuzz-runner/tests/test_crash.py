@@ -62,7 +62,7 @@ class _Probe:
 
 def _ctx(url, **pk):
     return type("C", (), {"base_url": url, "profile": Profile(base_url=url, **pk),
-                          "headers": None, "client": None})()
+                          "headers": None, "client": None, "evidence": {}})()
 
 
 def test_crash_fires_on_oversized_input_5xx(fragile):

@@ -63,7 +63,7 @@ def _ctx(url, action):
     form = Form(action=action, method="post", fields=["uploaded"],
                 enctype="multipart/form-data", file_fields=["uploaded"])
     return type("C", (), {"base_url": url, "profile": Profile(base_url=url, forms=[form]),
-                          "headers": None, "client": None})()
+                          "headers": None, "client": None, "evidence": {}})()
 
 
 def test_file_upload_executes_webshell(app):
@@ -76,5 +76,5 @@ def test_file_upload_clean_when_served_as_source(app):
 
 
 def test_file_upload_na_without_upload_form(app):
-    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": app, "profile": Profile(base_url=app), "headers": None, "client": None, "evidence": {}})()
     assert file_upload(ctx, _Probe()) is None

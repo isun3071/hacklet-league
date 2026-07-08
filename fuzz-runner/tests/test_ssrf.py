@@ -44,7 +44,7 @@ class _Probe:
 
 def _ctx(url, path):
     prof = Profile(base_url=url, endpoints=[Endpoint(path=path, method="get", query_params=["url"], raw_path=path)])
-    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_ssrf_fires_on_server_side_fetch(app):
@@ -57,5 +57,5 @@ def test_ssrf_clean_when_url_not_fetched(app):
 
 def test_ssrf_na_without_url_param(app):
     prof = Profile(base_url=app, endpoints=[Endpoint(path="/x", method="get", query_params=["name"], raw_path="/x")])
-    ctx = type("C", (), {"base_url": app, "profile": prof, "headers": None, "client": None})()
+    ctx = type("C", (), {"base_url": app, "profile": prof, "headers": None, "client": None, "evidence": {}})()
     assert ssrf(ctx, _Probe()) is None

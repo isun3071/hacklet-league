@@ -63,7 +63,7 @@ class _Probe:
 
 def _ctx(url, **profile_kw):
     prof = Profile(base_url=url, **profile_kw)
-    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": prof, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_xss_reflected_in_html_body(app):

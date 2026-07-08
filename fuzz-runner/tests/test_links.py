@@ -70,7 +70,7 @@ class _Probe:
 
 
 def _ctx(url):
-    return type("C", (), {"base_url": url, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "headers": None, "client": None, "evidence": {}})()
 
 
 def test_broken_links_fires_on_dead_internal_link(server):

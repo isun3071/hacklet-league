@@ -68,7 +68,7 @@ class _Probe:
 
 
 def _ctx(url):
-    return type("C", (), {"base_url": url, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "headers": None, "client": None, "evidence": {}})()
 
 
 @pytest.mark.parametrize("mode", ["none", "no_store", "decorative"])
