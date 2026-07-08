@@ -38,7 +38,7 @@ def _user_of(handler):
     return None
 
 
-HOME = b"""<!doctype html><html lang="en"><body>
+HOME = b"""<!doctype html><html lang="en"><head><title>demo app</title></head><body>
 <h1>demo app</h1>
 <a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a> | <a href="/dom">dom</a>
 <form action="/login" method="post">
@@ -113,6 +113,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if _user_of(self) == note["owner"]:  # hardened: owner only -> no IDOR
                 return self._send(200, "note: " + html.escape(note["text"]))
             return self._send(403, "forbidden")
+        if self.path == "/login":  # GET renders the login form (POST authenticates) -> the nav link resolves
+            return self._send(200, '<!doctype html><html lang="en"><head><title>log in</title></head><body>'
+                              '<form action="/login" method="post">'
+                              '<input name="username" aria-label="username">'
+                              '<input name="password" type="password" aria-label="password">'
+                              '<button type="submit">log in</button></form></body></html>')
         if self.path.startswith("/search"):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", [""])[0]
             return self._send(200, "<p>results for: " + html.escape(q) + "</p>")  # escaped

@@ -1452,6 +1452,142 @@ def http_soft_404(ctx, probe) -> bool:
     return False
 
 
+# Accessibility hard-fails — the OBJECTIVE, pass/fail subset of WCAG (an accessible name / lang / title /
+# alt is present, and the contrast-ratio MATH), all readable from static HTML with no browser. Not the
+# judgment calls (is the alt text meaningful, is the tab order sane) — only the unambiguous fails. All
+# collapse to ONE "the page has accessibility hard-fails" finding (variant-grouped with the browser probe).
+_A11Y_NAMED_ATTR = ("aria-label", "aria-labelledby", "title")
+_LABELABLE = re.compile(r"<(input|select|textarea)\b([^>]*)>", re.IGNORECASE)
+_SKIP_INPUT_TYPES = ("hidden", "submit", "button", "image", "reset")
+_NAMED_COLORS = {"black": (0, 0, 0), "white": (255, 255, 255), "red": (255, 0, 0), "lime": (0, 255, 0),
+                 "green": (0, 128, 0), "blue": (0, 0, 255), "gray": (128, 128, 128), "grey": (128, 128, 128),
+                 "silver": (192, 192, 192), "yellow": (255, 255, 0), "navy": (0, 0, 128), "maroon": (128, 0, 0)}
+
+
+def _tag_attr(name, tag):
+    return re.search(r"\b" + name + r"""\s*=\s*["']?([^"'>\s]+)""", tag, re.IGNORECASE)
+
+
+def _parse_color(s):
+    s = s.strip().lower()
+    m = re.match(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", s)
+    if m:
+        return int(m.group(1)), int(m.group(2)), int(m.group(3))
+    tok = s.split()[0] if s.split() else ""
+    if tok in _NAMED_COLORS:
+        return _NAMED_COLORS[tok]
+    m = re.match(r"#([0-9a-f]{3}|[0-9a-f]{6})\b", tok)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = "".join(ch * 2 for ch in h)
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return None
+
+
+def _contrast_ratio(fg, bg):
+    def _lin(rgb):
+        def chan(c):
+            c /= 255.0
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        return 0.2126 * chan(rgb[0]) + 0.7152 * chan(rgb[1]) + 0.0722 * chan(rgb[2])
+    l1, l2 = _lin(fg), _lin(bg)
+    return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)   # WCAG 2.x contrast ratio
+
+
+def a11y_hard_fails(ctx, probe) -> bool | None:
+    """Parse the homepage HTML for objective WCAG hard-fails with no browser: <html> without lang
+    (3.1.1), <img> without alt (1.1.1), a form control with no accessible name (4.1.2/3.3.2), a
+    missing/empty <title> (2.4.2), and inline-styled text below the universal 3:1 contrast floor (1.4.3,
+    the ratio math). One finding. N/A on a non-HTML homepage."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(probe.probe.get("target", "/"))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+    if "html" not in r.headers.get("content-type", "").lower():
+        return None
+    doc = r.text
+    m = re.search(r"<html\b([^>]*)>", doc, re.IGNORECASE)          # 1. <html> missing lang
+    if m and not re.search(r"\blang\s*=", m.group(1), re.IGNORECASE):
+        return True
+    for tag in re.findall(r"<img\b[^>]*>", doc, re.IGNORECASE):    # 2. <img> missing alt
+        if not re.search(r"\balt\s*=", tag, re.IGNORECASE):
+            return True
+    tm = re.search(r"<title\b[^>]*>(.*?)</title>", doc, re.IGNORECASE | re.DOTALL)  # 3. missing/empty <title>
+    if not tm or not tm.group(1).strip():
+        return True
+    label_fors = set(re.findall(r"""<label\b[^>]*\bfor\s*=\s*["']?([^"'>\s]+)""", doc, re.IGNORECASE))
+    label_spans = [(mm.start(), mm.end())                          # 4. control with no accessible name
+                   for mm in re.finditer(r"<label\b.*?</label>", doc, re.IGNORECASE | re.DOTALL)]
+    for mm in _LABELABLE.finditer(doc):
+        attrs = mm.group(2)
+        tt = _tag_attr("type", attrs)
+        if mm.group(1).lower() == "input" and tt and tt.group(1).lower() in _SKIP_INPUT_TYPES:
+            continue
+        if any(re.search(r"\b" + a + r"\s*=", attrs, re.IGNORECASE) for a in _A11Y_NAMED_ATTR):
+            continue
+        idm = _tag_attr("id", attrs)
+        if idm and idm.group(1) in label_fors:
+            continue
+        if any(s <= mm.start() < e for s, e in label_spans):
+            continue
+        return True
+    for mm in re.finditer(r"""<([a-z0-9]+)\b[^>]*\bstyle\s*=\s*["']([^"']*)["'][^>]*>(.*?)</\1>""",
+                          doc, re.IGNORECASE | re.DOTALL):         # 5. inline-style contrast < 3:1 floor
+        style = mm.group(2)
+        if not re.sub(r"<[^>]+>", "", mm.group(3)).strip():
+            continue
+        cm = re.search(r"(?<!-)\bcolor\s*:\s*([^;]+)", style, re.IGNORECASE)
+        bm = re.search(r"background(?:-color)?\s*:\s*([^;]+)", style, re.IGNORECASE)
+        if cm and bm:
+            fg, bg = _parse_color(cm.group(1)), _parse_color(bm.group(1))
+            if fg and bg and _contrast_ratio(fg, bg) < 3.0:
+                return True
+    return False
+
+
+# Broken links — an internal <a href> that leads to a 4xx is a dead end in the user's journey. Fire on
+# 4xx only (a missing/forbidden destination); 5xx is a server error (crash-resistance's domain), and a
+# followed redirect that lands on a real page is NOT broken.
+_ANCHOR_HREF = re.compile(r"""<a\b[^>]*\bhref\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+
+
+def broken_links(ctx, probe) -> bool | None:
+    """Fetch each same-origin <a href> link on the homepage; fire if one lands on a 4xx dead end. N/A
+    when the page has no internal links to follow."""
+    budget = probe.probe.get("max_attempts", 40)
+    target = probe.probe.get("target", "/")
+    base = urllib.parse.urlparse(ctx.base_url)
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(target)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+        if "html" not in r.headers.get("content-type", "").lower():
+            return None
+        links = []
+        for href in _ANCHOR_HREF.findall(r.text):
+            href = href.split("#")[0].strip()
+            if not href or href.startswith(("mailto:", "tel:", "javascript:", "data:")):
+                continue
+            if re.search(r"log[-_]?out|sign[-_]?out", href, re.IGNORECASE):
+                continue                                   # never GET a logout link (would drop the session)
+            t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, target), href))
+            if t.netloc == base.netloc and t.path:
+                links.append(t.path + ("?" + t.query if t.query else ""))
+        links = [p for p in dict.fromkeys(links) if p != target]   # dedupe, drop the self-link
+        if not links:
+            return None
+        for path in links[:budget]:
+            try:
+                if 400 <= c.get(path).status_code < 500:
+                    return True                            # dead link: an internal href leads to a 4xx
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+    return False
+
+
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
 # it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
 # Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
@@ -1554,6 +1690,8 @@ PREDICATES = {
     "perf_load_time": perf_load_time,
     "caching_ineffective": caching_ineffective,
     "http_soft_404": http_soft_404,
+    "a11y_hard_fails": a11y_hard_fails,
+    "broken_links": broken_links,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1605,6 +1743,8 @@ _PREDICATE_REASONS = {
     "perf_load_time": "homepage load time crosses the ~5s user-abandonment ceiling",
     "caching_ineffective": "static asset not cacheable (no validator / no-store / ignored revalidation) -> refetched every load",
     "http_soft_404": "a nonexistent static asset returned 2xx instead of 404 (soft-404 -> pollutes caches / crawlers / monitoring)",
+    "a11y_hard_fails": "accessibility hard-fail (missing lang / alt / form-control name / page title, or text below the 3:1 contrast floor)",
+    "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",

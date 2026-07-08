@@ -1,6 +1,7 @@
 id: qa-a11y-001
 bundle: qa
 category: accessibility
+variant_group_id: qa-a11y   # same flaw as qa-a11y-002 (static), two detection methods -> fire once
 pool: public
 evidence_model: oracle
 penalty: 5

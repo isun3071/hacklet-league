@@ -30,6 +30,8 @@ ALL_PROBES = [
     "perf-compress-001",  # no gzip on a sizeable text response
     "perf-cache-001",  # static asset served with no cache validators -> refetched every load
     "qa-http-001",  # soft-404: a nonexistent static asset returns 2xx instead of 404
+    "qa-a11y-002",  # static WCAG hard-fails: missing lang / alt / label / title / contrast floor
+    "qa-links-001",  # broken navigation: an internal <a href> lands on a 4xx dead end
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -84,6 +86,11 @@ def test_vulnerable_app_accrues_slop():
     assert o["perf-cache-001"] == "slop_detected"
     # qa-http-001: a nonexistent /<rand>.js falls through to a 200 index shell (soft-404), not a 404:
     assert o["qa-http-001"] == "slop_detected"
+    # qa-a11y-002 (no browser): <html> has no lang, inputs are placeholder-only (no accessible name),
+    # and there's no <title> -> objective WCAG hard-fails:
+    assert o["qa-a11y-002"] == "slop_detected"
+    # qa-links-001: the homepage's <a href="/login"> dead-ends on a 404 (login is POST-only) -> broken nav:
+    assert o["qa-links-001"] == "slop_detected"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):
@@ -101,8 +108,10 @@ def test_vulnerable_app_accrues_slop():
     # crash-resistance: ONE general finding -> 15 (was 7 reference-specific probes damped to ~14.58).
     # caching: /config.js uncacheable -> 8 (own category, no decay).
     # http-correctness: soft-404 -> 6 (own category).
-    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 427.
-    assert report.slop_score == 427
+    # accessibility: static WCAG hard-fails -> 5 (qa-a11y variant group; browser qa-a11y-001 is N/A here).
+    # broken-links: a homepage <a href> dead-ends on a 4xx -> 10 (own category).
+    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 442.
+    assert report.slop_score == 442
 
 
 def test_hardened_app_is_clean():
@@ -133,6 +142,8 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["qa-crash-010"] == "clean"       # robust: malformed input -> graceful 4xx / 404
     assert o["perf-cache-001"] == "not_applicable"  # homepage references no static asset to cache
     assert o["qa-http-001"] == "clean"        # correct: a missing asset 404s (universally testable)
+    assert o["qa-a11y-002"] == "clean"        # accessible HTML: lang + title set, no img/unlabeled control
+    assert o["qa-links-001"] == "not_applicable"  # no <a href> links on the homepage -> nothing to follow
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
     assert o["sec-headers-006"] == "clean"    # no X-Powered-By header
