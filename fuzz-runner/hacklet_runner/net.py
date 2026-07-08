@@ -32,6 +32,10 @@ def make_client(base_url: str, headers: dict | None = None, **kwargs) -> httpx.C
         if cookie_vals:
             cookies = parse_cookie_header(cookie_vals[0])
         headers = static or None
+    # A black-box grader connects to whatever cert the target presents (self-signed / sandbox / expired
+    # certs are normal for an app under test) -- cert validity is a separate concern, not a connection
+    # blocker. Default to not verifying TLS; callers can still override via kwargs.
+    kwargs.setdefault("verify", False)
     client = httpx.Client(base_url=base_url, headers=headers, **kwargs)
     if cookies:
         # Seed under the SAME domain http.cookiejar assigns to the server's own Set-Cookie, so a rotated

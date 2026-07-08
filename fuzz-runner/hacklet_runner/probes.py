@@ -1613,7 +1613,7 @@ def mixed_content(ctx, probe) -> bool | None:
     whatever cert the target presents (cert validity is a separate concern)."""
     if urllib.parse.urlparse(ctx.base_url).scheme != "https":
         return None
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True, verify=False) as c:
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:  # verify=False by default
         try:
             r = c.get(probe.probe.get("target", "/"))
         except (httpx.HTTPError, httpx.InvalidURL):

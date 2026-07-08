@@ -238,7 +238,8 @@ class RemoteDeployer(Deployer):
         deadline = time.time() + self.health_timeout
         while time.time() < deadline:
             try:
-                if httpx.get(self.base_url + "/", timeout=3.0, follow_redirects=True).status_code < 500:
+                if httpx.get(self.base_url + "/", timeout=3.0, follow_redirects=True,
+                             verify=False).status_code < 500:   # target may present a self-signed cert
                     return DeployHandle(self.base_url)  # a non-5xx response means it is up
             except httpx.HTTPError:
                 pass
