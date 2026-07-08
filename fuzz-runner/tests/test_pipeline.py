@@ -33,6 +33,7 @@ ALL_PROBES = [
     "qa-a11y-002",  # static WCAG hard-fails: missing lang / alt / label / title / contrast floor
     "qa-links-001",  # broken navigation: an internal <a href> lands on a 4xx dead end
     "qa-seo-001",  # missing best-practice meta (viewport / description)
+    "qa-http-002",  # HTTP conformance: an HTML response with no declared charset
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -97,6 +98,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-mixed-001"] == "not_applicable"
     # qa-seo-001: the vulnerable homepage has no <meta name=viewport> or description -> missing meta:
     assert o["qa-seo-001"] == "slop_detected"
+    # qa-http-002: the vulnerable app serves text/html with no charset -> browser must guess encoding:
+    assert o["qa-http-002"] == "slop_detected"
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):
@@ -117,8 +120,9 @@ def test_vulnerable_app_accrues_slop():
     # accessibility: static WCAG hard-fails -> 5 (qa-a11y variant group; browser qa-a11y-001 is N/A here).
     # broken-links: a homepage <a href> dead-ends on a 4xx -> 10 (own category).
     # seo: missing viewport/description meta -> 4 (own category).
-    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 446.
-    assert report.slop_score == 446
+    # http-conformance: text/html with no charset -> 3 (own category).
+    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 449.
+    assert report.slop_score == 449
 
 
 def test_hardened_app_is_clean():
@@ -152,6 +156,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["qa-a11y-002"] == "clean"        # accessible HTML: lang + title set, no img/unlabeled control
     assert o["qa-links-001"] == "not_applicable"  # no <a href> links on the homepage -> nothing to follow
     assert o["qa-seo-001"] == "clean"         # minimal sets viewport + description meta
+    assert o["qa-http-002"] == "clean"        # minimal serves text/html; charset=utf-8
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
     assert o["sec-headers-006"] == "clean"    # no X-Powered-By header

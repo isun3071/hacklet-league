@@ -65,7 +65,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, code, body, ctype="text/html; charset=utf-8", cookie=None):
+    def _send(self, code, body, ctype="text/html", cookie=None):  # no charset -> browsers must guess encoding
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)

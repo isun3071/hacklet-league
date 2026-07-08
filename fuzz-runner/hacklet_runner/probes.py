@@ -1641,6 +1641,23 @@ def seo_meta_missing(ctx, probe) -> bool | None:
     return not (has_viewport and has_desc)
 
 
+# HTTP conformance — an HTML response served with no declared charset: the browser must GUESS the
+# encoding (mojibake), and it's a UTF-7 XSS surface in old engines. (A "HEAD must not return a body"
+# check was dropped: a spec-compliant HTTP client discards the HEAD body, so it isn't observable without
+# raw-socket work — not worth it for this low-impact tail.)
+def http_conformance(ctx, probe) -> bool | None:
+    """Fire on an HTML response served without a declared charset. N/A on a non-HTML homepage."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(probe.probe.get("target", "/"))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+    ctype = r.headers.get("content-type", "").lower()
+    if "text/html" not in ctype:
+        return None                                       # only HTML documents declare a page charset
+    return "charset=" not in ctype
+
+
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
 # it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
 # Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
@@ -1747,6 +1764,7 @@ PREDICATES = {
     "broken_links": broken_links,
     "mixed_content": mixed_content,
     "seo_meta_missing": seo_meta_missing,
+    "http_conformance": http_conformance,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1802,6 +1820,7 @@ _PREDICATE_REASONS = {
     "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
+    "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",
