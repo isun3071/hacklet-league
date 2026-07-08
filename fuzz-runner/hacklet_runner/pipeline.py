@@ -7,7 +7,7 @@ so multiple vulnerable endpoints cost more than one but less than linearly.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -25,6 +25,8 @@ class _Ctx:
     client: httpx.Client
     profile: Profile
     headers: dict | None = None
+    evidence: dict = field(default_factory=dict)  # a predicate may record measured values here; the
+    #     executor snapshots it onto the outcome and resets it before the next probe (probes run serially)
 
 
 def _applicable(probe: Probe, profile: Profile) -> bool:
@@ -81,6 +83,7 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
     if not _applicable(probe, profile):
         return [_outcome(probe, "not_applicable", 0, target)]
     if "predicate" in probe.probe:
+        ctx.evidence = {}   # fresh per probe; the predicate may fill it with what it measured/attempted
         try:
             slop = PREDICATES[probe.probe["predicate"]](ctx, probe)
         except Exception:
@@ -88,12 +91,13 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
             # one probe to N/A, never crash the whole grade (run must not DNF). Calibration is the
             # backstop: a predicate that ALWAYS raises fails the suite.
             return [_outcome(probe, "not_applicable", 0, target)]
+        ev = dict(ctx.evidence)   # snapshot regardless of verdict — clean/n/a stats are the point here
         if slop is None:
             # the predicate couldn't establish the conditions to test (e.g. self-registration failed
             # on a CSRF/JSON-API app) -> N/A, NOT a false "clean". A false clean is a missed finding.
-            return [_outcome(probe, "not_applicable", 0, target)]
+            return [_outcome(probe, "not_applicable", 0, target, evidence=ev)]
         return [_outcome(probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0,
-                         target, reason=describe(probe) if slop else "")]
+                         target, reason=describe(probe) if slop else "", evidence=ev)]
     na_if_absent = probe.probe.get("na_if_absent", False)
     produced: list[Outcome] = []
     for label, fetch in _expand(probe, profile):
@@ -110,6 +114,7 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
         produced.append(_outcome(
             probe, "slop_detected" if slop else "clean", probe.penalty if slop else 0, label,
             reason=describe(probe) if slop else "",
+            evidence={"status": resp.status_code, "elapsed_ms": round(resp.elapsed.total_seconds() * 1000)},
         ))
     if not produced:  # no targets, every fetch failed, or endpoint absent -> inconclusive
         return [_outcome(probe, "not_applicable", 0, target)]
@@ -138,7 +143,8 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         deployer.teardown()
 
 
-def _outcome(probe: Probe, outcome: str, penalty: int, target: str = "", reason: str = "") -> Outcome:
+def _outcome(probe: Probe, outcome: str, penalty: int, target: str = "", reason: str = "",
+             evidence: dict | None = None) -> Outcome:
     return Outcome(
         probe_id=probe.id,
         bundle=probe.bundle,
@@ -148,4 +154,5 @@ def _outcome(probe: Probe, outcome: str, penalty: int, target: str = "", reason:
         variant_group_id=probe.variant_group_id,
         target=target,
         reason=reason,
+        evidence=evidence or {},
     )

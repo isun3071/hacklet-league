@@ -53,7 +53,8 @@ def app():
 
 
 def _ctx(url):
-    return type("C", (), {"base_url": url, "profile": None, "headers": None, "client": None})()
+    return type("C", (), {"base_url": url, "profile": None, "headers": None, "client": None,
+                          "evidence": {}})()   # predicates record measured values here (as the real _Ctx does)
 
 
 def _probe(**kw):

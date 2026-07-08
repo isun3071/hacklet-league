@@ -1,5 +1,5 @@
 """CLI output renderers — pure text builders, no server/Docker, so they run on the dev box."""
-from hacklet_runner.cli import _failed_text, _report_payload, _summary_text
+from hacklet_runner.cli import _failed_text, _fmt_evidence, _report_payload, _summary_text
 from hacklet_runner.schema import Outcome, Report
 
 
@@ -40,3 +40,17 @@ def test_report_payload_shape():
     assert len(p["outcomes"]) == 4
     assert p["outcomes"][0]["probe_id"] == "sec-xss-001"
     assert p["outcomes"][0]["target"] == "/search"
+
+
+def test_report_payload_carries_evidence():
+    # evidence rides on every outcome (clean/n/a too) so a display can show what was measured
+    r = Report(slop_score=0, outcomes=[Outcome(
+        "perf-loadtime-001", "performance", "speed", "clean", 0, target="/",
+        evidence={"load_time_s": 0.35, "ceiling_s": 5.0})])
+    ev = _report_payload(r)["outcomes"][0]["evidence"]
+    assert ev == {"load_time_s": 0.35, "ceiling_s": 5.0}
+
+
+def test_fmt_evidence():
+    assert _fmt_evidence({"ttfb_s": 0.03, "threshold_s": 0.8}) == "ttfb_s=0.03  threshold_s=0.8"
+    assert _fmt_evidence({}) == ""

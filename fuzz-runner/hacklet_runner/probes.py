@@ -352,7 +352,10 @@ def api_sqli(ctx, probe) -> bool | None:
     budget = probe.probe.get("max_attempts", 120)
     delay = probe.probe.get("time_delay", 3)
     tested = False
+    slots_tested = 0
+    eps_tested: list = []
     deep: list = []  # slots deferred to the UNION/time (blind, last-resort) pass
+    techs = ["error", "boolean", "union", "time"]
     with make_client(ctx.base_url, ctx.headers, timeout=max(15.0, delay + 8),
                      follow_redirects=False) as c:
         for ep in targets:
@@ -363,27 +366,35 @@ def api_sqli(ctx, probe) -> bool | None:
                 continue
             if _SQL_ERROR.search(base.text):
                 continue  # baseline already errors for unrelated reasons -> can't attribute injection
+            eps_tested.append(ep.raw_path)
             for slot in _sqli_slots(ep):
                 if budget <= 0:
                     break
                 budget -= 1
                 tested = True
+                slots_tested += 1
                 reqfn = (lambda ep=ep, slot=slot: lambda v: _sqli_request(ep, slot, v))()
                 try:
                     if _tech_error(c, method, reqfn) or _tech_boolean(c, method, reqfn):
+                        ctx.evidence.update(injectable=True, via="error/boolean", param=slot,
+                                            endpoint=ep.raw_path, techniques_tried=techs)
                         return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
                 if len(deep) < _DEEP_SLOTS:
-                    deep.append((method, reqfn))
+                    deep.append((method, reqfn, ep.raw_path, slot))
             if budget <= 0:
                 break
-        for method, reqfn in deep:
+        for method, reqfn, path, slot in deep:
             try:
                 if _tech_union(c, method, reqfn) or _tech_time(c, method, reqfn, delay):
+                    ctx.evidence.update(injectable=True, via="union/time", param=slot,
+                                        endpoint=path, techniques_tried=techs)
                     return True
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
+    ctx.evidence.update(injectable=False, endpoints_tested=len(eps_tested),
+                        params_tested=slots_tested, techniques_tried=techs)
     return False if tested else None
 
 
@@ -1337,20 +1348,28 @@ def perf_ttfb(ctx, probe) -> bool:
     """Homepage time-to-first-byte (server compute) exceeds the tier threshold — p90 over samples."""
     thresh = perf.TTFB_CEILING if probe.probe.get("tier") == "ceiling" else perf.TTFB_PROFILE
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        return perf.sample_ttfb(c, probe.probe.get("target", "/")) >= thresh
+        sample = perf.sample_ttfb(c, probe.probe.get("target", "/"))
+    ctx.evidence.update(ttfb_s=round(sample, 3), threshold_s=thresh,
+                        tier=probe.probe.get("tier", "profile"))
+    return sample >= thresh
 
 
 def perf_page_weight(ctx, probe) -> bool:
     """Total homepage transfer weight (HTML + critical assets) exceeds the tier threshold."""
     thresh = perf.WEIGHT_CEILING if probe.probe.get("tier") == "ceiling" else perf.WEIGHT_PROFILE
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        return _page_weight(c, ctx.base_url, probe.probe.get("target", "/"))[0] >= thresh
+        weight = _page_weight(c, ctx.base_url, probe.probe.get("target", "/"))[0]
+    ctx.evidence.update(weight_bytes=weight, threshold_bytes=thresh,
+                        tier=probe.probe.get("tier", "profile"))
+    return weight >= thresh
 
 
 def perf_request_count(ctx, probe) -> bool:
     """The homepage needs more than the profile's round-trip budget to render (too chatty)."""
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        return _page_weight(c, ctx.base_url, probe.probe.get("target", "/"))[1] > perf.REQUESTS_PROFILE
+        reqs = _page_weight(c, ctx.base_url, probe.probe.get("target", "/"))[1]
+    ctx.evidence.update(requests=reqs, threshold=perf.REQUESTS_PROFILE)
+    return reqs > perf.REQUESTS_PROFILE
 
 
 def perf_load_time(ctx, probe) -> bool:
@@ -1360,7 +1379,10 @@ def perf_load_time(ctx, probe) -> bool:
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
         ttfb = perf.sample_ttfb(c, target, n=3)
         weight, reqs = _page_weight(c, ctx.base_url, target)
-    return perf.computed_load_time(ttfb, weight, reqs) >= perf.LOADTIME_CEILING
+    load_time = perf.computed_load_time(ttfb, weight, reqs)
+    ctx.evidence.update(load_time_s=round(load_time, 2), ttfb_s=round(ttfb, 3), weight_bytes=weight,
+                        requests=reqs, ceiling_s=perf.LOADTIME_CEILING)
+    return load_time >= perf.LOADTIME_CEILING
 
 
 # Caching — a static asset (JS/CSS/image/font) that carries no cache validators forces a full refetch

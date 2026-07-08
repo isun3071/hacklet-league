@@ -74,6 +74,9 @@ class Outcome:
     variant_group_id: str | None = None
     target: str = ""  # the concrete path/form this outcome ran against (fan-out)
     reason: str = ""  # short human "why it fired" (slop only); derived from the probe's check
+    evidence: dict = field(default_factory=dict)  # measured values / what was checked — for ALL
+    #                                               outcomes (clean/n/a too), so a report can show
+    #                                               "load time 0.4s ✓" / "tried error+union+time, none hit"
 
 
 @dataclass

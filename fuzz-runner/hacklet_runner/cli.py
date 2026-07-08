@@ -95,6 +95,11 @@ def _fail(args, status: str, reason: str):
 _MARK = {"slop_detected": "SLOP", "clean": " ok ", "not_applicable": " -- "}
 
 
+def _fmt_evidence(ev: dict) -> str:
+    """"ttfb_s=0.03  threshold_s=0.8" — the measured values / what was attempted, for any outcome."""
+    return "  ".join(f"{k}={v}" for k, v in ev.items())
+
+
 def _bar(done: int, total: int, probe) -> None:
     w = 24
     filled = int(w * done / total) if total else w
@@ -112,7 +117,8 @@ def _make_progress(args):
             else:
                 for o in outcomes:
                     tag = f"SLOP -{o.penalty}" if o.outcome == "slop_detected" else _MARK[o.outcome]
-                    why = f"  {o.reason}" if o.reason else ""
+                    detail = "  ".join(x for x in (o.reason, _fmt_evidence(o.evidence)) if x)
+                    why = f"  {detail}" if detail else ""
                     sys.stderr.write(f"    {tag:<9} {o.category:<18} {(o.target or '—'):<16}{why}\n")
             sys.stderr.flush()
         return cb

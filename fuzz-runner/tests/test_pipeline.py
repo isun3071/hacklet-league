@@ -100,6 +100,12 @@ def test_vulnerable_app_accrues_slop():
     assert o["qa-seo-001"] == "slop_detected"
     # qa-http-002: the vulnerable app serves text/html with no charset -> browser must guess encoding:
     assert o["qa-http-002"] == "slop_detected"
+    # evidence rides on outcomes (clean ones too): the load-time probe records the measured number, and
+    # api_sqli records the techniques it tried even when the app is clean -> for the display layer.
+    ltime = next(x for x in report.outcomes if x.probe_id == "perf-loadtime-001")
+    assert "load_time_s" in ltime.evidence and ltime.evidence["ceiling_s"] == 5.0
+    sqli = next(x for x in report.outcomes if x.probe_id == "sec-sqli-004")
+    assert set(sqli.evidence.get("techniques_tried", [])) == {"error", "boolean", "union", "time"}
     # perf-cwv-001 (Core Web Vitals) is browser-only -> N/A here; the browser run is in test_browser:
     assert o["perf-cwv-001"] == "not_applicable"
     # qa-console-001 / qa-a11y-001 are browser-only too -> N/A here (fired in test_browser):

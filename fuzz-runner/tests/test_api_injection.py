@@ -28,12 +28,14 @@ def jsonapi():
 
 
 class _Ctx:
-    """Minimal pipeline context: api_sqli reads base_url, profile.endpoints, and headers."""
+    """Minimal pipeline context: api_sqli reads base_url, profile.endpoints, headers, and records into
+    evidence (as the real _Ctx does)."""
     def __init__(self, base_url, profile):
         self.base_url = base_url
         self.profile = profile
         self.headers = None
         self.client = None
+        self.evidence = {}
 
 
 class _Probe:
