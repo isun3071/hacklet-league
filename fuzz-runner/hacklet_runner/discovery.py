@@ -8,13 +8,13 @@ can't see (client-rendered forms), plus per-endpoint baselines for oracle differ
 from __future__ import annotations
 
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import httpx
 
 from . import jsmine, openapi
 from .net import make_client
-from .schema import Form, Profile
+from .schema import Endpoint, Form, Profile
 
 _LINK = re.compile(r'(?<![-\w])href=["\']([^"\']+)["\']', re.I)
 _SRC = re.compile(r'(?<![-\w])src=["\']([^"\']+)["\']', re.I)  # any tag: img / iframe / script / source / ...
@@ -79,6 +79,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     any_response = False
     endpoints: list = []
     js_urls: list[str] = []           # same-origin .js assets to mine for an SPA's API paths
+    link_params: dict[str, set] = {}  # path -> query-param NAMES seen in links (?page=, ?id=, ...)
 
     with make_client(base_url, headers, timeout=5.0, follow_redirects=True) as c:
         while queue and len(visited) < max_pages:
@@ -112,6 +113,11 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                     p = _same_origin_path(href, base_url, path)
                     if p:
                         routes.setdefault(p, None)
+                        # capture query-param NAMES from the link (?page=, ?id=, ...) so a reflected /
+                        # includable GET param is testable — the crawl otherwise drops the query string
+                        if "?" in href:
+                            for name in parse_qs(href.split("?", 1)[1].split("#")[0], keep_blank_values=True):
+                                link_params.setdefault(p, set()).add(name)
                         if p not in visited:
                             queue.append((p, depth + 1))
 
@@ -119,6 +125,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         # Both surface a form-less API the HTML crawl can't see; the fan-out and injection probes target
         # them. Neither present -> [] (the HTML-only path is unchanged). Dedup by (method, raw_path).
         endpoints = openapi.ingest(base_url, c) + jsmine.ingest(c, js_urls)
+        endpoints += [Endpoint(path=p, method="get", query_params=sorted(params), raw_path=p)
+                      for p, params in link_params.items()]
         seen_eps: set[tuple] = set()
         endpoints = [e for e in endpoints
                      if (e.method, e.raw_path) not in seen_eps and not seen_eps.add((e.method, e.raw_path))]

