@@ -21,7 +21,10 @@ _SRC = re.compile(r'(?<![-\w])src=["\']([^"\']+)["\']', re.I)  # any tag: img / 
 _FORM = re.compile(r"<form\b([^>]*)>(.*?)</form>", re.I | re.S)
 _ACTION = re.compile(r'(?<![-\w])action=["\']([^"\']*)["\']', re.I)
 _METHOD = re.compile(r'(?<![-\w])method=["\']([^"\']*)["\']', re.I)
+_ENCTYPE = re.compile(r'(?<![-\w])enctype=["\']([^"\']*)["\']', re.I)
 _FIELD = re.compile(r'<(?:input|textarea|select)\b[^>]*(?<![-\w])name=["\']([^"\']+)["\']', re.I)
+_INPUT_TAG = re.compile(r"<input\b[^>]*>", re.I)
+_IS_FILE = re.compile(r'(?<![-\w])type=["\']?file\b', re.I)
 
 MAX_PAGES = 25
 MAX_DEPTH = 2
@@ -61,10 +64,15 @@ def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
         if action is None:  # cross-origin action — not our target
             continue
         method = mm.group(1).lower() if mm else "get"
+        em = _ENCTYPE.search(attrs)
+        file_fields = [nm.group(1) for tag in _INPUT_TAG.findall(body) if _IS_FILE.search(tag)
+                       for nm in [_FIELD.search(tag)] if nm]
         forms.append(Form(
             action=action,
             method=method if method in ("get", "post") else "get",
             fields=_FIELD.findall(body),
+            enctype=em.group(1).lower() if em else "",
+            file_fields=file_fields,
         ))
     return forms
 

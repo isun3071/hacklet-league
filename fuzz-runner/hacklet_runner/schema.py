@@ -33,6 +33,8 @@ class Form:
     action: str
     method: str = "get"
     fields: list[str] = field(default_factory=list)
+    enctype: str = ""                                     # e.g. multipart/form-data (file uploads)
+    file_fields: list[str] = field(default_factory=list)  # names of <input type=file> controls
 
 
 @dataclass
