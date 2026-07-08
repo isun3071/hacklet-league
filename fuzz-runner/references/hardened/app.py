@@ -38,7 +38,9 @@ def _user_of(handler):
     return None
 
 
-HOME = b"""<!doctype html><html lang="en"><head><title>demo app</title></head><body>
+HOME = b"""<!doctype html><html lang="en"><head><title>demo app</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A small demo application."></head><body>
 <h1>demo app</h1>
 <a href="/login">login</a> | <a href="/search">search</a> | <a href="/crash">crash</a> | <a href="/heavy">heavy</a> | <a href="/dom">dom</a>
 <form action="/login" method="post">

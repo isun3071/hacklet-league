@@ -1,0 +1,13 @@
+id: qa-seo-001
+bundle: qa
+category: seo
+pool: public
+evidence_model: provable
+penalty: 4   # missing viewport (unusable on mobile) or description (no search snippet) — survivable, so low
+applicability:
+  requires: [at_least_one_http_endpoint_exists]
+probe:
+  # presence check: fire if the homepage lacks <meta name=viewport> or <meta name=description>.
+  # canonical is deliberately NOT checked (correctly absent on single-URL pages -> would false-positive)
+  predicate: seo_meta_missing
+  target: /

@@ -1623,6 +1623,24 @@ def mixed_content(ctx, probe) -> bool | None:
     return True if _http_subresources(r.text, str(r.url)) else False
 
 
+# SEO / discoverability meta — objective presence checks on best-practice head tags. Viewport is the
+# strong one (without it a mobile browser renders at desktop width -> tiny, unusable); description feeds
+# the search snippet. Canonical is deliberately NOT checked: it's correctly absent on single-URL pages.
+def seo_meta_missing(ctx, probe) -> bool | None:
+    """Fire when the homepage lacks a viewport meta or a description meta. N/A on a non-HTML page."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(probe.probe.get("target", "/"))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+    if "html" not in r.headers.get("content-type", "").lower():
+        return None
+    doc = r.text
+    has_viewport = re.search(r"""<meta\b[^>]*\bname\s*=\s*["']?viewport\b""", doc, re.IGNORECASE)
+    has_desc = re.search(r"""<meta\b[^>]*\bname\s*=\s*["']?description\b""", doc, re.IGNORECASE)
+    return not (has_viewport and has_desc)
+
+
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
 # it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
 # Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
@@ -1728,6 +1746,7 @@ PREDICATES = {
     "a11y_hard_fails": a11y_hard_fails,
     "broken_links": broken_links,
     "mixed_content": mixed_content,
+    "seo_meta_missing": seo_meta_missing,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1782,6 +1801,7 @@ _PREDICATE_REASONS = {
     "a11y_hard_fails": "accessibility hard-fail (missing lang / alt / form-control name / page title, or text below the 3:1 contrast floor)",
     "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
+    "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",

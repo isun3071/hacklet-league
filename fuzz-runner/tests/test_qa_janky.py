@@ -15,7 +15,7 @@ def test_qa_janky_fires_qa_and_perf_but_not_security():
     fired = {o.probe_id for o in report.outcomes if o.outcome == "slop_detected"}
     # QA + performance jank is caught (non-browser subset; console/a11y/cwv need --browser)
     assert {"qa-crash-010", "qa-errhyg-001"} <= fired          # crash-resistance + error hygiene
-    assert "qa-a11y-002" in fired                              # static WCAG hard-fails (no lang / alt / label)
+    assert {"qa-a11y-002", "qa-seo-001"} <= fired              # WCAG hard-fails + missing viewport/description
     assert "qa-http-001" not in fired                          # qa-janky 404s correctly -> no soft-404
     assert {"perf-compress-001", "perf-load-001"} <= fired                     # compression / load
     # the two-tier perf RUBRIC: slow homepage breaches the profile TTFB tier (not the absolute ceiling)
