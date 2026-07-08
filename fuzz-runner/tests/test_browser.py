@@ -92,3 +92,50 @@ def test_browser_pipeline_clears_on_hardened():
     assert o["perf-cwv-001"] == "clean"            # /slow content in initial HTML -> fast FCP
     assert o["qa-console-001"] == "clean"          # no uncaught errors on load
     assert o["qa-a11y-001"] == "clean"             # lang set + every input aria-labeled
+
+
+# Full-cascade contrast — colors from a <style> block + inheritance (the p's background is inherited
+# from body), which only a rendered browser resolves. The static inline-style probe cannot see this.
+import http.server        # noqa: E402
+import threading          # noqa: E402
+
+_LOW_CONTRAST = ("<!doctype html><html lang=en><head><title>t</title>"
+                 "<style>body{background:#808080} p{color:#8a8a8a}</style></head>"
+                 "<body><p>hard to read text</p></body></html>")
+_HIGH_CONTRAST = ("<!doctype html><html lang=en><head><title>t</title>"
+                  "<style>body{background:#ffffff} p{color:#111111}</style></head>"
+                  "<body><p>easy to read text</p></body></html>")
+
+
+def _serve_html(body):
+    class _H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            b = body.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_contrast_detects_cascade_low_contrast():
+    srv = _serve_html(_LOW_CONTRAST)
+    try:
+        assert browser.contrast_violations("http://127.0.0.1:%d/" % srv.server_address[1]) > 0
+    finally:
+        srv.shutdown()
+
+
+def test_contrast_clean_on_high_contrast():
+    srv = _serve_html(_HIGH_CONTRAST)
+    try:
+        assert browser.contrast_violations("http://127.0.0.1:%d/" % srv.server_address[1]) == 0
+    finally:
+        srv.shutdown()

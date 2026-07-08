@@ -137,9 +137,34 @@ _A11Y_JS = """() => {
 }"""
 
 
-def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> int | None:
-    """Render url and count presence-based accessibility violations (missing lang / alt / field label /
-    control name). None if no browser or the render fails."""
+# Contrast is the ONE accessibility check that needs the CASCADE: the effective text and background
+# colors come from stylesheets + inheritance, which only a rendered DOM resolves (getComputedStyle) --
+# the static probe can only see inline styles. We compute the WCAG contrast ratio and count text that
+# fails the universal 3:1 FLOOR (fails even for large text, so it's unarguable regardless of font size),
+# matching the static inline-contrast threshold. Background is the first opaque ancestor (default white).
+_CONTRAST_JS = r"""() => {
+  const lum = c => { const f = x => { x/=255; return x<=0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055,2.4); };
+    return 0.2126*f(c[0]) + 0.7152*f(c[1]) + 0.0722*f(c[2]); };
+  const parse = s => { const m = (s||'').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
+    return m ? [+m[1],+m[2],+m[3], m[4]===undefined?1:+m[4]] : null; };
+  const bg = el => { while (el) { const c = parse(getComputedStyle(el).backgroundColor);
+    if (c && c[3] !== 0) return c; el = el.parentElement; } return [255,255,255]; };
+  let v = 0;
+  document.querySelectorAll('body *').forEach(el => {
+    const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+    if (!own) return;                                    // only elements with their OWN visible text
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || +st.opacity === 0) return;
+    const fg = parse(st.color); if (!fg || fg[3] === 0) return;
+    const ratio = (Math.max(lum(fg), lum(bg(el))) + 0.05) / (Math.min(lum(fg), lum(bg(el))) + 0.05);
+    if (ratio < 3.0) v++;
+  });
+  return v;
+}"""
+
+
+def _eval_page(url, headers, timeout, js_list):
+    """Render url once and return the summed result of each JS expression, or None if no browser/render."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -154,11 +179,23 @@ def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> int | None
                 _apply_auth(page, url, headers)
                 page.goto(url, timeout=timeout * 1000, wait_until="load")
                 page.wait_for_timeout(300)
-                return page.evaluate(_A11Y_JS)
+                return sum(page.evaluate(js) for js in js_list)
             finally:
                 b.close()
     except Exception:
         return None
+
+
+def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> int | None:
+    """Render url and count accessibility violations: presence-based (missing lang / alt / field label /
+    control name) plus computed-style contrast below the 3:1 floor. None if no browser/render fails."""
+    return _eval_page(url, headers, timeout, [_A11Y_JS, _CONTRAST_JS])
+
+
+def contrast_violations(url: str, headers=None, timeout: float = 12.0) -> int | None:
+    """Render url and count text whose computed contrast is below the 3:1 floor (needs the cascade -> a
+    real browser). Isolated from the presence checks for direct testing. None if no browser/render."""
+    return _eval_page(url, headers, timeout, [_CONTRAST_JS])
 
 
 def console_errors(url: str, headers=None, timeout: float = 12.0) -> int | None:

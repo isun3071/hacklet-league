@@ -10,4 +10,4 @@ applicability:
 probe:
   predicate: a11y_violations_present
   target: /
-  threshold: 0   # fire on any presence-based violation (missing alt / label / lang / control name)
+  threshold: 0   # fire on any violation: presence (missing alt / label / lang / control name) or computed-style contrast below the 3:1 floor
