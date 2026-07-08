@@ -1430,6 +1430,28 @@ def caching_ineffective(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+_SOFT404_EXT = (".js", ".css", ".png", ".webp", ".svg", ".woff2")
+
+
+def http_soft_404(ctx, probe) -> bool:
+    """A missing STATIC ASSET must return a 4xx (normally 404), never 2xx. A 2xx for a guaranteed-
+    nonexistent typed asset is a soft-404: a misconfigured catch-all (often an SPA serving index.html
+    for everything) that makes caches, crawlers and monitors treat a nonexistent URL as real content.
+    Using a *typed asset* path keeps this SPA-safe — the standard `/route -> 200 index` rewrite is
+    intended, but no correct server (SPA or not) serves a nonexistent .js/.css/.png as success.
+    Redirects are NOT followed: a 3xx to a login is an auth gate, not a soft-404."""
+    token = "hlnope" + secrets.token_hex(5)          # a unique random name that cannot be a real file
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
+        for ext in _SOFT404_EXT:
+            try:
+                r = c.get("/%s%s" % (token, ext))
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if 200 <= r.status_code < 300:
+                return True                          # nonexistent asset served as success -> soft-404
+    return False
+
+
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
 # it reach an unhandled exception -> 5xx. Comprehensive across malformed-input techniques, one finding.
 # Precision: fire ONLY on 5xx (a 4xx IS graceful handling), and only when a BENIGN request to the same
@@ -1531,6 +1553,7 @@ PREDICATES = {
     "perf_request_count": perf_request_count,
     "perf_load_time": perf_load_time,
     "caching_ineffective": caching_ineffective,
+    "http_soft_404": http_soft_404,
     "slow_first_paint": slow_first_paint,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
@@ -1581,6 +1604,7 @@ _PREDICATE_REASONS = {
     "perf_request_count": "too many requests to render the homepage (over the perf budget)",
     "perf_load_time": "homepage load time crosses the ~5s user-abandonment ceiling",
     "caching_ineffective": "static asset not cacheable (no validator / no-store / ignored revalidation) -> refetched every load",
+    "http_soft_404": "a nonexistent static asset returned 2xx instead of 404 (soft-404 -> pollutes caches / crawlers / monitoring)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",

@@ -157,6 +157,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             return self._send(400, "no destination")
+        # soft-404: a missing STATIC ASSET falls through to a 200 index shell instead of a 404
+        # (misconfigured catch-all) -> caches/crawlers/monitors treat a nonexistent URL as real content
+        if self.path.split("?")[0].rsplit(".", 1)[-1].lower() in (
+                "js", "css", "png", "jpg", "gif", "svg", "ico", "woff", "woff2"):
+            return self._send(200, HOME, "text/html; charset=utf-8")
         return self._send(404, "not found")
 
     def do_POST(self):
