@@ -165,3 +165,80 @@ def test_bola_probe_fires_on_cross_user_object_read():
     # A creates an order with a canary secret; B reads it back -> broken object-level auth
     report = run(SubprocessDeployer(str(REFS / "jsonapi" / "app.py")), load_catalog(CATALOG))
     assert report.by_id["sec-idor-002"] == "slop_detected"
+
+
+# --- data-integrity round-trip (data_integrity_roundtrip) ---
+
+def _drafts_pair():
+    return [Endpoint(path="/api/drafts", method="post", body_fields=["title", "body"], raw_path="/api/drafts"),
+            Endpoint(path="/api/drafts/1", method="get", path_params=["id"], raw_path="/api/drafts/{id}")]
+
+
+def _orders_pair():
+    return [Endpoint(path="/api/orders", method="post", body_fields=["item", "secret"], raw_path="/api/orders"),
+            Endpoint(path="/api/orders/1", method="get", path_params=["id"], raw_path="/api/orders/{id}")]
+
+
+def test_data_integrity_fires_on_non_durable_write(jsonapi):
+    from hacklet_runner.probes import data_integrity_roundtrip
+    ctx = _Ctx(jsonapi, Profile(base_url=jsonapi, endpoints=_drafts_pair()))
+    assert data_integrity_roundtrip(ctx, _Probe()) is True   # POST 201 + id, but GET /api/drafts/{id} 404s
+    assert ctx.evidence["read_status"] == 404 and ctx.evidence["durable"] is False
+
+
+def test_data_integrity_clean_on_durable_pair(jsonapi):
+    from hacklet_runner.probes import data_integrity_roundtrip
+    ctx = _Ctx(jsonapi, Profile(base_url=jsonapi, endpoints=_orders_pair()))
+    assert data_integrity_roundtrip(ctx, _Probe()) is False  # /api/orders create round-trips correctly
+
+
+def test_data_integrity_na_when_no_create_read_pair(jsonapi):
+    from hacklet_runner.probes import data_integrity_roundtrip
+    ctx = _Ctx(jsonapi, Profile(base_url=jsonapi, endpoints=[]))
+    assert data_integrity_roundtrip(ctx, _Probe()) is None
+
+
+def test_data_integrity_probe_fires_end_to_end():
+    report = run(SubprocessDeployer(str(REFS / "jsonapi" / "app.py")), load_catalog(CATALOG))
+    assert report.by_id["qa-integrity-001"] == "slop_detected"
+
+
+# --- content-type correctness (content_type_mismatch) ---
+
+def test_declared_type_contradiction_detects_json_as_html():
+    from hacklet_runner.probes import _declared_type_contradicted as m
+    assert m("text/html; charset=utf-8", '{"ok": true}') == "json-body-served-as-text/html"
+    assert m("application/json", "<!doctype html><html></html>") == "html-body-served-as-application/json"
+
+
+def test_declared_type_contradiction_no_false_positives():
+    from hacklet_runner.probes import _declared_type_contradicted as m
+    assert m("application/json", '{"ok": true}') is None            # JSON as JSON
+    assert m("text/html; charset=utf-8", "<!doctype html><p>hi") is None  # HTML as HTML
+    assert m("text/plain", "just some plain text") is None          # plain text, no JSON/HTML shape
+    assert m("text/html", "") is None                               # empty body -> can't classify
+    assert m("text/html", "not json { but starts wrong") is None    # looks like { but isn't valid JSON
+
+
+def test_content_type_mismatch_fires_on_mistyped_endpoint(jsonapi):
+    from hacklet_runner.net import make_client
+    from hacklet_runner.probes import content_type_mismatch
+    ctx = _Ctx(jsonapi, Profile(base_url=jsonapi, endpoints=discover(jsonapi).endpoints))
+    ctx.client = make_client(jsonapi, None, timeout=10.0, follow_redirects=True)
+    assert content_type_mismatch(ctx, _CtypeProbe()) is True   # /api/mistyped: JSON body, text/html header
+    assert ctx.evidence["endpoint"] == "/api/mistyped"
+
+
+def test_content_type_mismatch_clean_on_correctly_typed_endpoints(jsonapi):
+    from hacklet_runner.net import make_client
+    from hacklet_runner.probes import content_type_mismatch
+    correct = [Endpoint(path="/api/notes", method="get", query_params=["q"], raw_path="/api/notes"),
+               Endpoint(path="/api/dump", method="get", raw_path="/api/dump")]
+    ctx = _Ctx(jsonapi, Profile(base_url=jsonapi, endpoints=correct))
+    ctx.client = make_client(jsonapi, None, timeout=10.0, follow_redirects=True)
+    # target defaults to "/" (jsonapi 404s with a JSON error body under application/json) -> also clean
+    assert content_type_mismatch(ctx, _CtypeProbe()) is False
+
+
+class _CtypeProbe:
+    probe = {"target": "/api/notes"}   # a known-good JSON endpoint as the homepage stand-in

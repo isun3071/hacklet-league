@@ -9,6 +9,7 @@ means the probe fires and adds its penalty.
 from __future__ import annotations
 
 import gzip
+import json
 import re
 import secrets
 import statistics
@@ -944,6 +945,102 @@ def api_bola(ctx, probe) -> bool | None:
     finally:
         a.client.close()
         b.client.close()
+
+
+def data_integrity_roundtrip(ctx, probe) -> bool | None:
+    """Persistence correctness: POST-create an object, then read it back by id and confirm the write was
+    durable. Fire when a create reports success (2xx with an id) but the object then can't be read back
+    (404 / 410 / 5xx) -> silent data loss / non-durable writes (the 'it said it saved, but it's gone'
+    failure). Uses the same create+read pairing as BOLA. N/A when there's no create+read pair or no
+    create succeeds (couldn't establish the round-trip -> not a clean pass, a missed test)."""
+    pairs = _bola_pairs(ctx.profile.endpoints)
+    if not pairs:
+        return None
+    account = auth.register_account(ctx.base_url, ctx.profile)   # some creates are auth-gated
+    client = (account.client if account
+              else make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True))
+    tested = False
+    try:
+        for create_ep, read_ep, param, id_field in pairs:
+            chosen_id = "hlid" + secrets.token_hex(4)
+            marker = "hldi" + secrets.token_hex(6)
+            body = {f: (chosen_id if f == id_field else marker + secrets.token_hex(2))
+                    for f in create_ep.body_fields}
+            try:
+                created = client.post(create_ep.path, json=body)
+                if created.status_code not in (200, 201):
+                    continue  # create didn't succeed -> nothing to read back on this pair
+                obj_id = chosen_id if id_field else _created_id(created)
+                if obj_id in (None, ""):
+                    continue  # created but no id to address it by -> can't round-trip this pair
+                read_path = read_ep.raw_path.replace(
+                    "{" + param + "}", urllib.parse.quote(str(obj_id), safe=""))
+                read = client.get(read_path)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            tested = True
+            if read.status_code in (404, 410) or read.status_code >= 500:
+                ctx.evidence.update(create_status=created.status_code, read_status=read.status_code,
+                                    endpoint=read_path, durable=False)
+                return True  # server acknowledged the create but the object isn't readable -> data lost
+        ctx.evidence.update(tested=tested, durable=True)
+        return False if tested else None
+    finally:
+        client.close()
+
+
+def _declared_type_contradicted(ctype: str, body: str) -> str | None:
+    """Does the body's actual format contradict its declared Content-Type? Returns a short reason for the
+    unambiguous, harmful cases only, else None. The headline case is JSON served as text/html: a browser
+    may render/execute it (a reflected-JSON XSS vector) and strict JSON clients break on the wrong type."""
+    ct = (ctype or "").split(";", 1)[0].strip().lower()
+    s = body.lstrip()
+    if not s:
+        return None
+    looks_json = s[0] in "{[" and _is_json(body)
+    low = s.lower()
+    looks_html = low.startswith("<!doctype") or low.startswith("<html")
+    if looks_json and ct in ("text/html", "application/xhtml+xml"):
+        return "json-body-served-as-text/html"
+    if looks_html and ct == "application/json":
+        return "html-body-served-as-application/json"
+    return None
+
+
+def _is_json(body: str) -> bool:
+    try:
+        json.loads(body)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def content_type_mismatch(ctx, probe) -> bool | None:
+    """Do any responses declare a Content-Type their body contradicts? Fetches the safe no-path-param GET
+    endpoints (plus the homepage) and fires on an unambiguous mismatch -- above all JSON served as
+    text/html (a browser may render it: a reflected-JSON XSS vector, and JSON clients break on the wrong
+    type). N/A when no response returns a body we can classify (couldn't test)."""
+    target = probe.probe.get("target", "/")
+    seen, candidates = set(), []
+    for path in [target] + [e.path for e in ctx.profile.endpoints
+                            if e.method.lower() == "get" and not e.path_params]:
+        if path not in seen and not seen.add(path):
+            candidates.append(path)
+    checked = False
+    for path in candidates[:20]:   # cap the fan-out; the mismatch is a global habit, not per-route
+        try:
+            resp = ctx.client.get(path)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+        if not resp.text.strip():
+            continue
+        checked = True
+        reason = _declared_type_contradicted(resp.headers.get("content-type", ""), resp.text)
+        if reason:
+            ctx.evidence.update(endpoint=path, declared=resp.headers.get("content-type", ""), reason=reason)
+            return True
+    ctx.evidence.update(checked=checked)
+    return False if checked else None
 
 
 def session_cookie_missing_flag(ctx, probe) -> bool | None:
@@ -2015,6 +2112,8 @@ PREDICATES = {
     "file_upload": file_upload,
     "weak_session_id": weak_session_id,
     "api_bola": api_bola,
+    "data_integrity_roundtrip": data_integrity_roundtrip,
+    "content_type_mismatch": content_type_mismatch,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
     "csrf_missing": csrf_missing,
@@ -2076,6 +2175,8 @@ _PREDICATE_REASONS = {
     "file_upload": "an uploaded webshell was accepted and executed server-side (insecure file upload -> RCE)",
     "weak_session_id": "session identifiers are weak/predictable (short / numeric / sequential)",
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
+    "data_integrity_roundtrip": "a created object could not be read back afterward (non-durable write / silent data loss)",
+    "content_type_mismatch": "a response's body contradicts its declared Content-Type (e.g. JSON served as text/html -> client breakage / reflected-JSON XSS)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
     "idor_horizontal": "another account's object was readable by id (broken access control)",

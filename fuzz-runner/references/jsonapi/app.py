@@ -8,9 +8,14 @@ spec-driven discovery + error-based SQLi path that references/vulnerable (HTML-f
 - POST /api/register, /api/login   self-as-oracle auth (login returns {"token": <username>})
 - POST /api/orders        create an order carrying a private "secret" (auth required)
 - GET  /api/orders/{id}   BOLA: returns ANY authed caller's-or-not order incl. its secret (no owner check)
+- POST /api/drafts        NON-DURABLE: returns 201 + an id but never persists -> the read-back always 404s
+- GET  /api/drafts/{id}   the broken round-trip's read side (always 404, even for a just-"created" id)
+- GET  /api/mistyped      a JSON body served with Content-Type: text/html (declared-type mismatch)
 
 api_sqli fires on /api/items/{id}, clean on /api/notes; response_leaks_credentials fires on /api/dump;
-api_bola fires on /api/orders/{id} (B reads A's order + secret) — all clean on the safe endpoints.
+api_bola fires on /api/orders/{id} (B reads A's order + secret); data_integrity_roundtrip fires on
+/api/drafts (create-then-read loses the object); content_type_mismatch fires on /api/mistyped — all
+clean on the safe/correct endpoints (/api/orders round-trips, the JSON endpoints declare application/json).
 """
 import http.server
 import json
@@ -51,6 +56,12 @@ SPEC = {
         "/api/orders/{id}": {
             "get": {"parameters": [{"in": "path", "name": "id", "required": True, "schema": _STR}]}
         },
+        "/api/drafts": {"post": {"requestBody": {"content": {"application/json": {
+            "schema": {"properties": {"title": _STR, "body": _STR}}}}}}},   # NON-DURABLE: create 201, read 404
+        "/api/drafts/{id}": {
+            "get": {"parameters": [{"in": "path", "name": "id", "required": True, "schema": _STR}]}
+        },
+        "/api/mistyped": {"get": {}},   # a JSON body served as text/html (Content-Type mismatch)
     },
 }
 
@@ -119,6 +130,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _send(self, 404, "application/json", b'{"error":"not found"}')
             else:  # BOLA: any authed caller reads any order incl. its secret — no owner check
                 _send(self, 200, "application/json", json.dumps({"id": order["id"], **order}).encode())
+        elif u.path.startswith("/api/drafts/"):
+            # NON-DURABLE WRITE: the POST below hands back an id but never persists, so every read 404s
+            _send(self, 404, "application/json", b'{"error":"not found"}')
+        elif u.path == "/api/mistyped":  # a JSON body served with the wrong Content-Type (text/html)
+            _send(self, 200, "text/html; charset=utf-8", json.dumps({"ok": True, "value": 42}).encode())
         else:
             _send(self, 404, "application/json", b'{"error":"not found"}')
 
@@ -154,6 +170,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             _STATE["next_id"] += 1
             ORDERS[oid] = {"id": oid, "owner": owner, "item": body.get("item", ""),
                            "secret": body.get("secret", "")}
+            _send(self, 201, "application/json", json.dumps({"id": oid}).encode())
+        elif u.path == "/api/drafts":  # returns a fresh id but NEVER stores it -> the read-back 404s
+            oid = str(_STATE["next_id"])
+            _STATE["next_id"] += 1
             _send(self, 201, "application/json", json.dumps({"id": oid}).encode())
         else:
             _send(self, 404, "application/json", b'{"error":"not found"}')
