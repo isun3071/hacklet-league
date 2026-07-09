@@ -1181,11 +1181,14 @@ def _is_login_form(action_low: str, fields_low: str) -> bool:
 
 def _csrf_candidates(profile):
     """State-changing forms that carry NO anti-CSRF token: a POST, or a form whose action/fields name a
-    state change (password/email/delete/settings/...). Login/search/logout/register are excluded."""
+    state change (email/delete/settings/...). Login/search/logout/register are excluded — and so is a
+    password-CHANGE form: submitting it would reset (and lock out) the grader's own session. CSRF is
+    still detected via the app's other tokenless state-changers (guestbook/comment/settings)."""
     out = []
     for f in profile.forms:
         low, fields_low = f.action.lower(), " ".join(f.fields).lower()
-        if any(h in low for h in _CSRF_SKIP) or _is_login_form(low, fields_low):
+        if any(h in low for h in _CSRF_SKIP) or _is_login_form(low, fields_low) \
+                or auth.is_password_change_form(f):
             continue
         if ((f.method or "get").lower() == "post" or any(h in low + " " + fields_low for h in _CSRF_STATE)) \
                 and not any(auth.is_csrf_field(x) for x in f.fields):

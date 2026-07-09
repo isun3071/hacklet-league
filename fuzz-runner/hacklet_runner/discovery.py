@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import httpx
 
 from . import jsmine, openapi
+from .auth import is_password_change_form
 from .net import make_client
 from .schema import Endpoint, Form, Profile
 
@@ -166,6 +167,13 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                 p = _same_origin_path(ref, base_url, "/")
                 if p:
                     routes.setdefault(p, None)
+
+    # Withhold password-CHANGE forms from the whole surface (like logout links above): probes SUBMIT
+    # discovered forms (and fold GET forms into query-param injection targets), so a `password_new`/
+    # `password_conf` form would get posted with our own session cookie and reset — and lock out — the
+    # account we're grading. DVWA's /vulnerabilities/csrf/ is exactly this. They stay in `routes` (safe
+    # to have crawled); only their submittable form/param projection is dropped.
+    forms = [f for f in forms if not is_password_change_form(f)]
 
     capabilities = {
         "at_least_one_http_endpoint_exists": any_response,

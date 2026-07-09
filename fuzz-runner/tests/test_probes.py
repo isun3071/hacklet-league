@@ -2,11 +2,23 @@
 problems and must NOT flag benign content (a false positive wrongly penalizes).
 """
 from hacklet_runner.probes import (
+    _csrf_candidates,
     response_is_dotenv,
     response_is_git_config,
     response_is_git_head,
     response_leaks_secret,
 )
+from hacklet_runner.schema import Form, Profile
+
+
+def test_csrf_candidates_exclude_password_change_forms():
+    # a password-change form must never be a CSRF target — submitting it resets the grader's own session
+    prof = Profile(base_url="http://x", forms=[
+        Form(action="/vulnerabilities/csrf/", method="get", fields=["password_new", "password_conf", "Change"]),
+        Form(action="/guestbook", method="post", fields=["name", "message"]),   # a safe state-changer
+    ])
+    actions = [f.action for f in _csrf_candidates(prof)]
+    assert "/guestbook" in actions and "/vulnerabilities/csrf/" not in actions
 
 
 class _Resp:

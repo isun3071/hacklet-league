@@ -45,8 +45,31 @@ class Account:
     register_response: httpx.Response
 
 
+# A field that names a NEW / CURRENT / OLD password — the hallmark of a password-CHANGE form (as opposed
+# to a "confirm password" field, which also appears on registration). "password2"/"retype"/"confirm" are
+# deliberately NOT here: they're ambiguous (registration has them too).
+_PW_CHANGE_FIELD = re.compile(r"pass(?:word)?[_-]?(?:new|current|old)|(?:new|current|old)[_-]?pass(?:word)?",
+                              re.IGNORECASE)
+_IDENTITY_HINT = ("user", "email", "mail", "login", "phone", "handle", "account")
+
+
+def is_password_change_form(form: Form) -> bool:
+    """True when a form CHANGES the current session's own password rather than authenticating or
+    registering with one. Submitting it (any probe, with our real cookie) resets the account's password
+    and locks the grader — and the real user — out (DVWA's /vulnerabilities/csrf/ is exactly this). A
+    registration needs an IDENTITY field (username/email); a password-change is new/confirm passwords
+    with none, or an explicit new/current/old-password field."""
+    names = [n.lower() for n in form.fields]
+    if not any("pass" in n or "pwd" in n for n in names):
+        return False  # no password field at all -> not a credential form
+    if any(_PW_CHANGE_FIELD.search(n) for n in names):
+        return True   # an explicit new/current/old-password field -> a change form
+    return not any(any(h in n for h in _IDENTITY_HINT) for n in names)  # password(s) but no identity to register
+
+
 def _password_form(forms: list[Form]) -> Form | None:
-    pw = [f for f in forms if any("pass" in name.lower() for name in f.fields)]
+    pw = [f for f in forms
+          if any("pass" in name.lower() for name in f.fields) and not is_password_change_form(f)]
     if not pw:
         return None
     return next((f for f in pw if any(h in f.action.lower() for h in _REGISTER_HINTS)), pw[0])
@@ -80,6 +103,7 @@ def create_form(forms: list[Form]) -> Form | None:
         and f.fields
         and not any(h in f.action.lower() for h in _NON_CREATE)
         and not all("pass" in n.lower() for n in f.fields)
+        and not is_password_change_form(f)  # never submit a credential-change form as "content"
     ]
     if not cands:
         return None

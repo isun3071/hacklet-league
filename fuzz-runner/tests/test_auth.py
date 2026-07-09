@@ -6,10 +6,14 @@ from hacklet_runner.auth import (
     _password_form,
     create_form,
     is_csrf_field,
+    is_password_change_form,
     parse_set_cookies,
     session_cookie,
 )
 from hacklet_runner.schema import Form
+
+# DVWA's /vulnerabilities/csrf/ — the form that locked the grader out: password_new/password_conf, no identity
+_DVWA_CSRF = Form(action="/vulnerabilities/csrf/", method="get", fields=["password_new", "password_conf", "Change"])
 
 
 def _resp(set_cookies):
@@ -63,6 +67,34 @@ def test_create_form_none_when_only_auth_and_search():
         Form(action="/search", method="get", fields=["q"]),
     ]
     assert create_form(forms) is None
+
+
+def test_is_password_change_form_flags_credential_change_not_registration():
+    # a password-CHANGE form (no identity / explicit new-password field) — never auto-submit it
+    assert is_password_change_form(_DVWA_CSRF)
+    assert is_password_change_form(Form(action="/account", method="post",
+                                        fields=["current_password", "new_password", "confirm"]))
+    assert is_password_change_form(Form(action="/settings", method="post", fields=["password", "password2"]))
+    # a real registration / login (has an identity field) is NOT a change form
+    assert not is_password_change_form(Form(action="/register", method="post",
+                                            fields=["username", "email", "password", "password_confirmation"]))
+    assert not is_password_change_form(Form(action="/login", method="post", fields=["username", "password"]))
+    assert not is_password_change_form(Form(action="/search", method="get", fields=["q"]))  # no password at all
+
+
+def test_password_form_skips_a_password_change_form():
+    # register_account must not pick DVWA's csrf password-change form (filling it locks the account out)
+    forms = [_DVWA_CSRF, Form(action="/login", method="post", fields=["username", "password"])]
+    assert _password_form(forms).action == "/login"
+    assert _password_form([_DVWA_CSRF]) is None  # only a change form -> nothing safe to submit
+
+
+def test_create_form_skips_a_password_change_form():
+    # the captcha-style change form is a POST with a non-password field ("Change"), but still must be skipped
+    forms = [Form(action="/vulnerabilities/captcha/", method="post",
+                  fields=["step", "password_new", "password_conf", "Change"]),
+             Form(action="/notes", method="post", fields=["text"])]
+    assert create_form(forms).action == "/notes"
 
 
 def test_is_csrf_field():
