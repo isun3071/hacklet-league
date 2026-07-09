@@ -8,7 +8,9 @@ Two unknowns this resolves on the VM (the Docker-less dev box can't test them):
     publishing).
   * does a read-only root filesystem break the reference apps?
 
-Docker-gated (skipped where Docker is absent). Keep scores in lockstep with test_pipeline.py.
+Docker-gated (skipped where Docker is absent). Asserts the hardened-mode score EQUALS the plain
+SubprocessDeployer baseline (not a hard-coded number), so "hardening preserves behavior" is tested
+directly and this file self-tracks any scoring change.
 """
 import pathlib
 import shutil
@@ -16,7 +18,7 @@ import shutil
 import pytest
 
 from hacklet_runner.catalog import load_catalog
-from hacklet_runner.deploy import DockerDeployer, _docker
+from hacklet_runner.deploy import DockerDeployer, SubprocessDeployer, _docker
 from hacklet_runner.pipeline import run
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -27,6 +29,11 @@ NET = "hacklet-fuzz-test-net"
 pytestmark = pytest.mark.skipif(
     shutil.which("docker") is None, reason="Docker not available (run on the VM/CI)"
 )
+
+
+def _subprocess_score(app: str) -> int:
+    """The deployer-independent baseline: the same reference graded via a local subprocess."""
+    return run(SubprocessDeployer(str(REFS / app / "app.py")), load_catalog(CATALOG)).slop_score
 
 # Run inside a container: try to open an outbound internet connection.
 _EGRESS_PROBE = (
@@ -56,9 +63,9 @@ def test_hardened_calibration_preserves_scores(internal_net):
         d = DockerDeployer(str(REFS / app), read_only=True, network=internal_net)
         return run(d, load_catalog(CATALOG)).slop_score
 
-    assert score("vulnerable") == 449
-    assert score("hardened") == 0
-    assert score("minimal") == 0
+    # hardening flags must not change any score -> equals the plain-subprocess baseline for each app
+    for app in ("vulnerable", "hardened", "minimal"):
+        assert score(app) == _subprocess_score(app)
 
 
 def test_read_only_preserves_scores():
@@ -67,9 +74,8 @@ def test_read_only_preserves_scores():
     def score(app: str) -> int:
         return run(DockerDeployer(str(REFS / app), read_only=True), load_catalog(CATALOG)).slop_score
 
-    assert score("vulnerable") == 449
-    assert score("hardened") == 0
-    assert score("minimal") == 0
+    for app in ("vulnerable", "hardened", "minimal"):
+        assert score(app) == _subprocess_score(app)
 
 
 def test_internal_network_blocks_egress(internal_net):

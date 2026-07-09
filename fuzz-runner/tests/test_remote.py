@@ -28,8 +28,13 @@ def running_vulnerable():
 
 
 def test_remote_fuzzes_running_target(running_vulnerable):
-    report = run(RemoteDeployer(running_vulnerable), load_catalog(CATALOG))
-    assert report.slop_score == 449  # same app, same catalog -> same score as SubprocessDeployer
+    catalog = load_catalog(CATALOG)
+    remote = run(RemoteDeployer(running_vulnerable), catalog).slop_score
+    # deployer-equivalence: RemoteDeployer must score the same app identically to SubprocessDeployer.
+    # Asserting equality (not a hard-coded number) means adding a probe never needs editing this test —
+    # test_pipeline.py holds the single authoritative score.
+    baseline = run(SubprocessDeployer(str(REFS / "vulnerable" / "app.py")), catalog).slop_score
+    assert remote == baseline > 0
 
 
 def test_remote_teardown_does_not_stop_target(running_vulnerable):

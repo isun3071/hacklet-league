@@ -1,11 +1,11 @@
 """Docker calibration: the same three-way reference suite, deployed via DockerDeployer instead of
-SubprocessDeployer, must produce identical slop scores (vulnerable 449, hardened 0, minimal 0).
+SubprocessDeployer, must produce IDENTICAL slop scores — proof the production deployer is
+behavior-equivalent to the dev/CI one (same catalog, same probes, same scores; just a sandboxed
+container instead of a local subprocess).
 
-This is the proof that the production deployer is behavior-equivalent to the dev/CI one — same
-catalog, same probes, same scores — just a sandboxed container instead of a local subprocess.
-
-Skipped where Docker is absent (the dev box has none); runs on the VM / CI. Keep the expected
-scores in lockstep with tests/test_pipeline.py.
+Asserts equality between the two deployers rather than a hard-coded number, so it self-tracks: adding
+or re-weighting a probe never needs an edit here (tests/test_pipeline.py holds the single authoritative
+score). Skipped where Docker is absent (the dev box has none); runs on the VM / CI.
 """
 import pathlib
 import shutil
@@ -13,7 +13,7 @@ import shutil
 import pytest
 
 from hacklet_runner.catalog import load_catalog
-from hacklet_runner.deploy import DockerDeployer
+from hacklet_runner.deploy import DockerDeployer, SubprocessDeployer
 from hacklet_runner.pipeline import run
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -25,17 +25,21 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _score(app: str) -> int:
+def _docker_score(app: str) -> int:
     return run(DockerDeployer(str(REFS / app)), load_catalog(CATALOG)).slop_score
 
 
+def _subprocess_score(app: str) -> int:
+    return run(SubprocessDeployer(str(REFS / app / "app.py")), load_catalog(CATALOG)).slop_score
+
+
 def test_docker_vulnerable_matches_subprocess():
-    assert _score("vulnerable") == 449
+    assert _docker_score("vulnerable") == _subprocess_score("vulnerable") > 0
 
 
 def test_docker_hardened_is_clean():
-    assert _score("hardened") == 0
+    assert _docker_score("hardened") == 0
 
 
 def test_docker_minimal_is_clean():
-    assert _score("minimal") == 0
+    assert _docker_score("minimal") == 0
