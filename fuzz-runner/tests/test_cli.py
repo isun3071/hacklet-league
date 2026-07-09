@@ -11,7 +11,9 @@ from hacklet_runner.schema import Outcome, Report
 
 
 def _report() -> Report:
-    return Report(slop_score=102, outcomes=[
+    # xss 30 + security-headers 3 = 33 (distinct categories, single-member -> no decay); consistent so
+    # the breakdown's "total" matches slop_score.
+    return Report(slop_score=33, axis_slop={"security": 33}, outcomes=[
         Outcome("sec-xss-001", "security", "xss", "slop_detected", 30, target="/search"),
         Outcome("sec-xss-001", "security", "xss", "clean", 0, target="/login"),
         Outcome("sec-headers-001", "security", "security-headers", "slop_detected", 3, target="/"),
@@ -38,11 +40,14 @@ def test_score_breakdown_empty_when_clean():
     assert _score_breakdown_text(r) == ""
 
 
-def test_summary_shows_score_and_tally():
+def test_summary_shows_score_and_tally_and_breakdown():
     t = _summary_text(_report(), "references/vulnerable/app.py")
-    assert "Slop score: 102" in t
+    assert "Slop score: 33" in t
     assert "2 slop · 1 clean · 1 n/a" in t
-    assert "security/xss" in t and "security/security-headers" in t
+    # the summary now embeds the point-based score breakdown (not misleading fire-COUNTS)
+    assert "how the score is built" in t
+    assert "xss" in t and "security-headers" in t
+    assert "total  33" in t   # the breakdown sums back to the score
 
 
 def test_summary_clean_app():
@@ -62,7 +67,7 @@ def test_failed_lists_only_slop():
 
 def test_report_payload_shape():
     p = _report_payload(_report())
-    assert p["slop_score"] == 102
+    assert p["slop_score"] == 33
     assert len(p["outcomes"]) == 4
     assert p["outcomes"][0]["probe_id"] == "sec-xss-001"
     assert p["outcomes"][0]["target"] == "/search"

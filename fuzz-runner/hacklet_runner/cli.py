@@ -11,7 +11,7 @@ import pathlib
 import subprocess
 import sys
 import textwrap
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import asdict
 
 from . import browser
@@ -60,11 +60,8 @@ def _summary_text(report, source: str) -> str:
         "",
     ]
     if slop:
-        by_cat = Counter(f"{o.bundle}/{o.category}" for o in slop)
-        lines.append("  where the slop is:")
-        for cat, n in sorted(by_cat.items(), key=lambda kv: (-kv[1], kv[0])):
-            lines.append(f"    {cat:<28} {n}")
-        lines += ["", "  → --failed lists each one · --json for the full report"]
+        lines.append(_score_breakdown_text(report))   # point-based, damper-aware, sums to the score
+        lines += ["", "  → --failed lists each probe · --json for the full report"]
     else:
         lines.append("  clean — no slop detected.")
     lines.append("")
@@ -120,24 +117,23 @@ def _score_breakdown_text(report, decay: float = CATEGORY_DECAY) -> str:
         if count > 1:
             cat_notes[(rep.bundle, rep.category)].append(f"{gid} ×{count}→{rep.penalty} once")
 
-    lines = ["", "  how the score is built"
-                 "   (variant group fires once at its max · then within a category each further hit ×%.1f)" % decay, ""]
+    lines = ["  how the score is built"
+             "   (variant group fires once at its max · then within a category each further hit ×%.1f)" % decay, ""]
     order = {"security": 0, "qa": 1, "performance": 2}
     bundles = sorted({b for b, _ in cat_pens}, key=lambda b: order.get(b, 9))
+    bundle_sub = {}
     for bundle in bundles:
-        lines.append(f"  {bundle}  {report.axis_slop.get(bundle, 0)}")
         cats = [(bundle, c) for (b, c) in cat_pens if b == bundle]
-        sub = {}
-        for key in cats:
-            terms = [p * decay ** i for i, p in enumerate(sorted(cat_pens[key], reverse=True))]
-            sub[key] = terms
+        sub = {key: [p * decay ** i for i, p in enumerate(sorted(cat_pens[key], reverse=True))] for key in cats}
+        bundle_sub[bundle] = round(sum(sum(sub[k]) for k in cats))   # = axis_slop[bundle], self-contained
+        lines.append(f"  {bundle}  {bundle_sub[bundle]}")
         for key in sorted(cats, key=lambda k: -sum(sub[k])):
             terms = sub[key]
             formula = " + ".join(_num(t) for t in terms[:5]) + (" + …" if len(terms) > 5 else "")
             note = "   [" + "; ".join(cat_notes[key]) + "]" if cat_notes.get(key) else ""
             lines.append(f"    {key[1]:<20} {_num(sum(terms)):>6}   {formula}{note}")
-    roll = " + ".join(f"{b} {report.axis_slop[b]}" for b in bundles if b in report.axis_slop)
-    lines += ["", f"  total  {report.slop_score}   ({roll})", ""]
+    roll = " + ".join(f"{b} {bundle_sub[b]}" for b in bundles)
+    lines += ["", f"  total  {report.slop_score}   ({roll})"]
     return "\n".join(lines)
 
 
@@ -148,11 +144,7 @@ def _print_report(report, source: str, args) -> None:
     if args.failed:
         print(_failed_text(report, source))
     else:
-        print(_summary_text(report, source))
-    if getattr(args, "verbose", False):   # -v: also show the damper/score breakdown
-        breakdown = _score_breakdown_text(report)
-        if breakdown:
-            print(breakdown)
+        print(_summary_text(report, source))   # summary now always includes the score breakdown
 
 
 def _fail(args, status: str, reason: str):
