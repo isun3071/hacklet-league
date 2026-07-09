@@ -1375,7 +1375,13 @@ def load_resilience(ctx, probe) -> bool:
 # tiered, published thresholds. `tier` = "profile" (tight, standardized-sandbox) or "ceiling" (absolute,
 # environment-robust); the two are separate catalog probes sharing a variant_group -> the worse tier
 # fires once. The homepage is the representative always-present target (real apps have no /heavy).
-_ASSET_REF = re.compile(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
+# Subresources a browser AUTO-LOADS: src on media/script tags + href on <link> (stylesheet/preload).
+# Deliberately NOT <a href> — those are user navigations, not page assets, and blindly GETting them can
+# fire a destructive link (e.g. DVWA's <a href="logout.php"> would log the grader's session out mid-run,
+# de-authenticating every probe after it). Also the correct definition for page-weight / request-count.
+_ASSET_REF = re.compile(
+    r"""<(?:(?:img|script|iframe|embed|audio|video|source|track)\b[^>]*\bsrc|link\b[^>]*\bhref)"""
+    r"""\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 
 
 def _page_weight(c, base_url, path="/"):
