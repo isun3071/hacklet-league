@@ -8,6 +8,7 @@ means the probe fires and adds its penalty.
 """
 from __future__ import annotations
 
+import gzip
 import re
 import secrets
 import statistics
@@ -1856,6 +1857,59 @@ def crash_resistance(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+_INGEST_PATHS = ("/ingest", "/upload", "/import", "/api/ingest", "/api/upload", "/api/import", "/webhook")
+
+
+# Decompression-bomb (zip-bomb) resistance — an app that decompresses a `Content-Encoding: gzip` request
+# body WITHOUT a decompressed-size cap can be memory-exhausted by a tiny payload that expands to GB. We
+# detect the MISSING DEFENSE, never actually detonate: send a body that decompresses to ~50MB (safe on
+# the sandbox, but above any sane cap) and check whether the app rejects it with 413 (capped) or
+# processes it (uncapped). A 3-way differential first confirms the endpoint really decompresses request
+# bodies, so a non-decompressing endpoint can't false-fire.
+def decompression_bomb(ctx, probe) -> bool | None:
+    """Fire when a POST endpoint decompresses gzip request bodies with no size cap (a zip bomb would
+    exhaust memory). Confirms decompression via a differential; the probe payload is bounded (~50MB
+    expanded) so it never nukes the target. N/A when no endpoint decompresses a request body."""
+    # discovered POST endpoints (OpenAPI JSON APIs) + a few common body-ingesting paths a form crawl
+    # won't surface (the decompression surface is usually an API, not an HTML form)
+    posts = list(dict.fromkeys(
+        [f.action for f in ctx.profile.forms if (f.method or "").lower() == "post"]
+        + [e.path for e in ctx.profile.endpoints if e.method.lower() == "post"]
+        + list(_INGEST_PATHS)))
+    if not posts:
+        return None
+    valid = b'{"x":"ok"}'
+    gz_valid = gzip.compress(valid)
+    bomb = gzip.compress(b"\x00" * 50_000_000)   # ~50MB expanded, ~50KB on the wire
+    json_ct = {"Content-Type": "application/json"}
+    gz_ct = {"Content-Type": "application/json", "Content-Encoding": "gzip"}
+    tested = False
+    with make_client(ctx.base_url, ctx.headers, timeout=20.0) as c:
+        for path in posts:
+            try:                                       # 3-way: decompressed-valid != raw-gzip-bytes -> it decompresses
+                sa = c.post(path, content=valid, headers=json_ct).status_code       # valid body, no encoding
+                sb = c.post(path, content=gz_valid, headers=json_ct).status_code    # gzip BYTES, no CE header
+                sc = c.post(path, content=gz_valid, headers=gz_ct).status_code      # gzip body, CE: gzip
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if not (sc == sa and sc != sb):
+                continue                               # endpoint doesn't decompress request bodies -> no bomb surface
+            tested = True
+            try:
+                r = c.post(path, content=bomb, headers=gz_ct)
+            except httpx.TimeoutException:
+                ctx.evidence.update(decompression_capped=False, endpoint=path, signal="timeout")
+                return True                            # hung decompressing the bomb
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if r.status_code == 413:
+                continue                               # rejected the over-limit decompressed body -> capped/defended
+            ctx.evidence.update(decompression_capped=False, endpoint=path, status=r.status_code, expanded_mb=50)
+            return True                                # decompresses (confirmed) with no size cap -> zip-bomb exhaustible
+    ctx.evidence.update(decompression_capped=True, posts_tested=len(posts))
+    return False if tested else None
+
+
 # Host-header injection — the app trusts a client-controlled Host / X-Forwarded-Host and reflects it into
 # an absolute URL or a redirect Location (web-cache poisoning, password-reset-link poisoning). Inject a
 # unique marker host; fire if it comes back in a Location header or the body. A random marker can't
@@ -1957,6 +2011,7 @@ PREDICATES = {
     "open_redirect": open_redirect,
     "host_header_injection": host_header_injection,
     "http_response_splitting": http_response_splitting,
+    "decompression_bomb": decompression_bomb,
 }
 
 
@@ -2016,6 +2071,7 @@ _PREDICATE_REASONS = {
     "open_redirect": "a user-controlled parameter redirects to an arbitrary external host",
     "host_header_injection": "a client-controlled Host / X-Forwarded-Host header reflects into a URL / redirect (cache + password-reset poisoning)",
     "http_response_splitting": "CRLF injected into a parameter reflects into a response header (header injection / response splitting)",
+    "decompression_bomb": "decompresses gzip request bodies with no size cap (a zip bomb would exhaust memory -> DoS)",
 }
 
 

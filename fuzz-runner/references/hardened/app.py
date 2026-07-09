@@ -14,6 +14,7 @@ import secrets
 import sqlite3
 import threading
 import urllib.parse
+import zlib
 
 PORT = int(os.environ.get("PORT", "8080"))
 
@@ -216,6 +217,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not isinstance(data, dict) or not isinstance(data.get("name"), str):
                 return self._send(400, "invalid item")
             return self._send(200, "item: " + data["name"].upper())
+        if self.path == "/ingest":  # decompresses a gzip request body but CAPS it -> rejects a zip bomb
+            raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            if "gzip" in self.headers.get("Content-Encoding", "").lower():
+                dec = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                raw = dec.decompress(raw, 1_000_000)   # cap decompression at 1 MB
+                if dec.unconsumed_tail:                 # more than the cap remained -> refuse to expand it
+                    return self._send(413, "payload too large")
+            try:
+                json.loads(raw)
+                return self._send(200, "ingested")
+            except Exception:
+                return self._send(400, "invalid json")
         return self._send(404, "not found")
 
 

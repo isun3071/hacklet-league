@@ -5,6 +5,7 @@ search input unescaped (XSS), no security headers, leaks stack traces, and a slo
 Trusted code we wrote, safe to run as a local subprocess; real submissions are untrusted and
 only ever run in the sandboxed container.
 """
+import gzip
 import http.server
 import json
 import os
@@ -221,6 +222,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, "item: " + data["name"].upper())
             except Exception:
                 return self._send(500, traceback.format_exc())
+        if self.path == "/ingest":  # decompresses a gzip request body with NO size cap -> zip-bomb DoS
+            raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            if "gzip" in self.headers.get("Content-Encoding", "").lower():
+                raw = gzip.decompress(raw)             # unbounded: a tiny bomb expands to GB unchecked
+            try:
+                json.loads(raw)
+                return self._send(200, "ingested")
+            except Exception:
+                return self._send(400, "invalid json")
         return self._send(404, "not found")
 
 

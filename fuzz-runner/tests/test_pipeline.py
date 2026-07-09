@@ -21,6 +21,7 @@ ALL_PROBES = [
     "sec-session-001", "sec-session-002", "sec-session-003",  # cookie hygiene: HttpOnly / SameSite / Secure
     "sec-csrf-001", "sec-cors-001", "sec-ratelimit-001", "sec-redirect-001", "sec-hosthdr-001",
     "sec-split-001",  # HTTP response splitting (CRLF into a reflected header)
+    "sec-dos-001",  # decompression-bomb: decompresses gzip request bodies with no size cap
     "sec-headers-001", "sec-headers-002", "sec-headers-004", "sec-headers-005", "sec-headers-006",  # header depth (003=HSTS https-only); 006=X-Powered-By
     "qa-errhyg-001", "perf-ttfb-001",
     "sec-exposure-001", "sec-exposure-002", "sec-exposure-003", "sec-exposure-004",  # .env + .git + .aws/credentials
@@ -122,6 +123,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-hosthdr-001"] == "slop_detected"
     # sec-split-001: /redirect reflects an unsanitized param (with CRLF) into the Location header:
     assert o["sec-split-001"] == "slop_detected"
+    # sec-dos-001: /ingest decompresses a gzip request body with no size cap -> zip-bomb exhaustible:
+    assert o["sec-dos-001"] == "slop_detected"
     # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + redirect 20 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10 + compress 5.
     # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
     # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2 + X-Powered-By 2, sorted-desc decay.
@@ -132,9 +135,9 @@ def test_vulnerable_app_accrues_slop():
     # broken-links: a homepage <a href> dead-ends on a 4xx -> 10 (own category).
     # seo: missing viewport/description meta -> 4 (own category).
     # http-conformance: text/html with no charset -> 3 (own category).
-    # host-header injection -> 15 (own category). response-splitting -> 20 (own category).
-    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 484.
-    assert report.slop_score == 484
+    # host-header injection -> 15. response-splitting -> 20. decompression-bomb -> 12. (own categories)
+    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 496.
+    assert report.slop_score == 496
 
 
 def test_hardened_app_is_clean():
@@ -172,6 +175,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-hosthdr-001"] == "clean"    # no endpoint reflects the Host header
     assert o["sec-split-001"] == "not_applicable"  # no form/param surface to inject CRLF into
+    assert o["sec-dos-001"] == "not_applicable"    # no endpoint decompresses a request body
     assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
     assert o["sec-headers-006"] == "clean"    # no X-Powered-By header
     assert o["sec-idor-001"] == "not_applicable"      # same gate
