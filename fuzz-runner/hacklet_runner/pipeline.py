@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from .aggregate import compute_slop_score
+from .aggregate import compute_axis_slop, compute_slop_score
 from .deploy import Deployer
 from .discovery import discover
 from .net import make_client
@@ -138,7 +138,8 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
                 outcomes.extend(probe_outcomes)
                 if on_progress:
                     on_progress(i + 1, total, probe, probe_outcomes)  # done: i+1 probes completed
-        return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes)
+        return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes,
+                      axis_slop=compute_axis_slop(outcomes))
     finally:
         deployer.teardown()
 

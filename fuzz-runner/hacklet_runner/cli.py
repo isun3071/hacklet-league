@@ -29,7 +29,15 @@ _DEPLOY_FAILURES = (RuntimeError, TimeoutError, subprocess.SubprocessError, OSEr
 # ---- output renderers (pure: build text, caller prints) -------------------------------------
 
 def _report_payload(report) -> dict:
-    return {"slop_score": report.slop_score, "outcomes": [asdict(o) for o in report.outcomes]}
+    return {"slop_score": report.slop_score, "axis_slop": report.axis_slop,
+            "outcomes": [asdict(o) for o in report.outcomes]}
+
+
+def _axis_line(report) -> str:
+    # per-axis decomposition of the total (unbounded, same units); subtotals sum to slop_score
+    order = ["security", "qa", "performance"]
+    parts = [f"{b} {report.axis_slop.get(b, 0)}" for b in order if b in report.axis_slop]
+    return "    " + " · ".join(parts) if parts else ""
 
 
 def _summary_text(report, source: str) -> str:
@@ -42,6 +50,10 @@ def _summary_text(report, source: str) -> str:
         f"  {source}",
         "",
         f"  Slop score: {report.slop_score}        lower is better — 0 is clean",
+    ]
+    if report.axis_slop:
+        lines.append(_axis_line(report))
+    lines += [
         "",
         f"  {len(slop)} slop · {clean} clean · {na} n/a        ({len(outs)} probe runs)",
         "",

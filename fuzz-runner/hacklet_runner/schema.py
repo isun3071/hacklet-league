@@ -81,8 +81,9 @@ class Outcome:
 
 @dataclass
 class Report:
-    slop_score: int
+    slop_score: int                                        # deduction total, unbounded [0, +inf); lower = better
     outcomes: list[Outcome] = field(default_factory=list)
+    axis_slop: dict = field(default_factory=dict)          # per-bundle damped subtotal; sums to slop_score
 
     @property
     def by_id(self) -> dict[str, str]:
