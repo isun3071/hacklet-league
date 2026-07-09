@@ -337,10 +337,17 @@ def main():
         report = grade(url, args.browser)
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
         print(f"\n  SLOP SCORE: {report.slop_score}   axis: {report.axis_slop}")
-        print(f"  {len(slop)} findings — security-relevant:")
-        for pid in sorted({o.probe_id for o in slop if o.probe_id.startswith("sec-")}):
-            o = next(o for o in slop if o.probe_id == pid)
-            print(f"    {pid:18} {o.category:20} {o.penalty:>3}  {o.reason[:70]}")
+        # ALL findings, one line per fired probe (fan-out collapsed), grouped security -> qa -> perf
+        by_probe = {o.probe_id: o for o in slop}   # any target; penalty is per-probe
+        order = {"security": 0, "qa": 1, "performance": 2}
+        findings = sorted(by_probe.values(), key=lambda o: (order.get(o.bundle, 9), -o.penalty, o.probe_id))
+        print(f"  {len(findings)} findings:")
+        bundle = None
+        for o in findings:
+            if o.bundle != bundle:
+                bundle = o.bundle
+                print(f"    [{bundle}]")
+            print(f"      {o.probe_id:18} {o.category:20} {o.penalty:>3}  {o.reason[:64]}")
     finally:
         if args.keep:
             print(f"\n(left running: docker rm -f {APP} {DB}; docker network rm {NET})")
