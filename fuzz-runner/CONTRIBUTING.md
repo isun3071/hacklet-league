@@ -5,99 +5,138 @@ How to add, change, and remove fuzz probes. The runner is a **fixed engine**; **
 code change — only a *new* detection primitive touches Python. Canonical design lives in
 [../FUZZ_RUNNER_SPEC.md](../FUZZ_RUNNER_SPEC.md); this is the practical recipe.
 
+The live lists of detection primitives are **`MATCHERS` and `PREDICATES` in `hacklet_runner/probes.py`**
+— that's the source of truth (this doc deliberately does not enumerate them, so it can't drift). Skim
+those dicts to see everything that exists today.
+
 ## The probe schema
 
 ```yaml
-id: sec-sqli-001            # unique
+id: sec-sqli-001            # unique — the LOADER KEYS ON THIS, NOT THE FILENAME (a dup id collides even
+                            #          across differently-named files)
 bundle: security            # security | qa | performance
-category: sql-injection     # diminishing returns apply within a category
-variant_group_id: <id>      # optional; probes sharing one fire ONCE (same logical flaw)
+category: sql-injection     # diminishing-returns damper applies WITHIN a category (sorted-desc decay)
+variant_group_id: <id>      # optional; probes sharing one fire ONCE at the max penalty (same logical flaw)
 pool: public                # public | hidden
-evidence_model: provable    # provable (slop visible in response) | oracle (differential)
+evidence_model: provable    # provable (slop visible in a response) | oracle (differential / self-as-oracle)
 penalty: 40                 # slop added when it fires (deduction-only; always positive)
 applicability:
-  requires: [any_endpoint_accepts_text_input]   # capabilities from discovery; empty = always
+  requires: [any_endpoint_accepts_text_input]   # capabilities from discovery; empty = always applicable
 probe:
-  # EITHER declarative:
+  # EITHER declarative (fetch a target, apply matchers):
   method: POST
-  target: /search
-  query: { q: "<payload>" }   # optional query params
-  data:  { age: abc }         # optional form body
-  # OR an oracle:
+  target: /search           # a literal path, or the selector "routes"/"forms" to fan across the surface
+  query: { q: "<payload>" }  #   optional query params
+  data:  { age: abc }        #   optional form body
+  # OR a predicate (multi-step oracle):
   predicate: sqli_auth_bypass
-  payload: "' OR '1'='1' -- "
-slop_if:                      # declarative only; ALL must match -> slop (omit for predicate probes)
+  payload: "' OR '1'='1' -- "   # arbitrary keys under probe: are read by the predicate via probe.probe
+slop_if:                      # declarative ONLY; ALL must match -> slop. Omit for predicate probes.
   - response_contains: "<payload>"
 ```
+
+## The two detection primitives (contracts)
+
+**Matcher** — `MATCHERS[name](resp, arg=None) -> bool`. Pure function over ONE response; `True` when
+slop is present. For declarative probes.
+
+**Predicate** — `PREDICATES[name](ctx, probe) -> bool | None`. A multi-step oracle. **Three-state, and
+the third state is load-bearing:**
+
+| return | meaning |
+| --- | --- |
+| `True`  | slop detected → the probe's `penalty` applies |
+| `False` | clean → tested and the flaw is absent |
+| `None`  | **not applicable** — could not establish the conditions to test (no such surface, self-registration failed, …). This is NOT a clean pass. A `False` when you couldn't actually test is a **false-clean = a missed finding.** When in doubt between `False` and `None`, return `None`. |
+
+The `ctx` object gives a predicate: `ctx.base_url`, `ctx.headers` (auth), `ctx.profile` (the discovered
+surface — `.routes`, `.forms`, `.endpoints`, `.capabilities`), `ctx.client` (a shared httpx client), and
+`ctx.evidence` (see below). For a fresh, correctly-authenticated client use
+`make_client(ctx.base_url, ctx.headers)` (seeds the cookie into the jar so a rotating session is
+followed; defaults `verify=False` so an https target with a self-signed cert is reachable).
+
+### Evidence (required for a new predicate)
+
+Every predicate should record what it measured / attempted via `ctx.evidence.update(key=value, ...)`,
+for **all** outcomes — clean and n/a too, not just slop. It rides in `--json` and the `-v` view, and is
+the product's transparency ("load_time_s=0.4 ✓", "tried error+boolean+union+time, none hit"). Keep it
+small and typed (numbers, short strings, small lists). Example:
+
+```python
+def perf_ttfb(ctx, probe) -> bool:
+    thresh = perf.TTFB_PROFILE
+    with make_client(ctx.base_url, ctx.headers) as c:
+        sample = perf.sample_ttfb(c, "/")
+    ctx.evidence.update(ttfb_s=round(sample, 3), threshold_s=thresh)   # <- what it measured
+    return sample >= thresh
+```
+
+### Safety (a probe fetches an UNTRUSTED, possibly-authenticated target)
+
+- **Never GET a discovered `<a href>` navigation or a state-changing endpoint with the auth cookie.**
+  A blind fetch of `<a href="logout.php">` logs the grader's own session out mid-run and blinds every
+  later probe (this actually happened — `fix 8071b67`). Fetch only true subresources
+  (`<img/script/media src>`, `<link href>`), and skip logout/delete-looking links (see `broken_links`).
+- Never send `PUT`/`PATCH`/`DELETE` payloads that mutate the target's state; grading must be safe to
+  re-run. Read-only injection (`GET`/benign `POST`) only.
+- A predicate that raises is caught and degraded to N/A for that one probe (the run never DNFs) — but
+  don't rely on it; handle `httpx.HTTPError`/`InvalidURL` yourself.
 
 ## Add a probe
 
 ### 1. Declarative, reusing a matcher — one file, no code
-Drop a YAML in `catalog/<bundle>/`. Example: a second error-hygiene probe on `/profile`, reusing
-`response_leaks_stack_trace`:
+Drop a YAML in `catalog/<bundle>/` with a `target` + `slop_if` using an existing matcher.
 
-```yaml
-# catalog/qa/qa-errhyg-002.yaml
-id: qa-errhyg-002
-bundle: qa
-category: error-hygiene
-penalty: 8
-applicability: { requires: [at_least_one_http_endpoint_exists] }
-probe: { method: POST, target: /profile, data: { age: abc } }
-slop_if: [ response_leaks_stack_trace ]
-```
-
-Matchers available today (`hacklet_runner/probes.py` → `MATCHERS`):
-
-| Matcher | Slop when |
-| --- | --- |
-| `response_leaks_stack_trace` | the response body contains a traceback signature |
-| `response_contains: <str>` | the response body contains `<str>` (e.g. an unescaped XSS marker) |
-| `response_missing_header: <name>` | the response lacks header `<name>` |
-| `response_server_error` | status is 500 / 502 / 503 / 504 (a crash, not 501/405) |
-| `ttfb_at_least: <seconds>` | time-to-first-byte ≥ `<seconds>` |
-
-### 2. A variant of an existing group — one file, same `variant_group_id`
-A new SQLi syntax: copy a `sec-sqli-*.yaml`, change the `payload`, keep
-`variant_group_id: sqli-auth-bypass`. It reuses the oracle and folds into the same fires-once
-group automatically (the group counts one penalty no matter how many syntaxes fire).
+### 2. A variant of an existing class — one file, same `variant_group_id`
+A new SQLi syntax / XSS payload: copy a sibling YAML, change the `payload`, keep the
+`variant_group_id`. It reuses the oracle and folds into the fires-once group (the group counts one
+penalty no matter how many syntaxes fire). **Give it a unique `id`.**
 
 ### 3. A new detection primitive — +1 function, then the YAML
-- **New matcher** → add to `MATCHERS`. Signature `(resp, arg=None) -> bool`, returning `True`
-  when slop is present.
-- **New oracle** → add to `PREDICATES`. Signature `(ctx, probe) -> bool`; use `ctx.client`
-  (httpx), `ctx.profile` (discovered surface), and `probe.probe` for params like `payload`.
+Add a `MATCHERS` or `PREDICATES` entry (and a matching `_MATCHER_REASONS`/`_PREDICATE_REASONS` line for
+the human "why it fired"). Predicates emit `ctx.evidence`. **Comprehensive-technique-per-class:** cover
+the class's techniques (SQLi = error/boolean/UNION/time; XSS = script/img/svg/attr/…) but collapse them
+to ONE finding — a single predicate that returns once, or siblings sharing a `variant_group_id`. Breadth
+is recall, not score inflation; keep each technique precise (marker / differential / confirmation
+guards) so breadth doesn't cost false positives.
 
-Predicates available today (`PREDICATES`): `sqli_auth_bypass`.
+### CI-lock it (per-technique reference servers)
+Add `tests/test_<name>.py` that stands up a throwaway `http.server` exhibiting exactly the flaw (one
+per technique) and asserts the predicate fires, plus a clean server it must not fire on, plus the N/A
+case. A fake `ctx` is `type("C", (), {"base_url": url, "headers": None, "client": None, "evidence": {}})()`
+— note the **`evidence: {}`** (a predicate writes to it; the full suite catches a missing one via
+`AttributeError`).
 
 ## Change a probe
-- **Tuning** (penalty, payload, threshold, applicability, pool) → edit the YAML field, re-calibrate.
-  e.g. tighten the speed gate `ttfb_at_least: 3.0 → 2.5`, or re-weight SQLi `penalty: 40 → 50`.
-- **Detection logic** → edit the matcher/predicate in `probes.py` (affects every probe that uses
-  it, so review accordingly).
-- **Pool flip** (public ↔ hidden) → change `pool:` and move the file between this public catalog
-  and the private `fuzz-catalog` repo.
+- **Tuning** (penalty, payload, threshold, applicability, pool) → edit the YAML field, re-run the suite.
+- **Detection logic** → edit the matcher/predicate (affects every probe that uses it — review
+  accordingly).
+- **Pool flip** (public ↔ hidden) → change `pool:` and move the file between this public catalog and
+  the private `fuzz-catalog` repo.
 
 ## Remove a probe
-Delete the YAML file — the runner stops loading it. Update/remove its assertion in `tests/`. For an
-event-grade catalog, *deprecate in the changelog* rather than silently delete, so past results stay
-interpretable.
+Delete the YAML — the runner stops loading it. Remove its assertion in `tests/`. For an event-grade
+catalog, *deprecate in the changelog* rather than silently delete, so past results stay interpretable.
 
 ## The calibration gate (non-negotiable)
-Every add/change must keep `uv run pytest` green. A probe must read **slop on
-`references/vulnerable`, clean on `references/hardened`, and N/A or clean on `references/minimal`**.
-If your probe targets a surface the reference apps lack, add it — broken in `vulnerable`, defended
-in `hardened`. So "add a probe" is usually three coupled edits:
+Every add/change must keep `uv run pytest` green. A probe must read **slop on `references/vulnerable`,
+clean on `references/hardened`, and N/A or clean on `references/minimal`** — the same surface, three
+verdicts. If your probe needs a surface the references lack, add it (broken in `vulnerable`, defended in
+`hardened`). So "add a probe" is usually three coupled edits:
 
 1. the probe YAML,
 2. the reference surface (if new),
 3. the test assertion.
 
-That coupling is the point: a probe that can't separate defended from broken from absent does not
-merge.
+That coupling is the point: a probe that can't separate defended-from-broken-from-absent does not merge.
+
+**The score:** `tests/test_pipeline.py` holds the **single authoritative** vulnerable-app score
+(`assert report.slop_score == N`, with a breakdown comment). A probe that fires on `vulnerable` changes
+`N` by its (damped) penalty — update it there, in **one** place. `test_remote.py` and the docker tests
+assert *deployer-equivalence* (they equal the SubprocessDeployer baseline), so they self-track and never
+need editing for a scoring change.
 
 ## Over time
 Versioning (semver + quarterly cadence), PR review, and public-vs-hidden governance are in
-[../FUZZ_RUNNER_SPEC.md](../FUZZ_RUNNER_SPEC.md) (Catalog Organization, Test Authoring Workflow,
-Pool composition). Hidden probes are authored the same way but live in the **private `fuzz-catalog`
-repo**, never this public one.
+[../FUZZ_RUNNER_SPEC.md](../FUZZ_RUNNER_SPEC.md). Hidden probes are authored the same way but live in the
+private `fuzz-catalog` repo, never this public one.
