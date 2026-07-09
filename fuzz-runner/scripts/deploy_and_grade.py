@@ -240,7 +240,9 @@ def _start_db(db: dict):
 
 
 def execute(plan: dict, repo: pathlib.Path, verbose: bool = False) -> str:
-    _docker("rm", "-f", APP)
+    # clean slate: drop BOTH the app AND the db sidecar from any prior attempt (or a killed prior run),
+    # else the next `docker run --name hl-db` Conflicts and every retry fails identically.
+    _docker("rm", "-f", APP, DB)
     _docker("network", "create", NET)  # idempotent-ish; ignore "already exists"
     _start_db(plan.get("db") or {"type": "none"})
 
@@ -327,7 +329,7 @@ def main():
             except DeployError as e:
                 error = str(e)
                 print(f"  deploy failed:\n{error[-800:]}")
-                _docker("rm", "-f", APP)
+                _docker("rm", "-f", APP, DB)   # tear down this attempt's containers before the next
         if not url:
             print("\nGAVE UP — could not deploy after all attempts.")
             return
