@@ -239,6 +239,9 @@ def main() -> None:
                     help="production sandbox for --submission: read-only rootfs + egress-blocked network")
     ap.add_argument("--network", metavar="NET", default="hacklet-fuzz-net",
                     help="docker network for --harden (create once: docker network create --internal NET)")
+    ap.add_argument("--source", metavar="DIR",
+                    help="also statically scan this source tree for hardcoded secrets (auto for "
+                         "--submission; use with --target when you also have the repo). Folds into the score.")
     out = ap.add_argument_group("output")
     out.add_argument("--json", action="store_true", help="print the full machine-readable JSON report")
     out.add_argument("--failed", action="store_true", help="list only the probes that detected slop")
@@ -259,10 +262,13 @@ def main() -> None:
         auth_headers[name.strip()] = value.strip()
     progress = _make_progress(args)
 
+    if args.source and not pathlib.Path(args.source).exists():
+        _fail(args, "bad-arg", f"--source path does not exist: {args.source}")
+
     # Trusted reference app: subprocess, no Docker.
     if args.app:
         report = run(SubprocessDeployer(args.app), catalog, render=render, headers=auth_headers,
-                     on_progress=progress)
+                     on_progress=progress, source_dir=args.source)
         _clear_bar(args)
         _print_report(report, source, args)
         return
@@ -271,7 +277,7 @@ def main() -> None:
     if args.target:
         try:
             report = run(RemoteDeployer(args.target), catalog, render=render, headers=auth_headers,
-                         on_progress=progress)
+                         on_progress=progress, source_dir=args.source)
         except _DEPLOY_FAILURES as e:
             _fail(args, "unreachable", str(e)[:500])
         _clear_bar(args)
@@ -289,7 +295,8 @@ def main() -> None:
             read_only=args.harden,
             network=args.network if args.harden else None,
         )
-        report = run(deployer, catalog, render=render, headers=auth_headers, on_progress=progress)
+        report = run(deployer, catalog, render=render, headers=auth_headers, on_progress=progress,
+                     source_dir=args.source or str(sub.context_dir))  # scan the submission's own source
     except _DEPLOY_FAILURES as e:
         _fail(args, "DNF", str(e)[:500])
     finally:

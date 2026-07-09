@@ -11,12 +11,32 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from . import secretscan
 from .aggregate import compute_axis_slop, compute_slop_score
 from .deploy import Deployer
 from .discovery import discover
 from .net import make_client
 from .probes import MATCHERS, PREDICATES, describe
 from .schema import Form, Outcome, Probe, Profile, Report
+
+
+def _source_secret_outcome(source_dir) -> Outcome:
+    """Fold a static secret scan of the submission SOURCE into the report (the one high-value class a
+    black-box HTTP grader can't see: a server-side hardcoded secret that never reaches a client). One
+    aggregate finding however many secrets — like the HTTP secrets probe. Only called when source is
+    available; a bare --target URL has none, so this simply doesn't run."""
+    findings = secretscan.scan_secrets(source_dir)
+    evidence = {"secrets_found": len(findings),
+                "findings": [{"file": f.file, "line": f.line, "kind": f.kind, "snippet": f.snippet}
+                             for f in findings[:25]]}
+    if findings:
+        kinds = sorted({f.kind for f in findings})
+        return Outcome(probe_id="sec-secret-src-001", bundle="security", category="hardcoded-secrets",
+                       outcome="slop_detected", penalty=35, variant_group_id="hardcoded-secrets",
+                       reason=f"{len(findings)} hardcoded secret(s) in source ({', '.join(kinds[:4])})",
+                       evidence=evidence)
+    return Outcome(probe_id="sec-secret-src-001", bundle="security", category="hardcoded-secrets",
+                   outcome="clean", penalty=0, variant_group_id="hardcoded-secrets", evidence=evidence)
 
 
 @dataclass
@@ -121,7 +141,8 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
     return produced
 
 
-def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_progress=None) -> Report:
+def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_progress=None,
+        source_dir=None) -> Report:
     """on_progress(done, total, probe, outcomes): called twice per probe — before it runs with
     outcomes=None (so a caller can show what's currently testing), and after with its outcomes."""
     try:
@@ -142,6 +163,8 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
                 outcomes.extend(probe_outcomes)
                 if on_progress:
                     on_progress(i + 1, total, probe, probe_outcomes)  # done: i+1 probes completed
+        if source_dir:   # static source scan (submission zip / --source DIR); absent for a bare --target
+            outcomes.append(_source_secret_outcome(source_dir))
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes,
                       axis_slop=compute_axis_slop(outcomes))
     finally:
