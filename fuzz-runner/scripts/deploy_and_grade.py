@@ -59,9 +59,28 @@ def _docker(*args, timeout=None, check=False):
     return p
 
 
+def _build_streamed(dockerfile, ctx, timeout=1200):
+    """docker build, STREAMING output to the terminal so a long base-image pull / npm-or-pip install is
+    visible (not a silent hang), while still capturing the tail for the LLM error-feedback loop."""
+    proc = subprocess.Popen(["docker", "build", "-f", str(dockerfile), "-t", APP, str(ctx)],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    lines, start = [], time.time()
+    for line in proc.stdout:
+        sys.stderr.write("    │ " + line)
+        sys.stderr.flush()
+        lines.append(line)
+        if time.time() - start > timeout:
+            proc.kill()
+            lines.append("\n(build exceeded %ds — killed)" % timeout)
+            break
+    proc.wait()
+    return proc.returncode, "".join(lines)[-3000:]
+
+
 def _teardown():
     _docker("rm", "-f", APP, DB)
     _docker("network", "rm", NET)
+    _docker("rmi", "-f", APP)   # drop this repo's app image; base images stay cached (speeds later builds)
 
 
 # ---- 1. clone + gather deploy context -------------------------------------------------------------
@@ -206,10 +225,10 @@ def execute(plan: dict, repo: pathlib.Path) -> str:
     dockerfile = ctx / "Dockerfile.hacklet"
     dockerfile.write_text(plan["dockerfile"])
 
-    print("  docker build ...")
-    b = _docker("build", "-f", str(dockerfile), "-t", APP, str(ctx), timeout=900)
-    if b.returncode != 0:
-        raise DeployError("BUILD FAILED:\n" + (b.stderr or b.stdout)[-3000:])
+    print("  docker build (streaming — base-image pull + npm/pip install is the slow part):")
+    rc, tail = _build_streamed(dockerfile, ctx)
+    if rc != 0:
+        raise DeployError("BUILD FAILED:\n" + tail)
 
     app_env = plan.get("app_env") or {}
     env_args = []
