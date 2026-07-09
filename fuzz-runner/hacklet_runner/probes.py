@@ -1085,6 +1085,118 @@ def debug_mode_enabled(ctx, probe) -> bool | None:
     return False if inspected else None
 
 
+# --- managed-backend exposure (Supabase / Firebase shipped world-readable) --------------------------
+# The signature vibe-coding leak: the app embeds a Supabase/Firebase config + its PUBLIC anon key in the
+# client bundle, but ships the database with NO row-level security -> anyone with the (public) key reads
+# the whole DB. We mine the bundle for the config, then issue the SAME read-only query the app's own
+# frontend makes, with the SAME public key, and see whether real rows come back. Host-restricted to the
+# managed providers (never an arbitrary URL from the bundle -> no SSRF), read-only, bounded.
+_SUPABASE_URL = re.compile(r"https://([a-z0-9]{15,40})\.supabase\.co")
+_FIREBASE_RTDB = re.compile(r"https://([a-z0-9][a-z0-9-]{2,60}\.firebaseio\.com)")
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
+
+
+def _client_bundle(ctx, cap: int = 2_000_000) -> str:
+    """The served client-side text: the homepage plus its same-origin .js bundles, where an SPA embeds
+    its backend config + public keys."""
+    parts, total = [], 0
+    paths = ["/"] + [r for r in ctx.profile.routes if r.split("?")[0].endswith(".js")]
+    for p in list(dict.fromkeys(paths))[:10]:
+        try:
+            t = ctx.client.get(p).text
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+        parts.append(t[:cap - total])
+        total += len(parts[-1])
+        if total >= cap:
+            break
+    return "\n".join(parts)
+
+
+def _postgrest_tables(resp) -> list[str]:
+    """Table names PostgREST advertises at its root for the anon role (the OpenAPI 'definitions')."""
+    try:
+        j = resp.json()
+    except ValueError:
+        return []
+    if isinstance(j, dict) and isinstance(j.get("definitions"), dict):
+        return list(j["definitions"].keys())
+    if isinstance(j, dict) and isinstance(j.get("paths"), dict):
+        return [p.strip("/") for p in j["paths"] if p.strip("/")]
+    return []
+
+
+def _supabase_readable(client, base: str, keys: list[str]):
+    """Return {table, rows, sample} if any table returns rows to the anon key (RLS missing), 'unreachable'
+    if the host can't be reached (egress blocked -> N/A), else None (reached but nothing readable)."""
+    reached = False
+    for key in keys[:4]:
+        hdr = {"apikey": key, "Authorization": "Bearer " + key}
+        try:
+            root = client.get(base + "/rest/v1/", headers=hdr, timeout=6.0)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+        reached = True
+        for table in _postgrest_tables(root)[:8]:
+            try:
+                r = client.get(base + "/rest/v1/" + table, params={"select": "*", "limit": "1"},
+                               headers=hdr, timeout=6.0)
+                rows = r.json() if r.status_code == 200 else None
+            except (httpx.HTTPError, httpx.InvalidURL, ValueError):
+                continue
+            if isinstance(rows, list) and rows:   # real rows to the public key -> world-readable DB
+                return {"table": table, "rows": len(rows), "columns": sorted(rows[0])[:8]}
+    return None if reached else "unreachable"
+
+
+def _firebase_readable(client, json_url: str):
+    """The whole Realtime Database if it's world-readable: GET <db>/.json returns data (not null / not a
+    permission error). 'unreachable' on a network error (-> N/A)."""
+    try:
+        r = client.get(json_url, timeout=6.0)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return "unreachable"
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError:
+            return None
+        if data not in (None, {}, []):
+            return data
+    return None
+
+
+def exposed_backend_readable(ctx, probe) -> bool | None:
+    """Managed backend (Supabase/Firebase) shipped without row-level security: mine the client bundle for
+    the config + public key, then read the DB with that key. Fire if real rows come back. N/A when no such
+    config is embedded (the firewalled Tier-A case) or the provider host is unreachable (egress blocked)."""
+    blob = _client_bundle(ctx)
+    sm = _SUPABASE_URL.search(blob)
+    fm = _FIREBASE_RTDB.search(blob)
+    if not sm and not fm:
+        return None  # no managed-backend config in the client -> nothing to test
+    reached = False
+    keys = [m.group(0) for m in _JWT.finditer(blob)]
+    with httpx.Client(timeout=8.0, follow_redirects=True, verify=False) as ext:   # external provider hosts
+        if sm:
+            base = "https://" + sm.group(1) + ".supabase.co"
+            hit = _supabase_readable(ext, base, keys)
+            if isinstance(hit, dict):
+                ctx.evidence.update(backend="supabase", host=base, table=hit["table"],
+                                    rows_readable=hit["rows"], columns=hit["columns"])
+                return True
+            reached = reached or hit != "unreachable"
+        if fm:
+            data = _firebase_readable(ext, "https://" + fm.group(1) + "/.json")
+            if isinstance(data, (dict, list)) and data:
+                ctx.evidence.update(backend="firebase-rtdb", host=fm.group(1),
+                                    sample_keys=sorted(data)[:8] if isinstance(data, dict) else len(data))
+                return True
+            reached = reached or data != "unreachable"
+    ctx.evidence.update(checked=True, reachable=reached, world_readable=False)
+    return False if reached else None   # reached-but-protected = clean; unreachable = N/A (egress blocked)
+
+
 def session_cookie_missing_flag(ctx, probe) -> bool | None:
     """Self-as-oracle: register an account, then inspect the session cookie it sets. Slop if it lacks
     the hardening flag named in the probe (httponly | samesite | secure). Returns None (-> N/A) when
@@ -2160,6 +2272,7 @@ PREDICATES = {
     "data_integrity_roundtrip": data_integrity_roundtrip,
     "content_type_mismatch": content_type_mismatch,
     "debug_mode_enabled": debug_mode_enabled,
+    "exposed_backend_readable": exposed_backend_readable,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
     "csrf_missing": csrf_missing,
@@ -2224,6 +2337,7 @@ _PREDICATE_REASONS = {
     "data_integrity_roundtrip": "a created object could not be read back afterward (non-durable write / silent data loss)",
     "content_type_mismatch": "a response's body contradicts its declared Content-Type (e.g. JSON served as text/html -> client breakage / reflected-JSON XSS)",
     "debug_mode_enabled": "framework debug mode is on in production (interactive debugger / DEBUG page -> source, settings, env and an RCE console exposed)",
+    "exposed_backend_readable": "the app's managed backend (Supabase/Firebase) is world-readable with its own public key -> the whole database is exposed (missing row-level security)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
     "idor_horizontal": "another account's object was readable by id (broken access control)",
