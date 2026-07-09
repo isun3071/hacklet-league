@@ -7,7 +7,8 @@ failures by feeding the error back to the LLM, and finally grade the running app
 The LLM ONLY figures out the deploy; the fuzzer does the grading.
 
     export OPENROUTER_API_KEY=sk-or-...
-    # optional: export OPENROUTER_MODEL=anthropic/claude-sonnet-4   (default below)
+    # optional: export OPENROUTER_MODEL=...   (default deepseek/deepseek-v4-flash — cheap; deploy-planning
+    #   is a read-the-repo/write-a-Dockerfile task, not frontier work, and the retry loop covers misses)
     uv run python scripts/deploy_and_grade.py https://github.com/user/repo
     uv run python scripts/deploy_and_grade.py --browser --attempts 4 https://github.com/user/repo
     uv run python scripts/deploy_and_grade.py /path/to/local/repo         # skip the clone
@@ -38,7 +39,7 @@ from hacklet_runner.deploy import RemoteDeployer  # noqa: E402
 from hacklet_runner.pipeline import run  # noqa: E402
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
+DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
 NET = "hl-deploy-net"
 APP = "hl-deploy-app"
 DB = "hl-db"
