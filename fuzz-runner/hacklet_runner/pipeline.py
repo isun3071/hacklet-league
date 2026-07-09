@@ -129,8 +129,12 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         profile = discover(handle.base_url, render=render, headers=headers)
         outcomes: list[Outcome] = []
         total = len(catalog)
-        with make_client(handle.base_url, headers, timeout=15.0, follow_redirects=True) as client:
-            ctx = _Ctx(handle.base_url, client, profile, headers)
+        # bind the client + probes to the ORIGIN (a --target may carry an entry path; discover() crawls
+        # from it, but probes construct base_url + "/probe/path" and need the bare origin). profile.base_url
+        # is already normalized to the origin by discover().
+        origin = profile.base_url or handle.base_url
+        with make_client(origin, headers, timeout=15.0, follow_redirects=True) as client:
+            ctx = _Ctx(origin, client, profile, headers)
             for i, probe in enumerate(catalog):
                 if on_progress:
                     on_progress(i, total, probe, None)              # starting probe i (0-indexed)

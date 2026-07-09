@@ -238,7 +238,11 @@ class RemoteDeployer(Deployer):
         deadline = time.time() + self.health_timeout
         while time.time() < deadline:
             try:
-                if httpx.get(self.base_url + "/", timeout=3.0, follow_redirects=True,
+                # health-check the target AS GIVEN (httpx defaults a bare origin to "/"). Do NOT append
+                # "/": a target with a path (e.g. .../portal.php, pointing at a specific vuln page) would
+                # become ".../portal.php/", which on some apps (bWAPP) triggers a relative-redirect loop
+                # -> TooManyRedirects -> a false "did not respond".
+                if httpx.get(self.base_url, timeout=3.0, follow_redirects=True,
                              verify=False).status_code < 500:   # target may present a self-signed cert
                     return DeployHandle(self.base_url)  # a non-5xx response means it is up
             except httpx.HTTPError:

@@ -92,7 +92,15 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     forms: list[Form] = []
     seen_forms: set[tuple] = set()
     visited: set[str] = set()
-    queue: list[tuple[str, int]] = [("/", 0)]
+    # Split a path-bearing --target into ORIGIN + entry path. The client and probes bind to the origin
+    # (a path-bearing base_url breaks httpx's relative-redirect resolution -> loops, and breaks the
+    # `base_url + "/probe/path"` construction probes rely on), while the crawl SEEDS at the entry path so
+    # a --target pointing at a specific page (e.g. bWAPP's /sqli_1.php, whose "/" only redirects to a
+    # login/portal the crawler can't navigate) gets THAT page discovered. A bare origin still starts at "/".
+    _parsed = urlparse(base_url)
+    start_path = _parsed.path or "/"
+    base_url = f"{_parsed.scheme}://{_parsed.netloc}" if _parsed.netloc else base_url
+    queue: list[tuple[str, int]] = [(start_path, 0)]
     any_response = False
     endpoints: list = []
     js_urls: list[str] = []           # same-origin .js assets to mine for an SPA's API paths

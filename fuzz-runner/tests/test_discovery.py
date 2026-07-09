@@ -99,3 +99,43 @@ def test_hardened_same_surface_as_vulnerable(serve):
     assert any(
         f.action == "/login" and set(f.fields) == {"username", "password"} for f in profile.forms
     )
+
+
+import http.server        # noqa: E402
+import threading          # noqa: E402
+
+
+def _serve_two_page():
+    # "/" has no form (like bWAPP's login/portal redirect); "/deep" carries the real form
+    pages = {"/": b"<html><body>home, nothing here</body></html>",
+             "/deep": b'<html><body><form action="/deep" method="get"><input name="q"></form></body></html>'}
+
+    class _H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            body = pages.get(self.path.split("?")[0], b"not found")
+            self.send_response(200 if body != b"not found" else 404)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_path_bearing_target_crawls_the_entry_page_and_binds_to_origin():
+    srv = _serve_two_page()
+    try:
+        origin = "http://127.0.0.1:%d" % srv.server_address[1]
+        # a bare-origin target sees only "/" (no form there)
+        assert discover(origin).forms == []
+        # a --target pointing at /deep must discover THAT page's form, and normalize base_url to the origin
+        prof = discover(origin + "/deep")
+        assert prof.base_url == origin  # bound to origin (not the path) so probes build base_url+"/path"
+        assert any(f.action == "/deep" and f.fields == ["q"] for f in prof.forms)
+    finally:
+        srv.shutdown()
