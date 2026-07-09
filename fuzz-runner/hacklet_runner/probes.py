@@ -1856,6 +1856,70 @@ def crash_resistance(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+# Host-header injection — the app trusts a client-controlled Host / X-Forwarded-Host and reflects it into
+# an absolute URL or a redirect Location (web-cache poisoning, password-reset-link poisoning). Inject a
+# unique marker host; fire if it comes back in a Location header or the body. A random marker can't
+# reflect by coincidence -> near-zero false positives. Universally testable -> never N/A.
+_HOST_HEADERS = ("Host", "X-Forwarded-Host")
+_HOST_TARGETS = ("/", "/account", "/reset", "/password-reset", "/forgot", "/login", "/verify", "/link")
+
+
+def host_header_injection(ctx, probe) -> bool:
+    """Inject a marker host via Host / X-Forwarded-Host across the homepage + likely reset/link routes;
+    fire if it reflects into a redirect Location or the response body."""
+    marker = "hlhost" + secrets.token_hex(4) + ".example"
+    routes = [r for r in ctx.profile.routes
+              if re.search(r"reset|password|forgot|login|account|verify|link|confirm", r, re.IGNORECASE)]
+    targets = list(dict.fromkeys(list(_HOST_TARGETS) + routes))
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=False) as c:
+        for path in targets:
+            for hdr in _HOST_HEADERS:
+                try:
+                    r = c.get(path, headers={hdr: marker})
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                if marker in r.headers.get("location", "") or marker in r.text:
+                    ctx.evidence.update(reflected=True, via=hdr, target=path)
+                    return True
+    ctx.evidence.update(reflected=False, targets=len(targets))
+    return False
+
+
+# HTTP response splitting — CRLF injected into a parameter the app copies into a RESPONSE HEADER (a
+# redirect Location, a Set-Cookie) lets an attacker inject headers / split the response. Inject CRLF + a
+# unique marker header into reflecting fields; fire if the marker comes back as a real response header.
+# Modern servers reject CRLF in header values, so a well-built app reads clean (low false-positive).
+def http_response_splitting(ctx, probe) -> bool | None:
+    """Inject `<CRLF>Hlsplit: <marker>` into each field; fire if `Hlsplit: <marker>` appears as a real
+    response header (the app reflected the raw CRLF into a header). N/A when there's no input surface."""
+    targets = _injectable_targets(ctx.profile)
+    if not targets:
+        return None
+    marker = "hlsplit" + secrets.token_hex(4)
+    payload = "x\r\nHlsplit: " + marker
+    budget = probe.probe.get("max_attempts", 80)
+    tested = False
+    checked = 0
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=False) as c:
+        for action, method, fields in targets:
+            for field in fields:
+                if budget <= 0:
+                    break
+                budget -= 1
+                tested = True
+                checked += 1
+                data = {fn: (payload if fn == field else "1") for fn in fields}
+                try:
+                    r = _xss_send(c, method, action, data)
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
+                if r.headers.get("hlsplit") == marker:
+                    ctx.evidence.update(split=True, target=action, field=field)
+                    return True
+    ctx.evidence.update(split=False, fields_tested=checked)
+    return False if tested else None
+
+
 PREDICATES = {
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
@@ -1891,6 +1955,8 @@ PREDICATES = {
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
     "open_redirect": open_redirect,
+    "host_header_injection": host_header_injection,
+    "http_response_splitting": http_response_splitting,
 }
 
 
@@ -1948,6 +2014,8 @@ _PREDICATE_REASONS = {
     "console_errors_present": "threw an uncaught JavaScript error on load",
     "a11y_violations_present": "accessibility violations (missing alt / form label / lang / control name)",
     "open_redirect": "a user-controlled parameter redirects to an arbitrary external host",
+    "host_header_injection": "a client-controlled Host / X-Forwarded-Host header reflects into a URL / redirect (cache + password-reset poisoning)",
+    "http_response_splitting": "CRLF injected into a parameter reflects into a response header (header injection / response splitting)",
 }
 
 

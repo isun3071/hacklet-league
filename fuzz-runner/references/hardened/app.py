@@ -115,6 +115,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if _user_of(self) == note["owner"]:  # hardened: owner only -> no IDOR
                 return self._send(200, "note: " + html.escape(note["text"]))
             return self._send(403, "forbidden")
+        if self.path == "/account":  # host-safe: the redirect is a fixed relative path, never from the Host header
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path == "/login":  # GET renders the login form (POST authenticates) -> the nav link resolves
             return self._send(200, '<!doctype html><html lang="en"><head><title>log in</title></head><body>'
                               '<form action="/login" method="post">'

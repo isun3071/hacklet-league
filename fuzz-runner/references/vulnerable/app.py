@@ -146,6 +146,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/heavy"):
             time.sleep(1.5)  # slow: over the TTFB gate, but small enough to keep the suite fast
             return self._send(200, "done")
+        if self.path == "/account":  # host-header injection: builds the redirect from the client's Host
+            self.send_response(302)
+            self.send_header("Location", "http://" + self.headers.get("Host", "localhost") + "/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path.startswith("/redirect"):  # open redirect: reflects any destination, no validation
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             dest = (q.get("next") or q.get("url") or q.get("redirect") or q.get("return")
