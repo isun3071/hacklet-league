@@ -241,6 +241,60 @@ def console_errors(url: str, headers=None, timeout: float = 12.0) -> int | None:
         return None
 
 
+# Core Web Vitals — LCP (largest content paint), CLS (layout shift), total blocking time (main-thread
+# jank) — measured by a PerformanceObserver injected BEFORE load, over N renders throttled to a mid-tier
+# device (4x CPU + Slow-4G, Lighthouse's lab profile), so a bad number means bad on a REAL device, not
+# flattered by a fast sandbox. The predicate scores off the player-favorable edge (best-of-N), so
+# measurement variance can only ever help a player -- the app must be poor even on its best run to fire.
+_VITALS_JS = """(() => {
+  window.__hlv = {lcp: 0, cls: 0, tbt: 0};
+  const obs = (t, cb) => { try { new PerformanceObserver(cb).observe({type: t, buffered: true}); } catch (e) {} };
+  obs('largest-contentful-paint', l => { const es = l.getEntries(); if (es.length) window.__hlv.lcp = es[es.length - 1].startTime; });
+  obs('layout-shift', l => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__hlv.cls += e.value; });
+  obs('longtask', l => { for (const e of l.getEntries()) if (e.duration > 50) window.__hlv.tbt += (e.duration - 50); });
+})()"""
+
+# Lighthouse's standard mobile lab throttle -> the published CWV device profile (distinct from perf.py's
+# transfer profile, which grades server-side load time). ~Slow 4G: 150ms RTT, 1.6Mbps down, 750Kbps up.
+_CWV_THROTTLE = {"offline": False, "latency": 150, "downloadThroughput": 200_000, "uploadThroughput": 93_750}
+
+
+def web_vitals(url: str, headers=None, timeout: float = 25.0, samples: int = 3) -> list | None:
+    """Sample Core Web Vitals over N throttled renders; return [{lcp_ms, cls, tbt_ms}] per run (the caller
+    scores off the player-favorable edge). None if no browser or the render fails."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return None
+            try:
+                out = []
+                for _ in range(samples):
+                    page = b.new_page()
+                    try:
+                        cdp = page.context.new_cdp_session(page)
+                        cdp.send("Network.enable")
+                        cdp.send("Network.emulateNetworkConditions", _CWV_THROTTLE)
+                        cdp.send("Emulation.setCPUThrottlingRate", {"rate": 4})
+                        page.add_init_script(script=_VITALS_JS)   # observers up before any page script
+                        _apply_auth(page, url, headers)
+                        page.goto(url, timeout=timeout * 1000, wait_until="load")
+                        page.wait_for_timeout(2000)   # let LCP finalize + late layout shifts settle (throttled)
+                        v = page.evaluate("() => window.__hlv")
+                        out.append({"lcp_ms": round(v["lcp"]), "cls": round(v["cls"], 3), "tbt_ms": round(v["tbt"])})
+                    finally:
+                        page.close()
+                return out
+            finally:
+                b.close()
+    except Exception:
+        return None
+
+
 def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24,
                      total_timeout: float = 45.0, headers=None) -> bool:
     """Inject an executing payload into candidate query params of each path, render, and return True

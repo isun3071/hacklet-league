@@ -139,3 +139,41 @@ def test_contrast_clean_on_high_contrast():
         assert browser.contrast_violations("http://127.0.0.1:%d/" % srv.server_address[1]) == 0
     finally:
         srv.shutdown()
+
+
+# --- Core Web Vitals (perf-cwv-002 / slow_core_web_vitals) --------------------------------
+from hacklet_runner.net import make_client        # noqa: E402
+from hacklet_runner.probes import slow_core_web_vitals  # noqa: E402
+
+# an 800ms synchronous busy-loop blocks the main thread on load -> Total Blocking Time well past 600ms
+_CWV_POOR = ("<!doctype html><html lang=en><head><title>t</title></head><body><h1>slow</h1>"
+             "<script>const t0=performance.now();while(performance.now()-t0<800){}</script></body></html>")
+_CWV_CLEAN = "<!doctype html><html lang=en><head><title>t</title></head><body><h1>fast</h1></body></html>"
+
+
+class _CwvProbe:
+    probe = {"target": "/", "samples": 2}
+
+
+def _cwv_ctx(url):
+    return type("C", (), {"base_url": url, "headers": None, "client": make_client(url), "evidence": {}})()
+
+
+def test_cwv_fires_on_poor_web_vitals():
+    srv = _serve_html(_CWV_POOR)
+    try:
+        ctx = _cwv_ctx("http://127.0.0.1:%d/" % srv.server_address[1])
+        assert slow_core_web_vitals(ctx, _CwvProbe()) is True
+        assert "TBT" in ctx.evidence["failed"]        # main-thread block is the metric that trips
+    finally:
+        srv.shutdown()
+
+
+def test_cwv_clean_on_fast_page():
+    srv = _serve_html(_CWV_CLEAN)
+    try:
+        ctx = _cwv_ctx("http://127.0.0.1:%d/" % srv.server_address[1])
+        assert slow_core_web_vitals(ctx, _CwvProbe()) is False
+        assert ctx.evidence["failed"] == []
+    finally:
+        srv.shutdown()

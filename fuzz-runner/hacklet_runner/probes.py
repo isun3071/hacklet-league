@@ -1203,6 +1203,29 @@ def slow_first_paint(ctx, probe) -> bool:
     return fcp > threshold
 
 
+def slow_core_web_vitals(ctx, probe) -> bool:
+    """Browser oracle: Core Web Vitals (LCP / CLS / total blocking time) sampled over N device-throttled
+    renders and scored off the PLAYER-FAVORABLE EDGE (best-of-N) against Google's POOR thresholds (set
+    beyond the normal variance band) -- so the app has to be poor even on its BEST run to fire, and
+    measurement variance can only ever help the player. Browser-gated."""
+    target = probe.probe.get("target", "/")
+    if not _served(ctx, target):
+        target = "/"
+    url = ctx.base_url.rstrip("/") + target
+    samples = browser.web_vitals(url, headers=ctx.headers, samples=probe.probe.get("samples", 3))
+    if not samples:
+        return False
+    best_lcp = min(s["lcp_ms"] for s in samples)   # lower is better -> take the player's best run
+    best_cls = min(s["cls"] for s in samples)
+    best_tbt = min(s["tbt_ms"] for s in samples)
+    bad = {"LCP": best_lcp > probe.probe.get("lcp_ms", 4000),   # Google "poor": LCP>4s / CLS>0.25 / TBT>600ms
+           "CLS": best_cls > probe.probe.get("cls", 0.25),
+           "TBT": best_tbt > probe.probe.get("tbt_ms", 600)}
+    ctx.evidence.update(best_lcp_ms=best_lcp, best_cls=best_cls, best_tbt_ms=best_tbt,
+                        samples=len(samples), failed=[k for k, v in bad.items() if v])
+    return any(bad.values())
+
+
 def console_errors_present(ctx, probe) -> bool:
     """Browser oracle: the page throws an uncaught JavaScript error on load — broken regardless of
     intent. Browser-gated."""
@@ -2012,6 +2035,7 @@ PREDICATES = {
     "seo_meta_missing": seo_meta_missing,
     "http_conformance": http_conformance,
     "slow_first_paint": slow_first_paint,
+    "slow_core_web_vitals": slow_core_web_vitals,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
     "open_redirect": open_redirect,
@@ -2071,6 +2095,7 @@ _PREDICATE_REASONS = {
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
+    "slow_core_web_vitals": "Core Web Vitals poor on the best of N throttled samples (slow LCP / layout shift / main-thread blocking)",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "threw an uncaught JavaScript error on load",
     "a11y_violations_present": "accessibility violations (missing alt / form label / lang / control name)",
