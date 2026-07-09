@@ -317,13 +317,23 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="stream the full docker build output (default: high-level steps only)")
     ap.add_argument("--keep", action="store_true", help="don't tear the containers down after grading")
+    ap.add_argument("--record", metavar="FILE", help="append the full result (metadata + findings + "
+                    "evidence) as a JSON line to FILE, for scripts/stats.py")
+    ap.add_argument("--meta", metavar="JSON", default="",
+                    help="metadata to merge into the record, e.g. from devpost_repos --json "
+                         "('{\"hackathon\":\"x\",\"project\":\"...\",\"winner\":true}')")
     args = ap.parse_args()
+
+    meta = json.loads(args.meta) if args.meta.strip() else {}
+    result = {"repo": args.repo, "deployed": False, "attempts_used": 0,
+              "browser": args.browser, "ts": time.time(), **meta}   # ts: recorder stamps it (sortable)
 
     repo = clone(args.repo)
     context = gather_context(repo)
     plan, url, error = None, None, ""
     try:
         for attempt in range(1, args.attempts + 1):
+            result["attempts_used"] = attempt
             print(f"\n=== attempt {attempt}/{args.attempts}: planning deploy ({args.model}) ===")
             plan = plan_deploy(context, args.model, error=error, prev=plan)
             print(f"  stack: {plan.get('stack')}  port: {plan.get('port')}  db: {(plan.get('db') or {}).get('type')}")
@@ -334,14 +344,20 @@ def main():
                 break
             except DeployError as e:
                 error = str(e)
+                result["deploy_error"] = (error.strip().splitlines() or ["unknown"])[0][:200]
                 print(f"  deploy failed:\n{error[-800:]}")
                 _docker("rm", "-f", APP, DB)   # tear down this attempt's containers before the next
         if not url:
             print("\nGAVE UP — could not deploy after all attempts.")
-            return
+            return   # result (deployed=False, deploy_error) is written in the finally
+        result.update(deployed=True, stack=plan.get("stack"))
         print(f"\n=== grading {url} ===")
         report = grade(url, args.browser)
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
+        result.update(slop_score=report.slop_score, axis_slop=report.axis_slop,
+                      findings=[{"probe_id": o.probe_id, "bundle": o.bundle, "category": o.category,
+                                 "penalty": o.penalty, "group": o.variant_group_id, "reason": o.reason,
+                                 "target": o.target, "evidence": o.evidence} for o in slop])   # full provenance
         print(f"\n  SLOP SCORE: {report.slop_score}   ({_axis_str(report.axis_slop)})")
         # ALL findings, grouped bundle -> category. The category shows its DAMPED subtotal (what it adds
         # to the score); the rows under it are each flaw's RAW penalty, which taper within the category
@@ -365,6 +381,10 @@ def main():
             for o in sorted(cat_probes[key], key=lambda o: -o.penalty):
                 print(f"        {o.probe_id:20} {o.penalty:>3}  {o.reason[:56]}")
     finally:
+        if args.record:
+            with open(args.record, "a") as f:
+                f.write(json.dumps(result) + "\n")
+            print(f"  recorded -> {args.record}")
         if args.keep:
             print(f"\n(left running: docker rm -f {APP} {DB}; docker network rm {NET})")
         else:
