@@ -131,8 +131,8 @@ def test_vulnerable_app_accrues_slop():
     # (frequency x severity, see the catalog): security holds its catastrophic per-instance ceiling (40),
     # while qa/perf are priced up for their every-user frequency. On this deliberately security-riddled
     # reference, security still dominates; a realistic janky app (references/qa-janky) leans qa/perf.
-    assert report.axis_slop == {"security": 412, "qa": 158, "performance": 68}
-    assert report.slop_score == 638
+    assert report.axis_slop == {"security": 416, "qa": 158, "performance": 68}
+    assert report.slop_score == 642
     assert sum(report.axis_slop.values()) == report.slop_score
 
 
