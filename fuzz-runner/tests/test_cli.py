@@ -1,5 +1,12 @@
 """CLI output renderers — pure text builders, no server/Docker, so they run on the dev box."""
-from hacklet_runner.cli import _failed_text, _fmt_evidence, _report_payload, _summary_text
+from hacklet_runner.aggregate import compute_axis_slop, compute_slop_score
+from hacklet_runner.cli import (
+    _failed_text,
+    _fmt_evidence,
+    _report_payload,
+    _score_breakdown_text,
+    _summary_text,
+)
 from hacklet_runner.schema import Outcome, Report
 
 
@@ -10,6 +17,25 @@ def _report() -> Report:
         Outcome("sec-headers-001", "security", "security-headers", "slop_detected", 3, target="/"),
         Outcome("perf-ttfb-001", "performance", "speed", "not_applicable", 0, target="/heavy"),
     ])
+
+
+def test_score_breakdown_shows_dampers_and_sums_to_total():
+    outs = [
+        Outcome("sqli-a", "security", "sql-injection", "slop_detected", 40, variant_group_id="sqli"),
+        Outcome("sqli-b", "security", "sql-injection", "slop_detected", 40, variant_group_id="sqli"),  # once
+        Outcome("crash-a", "qa", "crash", "slop_detected", 30),
+        Outcome("crash-b", "qa", "crash", "slop_detected", 30),   # 30 + 30*0.6 = 48 (within-category decay)
+    ]
+    r = Report(slop_score=compute_slop_score(outs), outcomes=outs, axis_slop=compute_axis_slop(outs))
+    t = _score_breakdown_text(r)
+    assert "sqli ×2→40 once" in t        # variant-group collapse is shown
+    assert "30 + 18" in t                # within-category decay is shown (30 + 30×0.6)
+    assert f"total  {r.slop_score}" in t and r.slop_score == 88  # 40 + 48
+
+
+def test_score_breakdown_empty_when_clean():
+    r = Report(slop_score=0, outcomes=[Outcome("x", "security", "xss", "clean", 0)], axis_slop={})
+    assert _score_breakdown_text(r) == ""
 
 
 def test_summary_shows_score_and_tally():

@@ -11,10 +11,11 @@ import pathlib
 import subprocess
 import sys
 import textwrap
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import asdict
 
 from . import browser
+from .aggregate import CATEGORY_DECAY
 from .catalog import load_catalog
 from .deploy import DockerDeployer, RemoteDeployer, SubprocessDeployer
 from .ingest import SubmissionError, extract_submission
@@ -85,13 +86,73 @@ def _failed_text(report, source: str) -> str:
     return "\n".join(lines)
 
 
+def _num(n: float) -> str:
+    return f"{n:.0f}" if abs(n - round(n)) < 0.05 else f"{n:.1f}"
+
+
+def _score_breakdown_text(report, decay: float = CATEGORY_DECAY) -> str:
+    """Show the dampers at work: how fired penalties fold into the score. Mirrors aggregate.compute_slop_score
+    — a variant group contributes once (its max member), then within each category the penalties decay
+    (sorted desc, each further hit ×decay); categories sum per bundle, bundles sum to the total."""
+    fired = [o for o in report.outcomes if o.outcome == "slop_detected"]
+    if not fired:
+        return ""
+    # variant-group collapse: keep the highest-penalty member per group, remember how many fired
+    groups: dict[str, list] = {}       # gid -> [rep_outcome, member_count]
+    singles = []
+    for o in fired:
+        if o.variant_group_id:
+            g = groups.get(o.variant_group_id)
+            if g is None:
+                groups[o.variant_group_id] = [o, 1]
+            else:
+                g[1] += 1
+                if o.penalty > g[0].penalty:
+                    g[0] = o
+        else:
+            singles.append(o)
+    cat_pens: dict[tuple, list] = defaultdict(list)   # (bundle, category) -> [penalties feeding the decay]
+    cat_notes: dict[tuple, list] = defaultdict(list)  # (bundle, category) -> ["group ×N→max"]
+    for o in singles:
+        cat_pens[(o.bundle, o.category)].append(o.penalty)
+    for gid, (rep, count) in groups.items():
+        cat_pens[(rep.bundle, rep.category)].append(rep.penalty)
+        if count > 1:
+            cat_notes[(rep.bundle, rep.category)].append(f"{gid} ×{count}→{rep.penalty} once")
+
+    lines = ["", "  how the score is built"
+                 "   (variant group fires once at its max · then within a category each further hit ×%.1f)" % decay, ""]
+    order = {"security": 0, "qa": 1, "performance": 2}
+    bundles = sorted({b for b, _ in cat_pens}, key=lambda b: order.get(b, 9))
+    for bundle in bundles:
+        lines.append(f"  {bundle}  {report.axis_slop.get(bundle, 0)}")
+        cats = [(bundle, c) for (b, c) in cat_pens if b == bundle]
+        sub = {}
+        for key in cats:
+            terms = [p * decay ** i for i, p in enumerate(sorted(cat_pens[key], reverse=True))]
+            sub[key] = terms
+        for key in sorted(cats, key=lambda k: -sum(sub[k])):
+            terms = sub[key]
+            formula = " + ".join(_num(t) for t in terms[:5]) + (" + …" if len(terms) > 5 else "")
+            note = "   [" + "; ".join(cat_notes[key]) + "]" if cat_notes.get(key) else ""
+            lines.append(f"    {key[1]:<20} {_num(sum(terms)):>6}   {formula}{note}")
+    roll = " + ".join(f"{b} {report.axis_slop[b]}" for b in bundles if b in report.axis_slop)
+    lines += ["", f"  total  {report.slop_score}   ({roll})", ""]
+    return "\n".join(lines)
+
+
 def _print_report(report, source: str, args) -> None:
     if args.json:
         print(json.dumps(_report_payload(report), indent=2))
-    elif args.failed:
+        return
+    if args.failed:
         print(_failed_text(report, source))
     else:
         print(_summary_text(report, source))
+    if getattr(args, "verbose", False):   # -v: also show the damper/score breakdown
+        breakdown = _score_breakdown_text(report)
+        if breakdown:
+            print(breakdown)
 
 
 def _fail(args, status: str, reason: str):
@@ -182,7 +243,8 @@ def main() -> None:
     out.add_argument("--json", action="store_true", help="print the full machine-readable JSON report")
     out.add_argument("--failed", action="store_true", help="list only the probes that detected slop")
     out.add_argument("-v", "--verbose", action="store_true",
-                     help="stream every probe/target outcome as it runs (to stderr)")
+                     help="stream every probe/target outcome as it runs (stderr), and append the "
+                          "score breakdown showing the variant-group + within-category dampers")
     out.add_argument("-q", "--quiet", action="store_true", help="suppress the live progress bar")
     args = ap.parse_args()
 
