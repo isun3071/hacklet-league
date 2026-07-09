@@ -9,6 +9,8 @@ browser (chromium / chrome / msedge channels), so it works wherever one is avail
 from __future__ import annotations
 
 import contextlib
+import json
+import pathlib
 import time
 import urllib.parse
 
@@ -111,30 +113,23 @@ def first_contentful_paint(url: str, headers=None, timeout: float = 12.0) -> flo
         return None
 
 
-# Hand-rolled presence-based accessibility checks (no axe-core dependency): missing lang, images with
-# no alt attribute, form fields with no accessible name, and icon-only controls with no name. Presence
-# only — the *content* of alt text etc. is intent-dependent (the judge's domain), not ours.
-_A11Y_JS = """() => {
-  let v = 0;
-  const root = document.documentElement;
-  if (!root.lang || !root.lang.trim()) v++;
-  v += document.querySelectorAll('img:not([alt])').length;
-  const fields = document.querySelectorAll(
-    'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]), textarea, select');
-  fields.forEach(el => {
-    const named = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
-      || el.getAttribute('title') || (el.id && document.querySelector('label[for="' + el.id + '"]'))
-      || el.closest('label');
-    if (!named) v++;
-  });
-  document.querySelectorAll('button, a[href]').forEach(el => {
-    const txt = (el.textContent || '').trim();
-    const named = el.getAttribute('aria-label') || el.getAttribute('title')
-      || el.querySelector('img[alt]:not([alt=""])');
-    if (!txt && !named) v++;
-  });
-  return v;
-}"""
+# Accessibility is graded with axe-core (Deque), the gold-standard WCAG engine, injected into the render.
+# axe splits results into `violations` (algorithmically DETERMINABLE — a rule definitively failed) and
+# `incomplete` (needs a human to decide). We take `violations` only, filtered to the WCAG 2 A/AA
+# conformance target (excludes best-practice opinions + aspirational AAA) — so the ingested corpus lands
+# squarely on our objective/intent-independent axis, and `incomplete` is left to the human judge.
+# WCAG 2.0/2.1 A/AA — the established conformance target (ADA / Section 508 / EN 301 549). We omit the
+# newer WCAG 2.2 rules (e.g. target-size), which fire on default-sized controls across most well-built
+# desktop pages and would false-positive; 2.2 can be revisited once we can gauge its precision on real apps.
+_AXE_WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]
+_AXE_JS_CACHE: str | None = None
+
+
+def _axe_js() -> str:
+    global _AXE_JS_CACHE
+    if _AXE_JS_CACHE is None:
+        _AXE_JS_CACHE = (pathlib.Path(__file__).resolve().parent / "vendor" / "axe.min.js").read_text("utf-8")
+    return _AXE_JS_CACHE
 
 
 # Contrast is the ONE accessibility check that needs the CASCADE: the effective text and background
@@ -186,10 +181,32 @@ def _eval_page(url, headers, timeout, js_list):
         return None
 
 
-def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> int | None:
-    """Render url and count accessibility violations: presence-based (missing lang / alt / field label /
-    control name) plus computed-style contrast below the 3:1 floor. None if no browser/render fails."""
-    return _eval_page(url, headers, timeout, [_A11Y_JS, _CONTRAST_JS])
+def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> list | None:
+    """Render url, inject axe-core, and return its WCAG 2 A/AA violations as [{id, impact}] — the
+    gold-standard deterministic a11y ruleset (~100 rules incl. contrast, ARIA, structure). None if no
+    browser or the render fails."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return None
+            try:
+                page = b.new_page(bypass_csp=True)   # inject our audit tool even when the target sets a CSP
+                _apply_auth(page, url, headers)
+                page.goto(url, timeout=timeout * 1000, wait_until="load")
+                page.wait_for_timeout(300)
+                page.add_script_tag(content=_axe_js())            # defines window.axe
+                results = page.evaluate(
+                    "() => axe.run(document, {runOnly: {type: 'tag', values: %s}})" % json.dumps(_AXE_WCAG_TAGS))
+                return [{"id": v["id"], "impact": v.get("impact")} for v in results.get("violations", [])]
+            finally:
+                b.close()
+    except Exception:
+        return None
 
 
 def contrast_violations(url: str, headers=None, timeout: float = 12.0) -> int | None:

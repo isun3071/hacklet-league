@@ -1214,13 +1214,19 @@ def console_errors_present(ctx, probe) -> bool:
 
 
 def a11y_violations_present(ctx, probe) -> bool:
-    """Browser oracle: presence-based accessibility violations (missing lang / alt / field label /
-    control name) above the threshold. Browser-gated; presence only, so intent-independent."""
+    """Browser oracle: WCAG 2 A/AA accessibility violations from axe-core (its deterministic `violations`
+    set) above the threshold. Browser-gated; axe reports only algorithmically-determinable failures, so
+    it stays intent-independent (the `incomplete`/needs-review rules are excluded)."""
     url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
-    n = browser.a11y_violations(url, headers=ctx.headers)
-    if isinstance(n, (int, float)):
-        ctx.evidence.update(violations=n, threshold=probe.probe.get("threshold", 0))
-    return isinstance(n, (int, float)) and n > probe.probe.get("threshold", 0)
+    viols = browser.a11y_violations(url, headers=ctx.headers)
+    if viols is None:
+        return False
+    impacts: dict[str, int] = {}
+    for v in viols:
+        impacts[v.get("impact")] = impacts.get(v.get("impact"), 0) + 1
+    ctx.evidence.update(violations=len(viols), rules=sorted({v["id"] for v in viols})[:15],
+                        impacts=impacts, engine="axe-core")
+    return len(viols) > probe.probe.get("threshold", 0)
 
 
 _REDIRECT_PARAMS = ("next", "url", "redirect", "return", "dest", "continue", "to", "r")
