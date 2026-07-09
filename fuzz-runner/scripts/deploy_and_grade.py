@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import defaultdict
 
 import httpx
 
@@ -34,9 +35,14 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
 from hacklet_runner import browser  # noqa: E402
+from hacklet_runner.aggregate import CATEGORY_DECAY, _damped_total  # noqa: E402
 from hacklet_runner.catalog import load_catalog  # noqa: E402
 from hacklet_runner.deploy import RemoteDeployer  # noqa: E402
 from hacklet_runner.pipeline import run  # noqa: E402
+
+
+def _axis_str(axis: dict) -> str:
+    return " · ".join(f"{b} {round(axis[b])}" for b in ("security", "qa", "performance") if b in axis)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
@@ -336,18 +342,28 @@ def main():
         print(f"\n=== grading {url} ===")
         report = grade(url, args.browser)
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
-        print(f"\n  SLOP SCORE: {report.slop_score}   axis: {report.axis_slop}")
-        # ALL findings, one line per fired probe (fan-out collapsed), grouped security -> qa -> perf
-        by_probe = {o.probe_id: o for o in slop}   # any target; penalty is per-probe
+        print(f"\n  SLOP SCORE: {report.slop_score}   ({_axis_str(report.axis_slop)})")
+        # ALL findings, grouped bundle -> category. The category shows its DAMPED subtotal (what it adds
+        # to the score); the rows under it are each flaw's RAW penalty, which taper within the category
+        # (within-category diminishing returns + variant-group), so the rows can exceed the subtotal.
+        cat_fired, cat_probes = defaultdict(list), defaultdict(list)
+        for o in slop:
+            cat_fired[(o.bundle, o.category)].append(o)          # all fired (with fan-out) -> exact subtotal
+        for o in {o.probe_id: o for o in slop}.values():
+            cat_probes[(o.bundle, o.category)].append(o)          # one row per probe
+        subs = {k: _damped_total(v, CATEGORY_DECAY) for k, v in cat_fired.items()}
         order = {"security": 0, "qa": 1, "performance": 2}
-        findings = sorted(by_probe.values(), key=lambda o: (order.get(o.bundle, 9), -o.penalty, o.probe_id))
-        print(f"  {len(findings)} findings:")
-        bundle = None
-        for o in findings:
-            if o.bundle != bundle:
-                bundle = o.bundle
-                print(f"    [{bundle}]")
-            print(f"      {o.probe_id:18} {o.category:20} {o.penalty:>3}  {o.reason[:64]}")
+        n = sum(len(v) for v in cat_probes.values())
+        print(f"  {n} findings   (category = damped subtotal it adds; rows = each flaw's raw penalty)")
+        last = None
+        for key in sorted(cat_probes, key=lambda k: (order.get(k[0], 9), -subs[k])):
+            bundle, cat = key
+            if bundle != last:
+                last = bundle
+                print(f"    [{bundle}  {round(report.axis_slop.get(bundle, 0))}]")
+            print(f"      {cat:22} {round(subs[key]):>3}")
+            for o in sorted(cat_probes[key], key=lambda o: -o.penalty):
+                print(f"        {o.probe_id:20} {o.penalty:>3}  {o.reason[:56]}")
     finally:
         if args.keep:
             print(f"\n(left running: docker rm -f {APP} {DB}; docker network rm {NET})")
