@@ -29,6 +29,15 @@ _TRACE = re.compile(
     r"\bat [\w.$]+\([\w.]+:\d+\)"
 )
 
+# Fingerprints of a framework's DEBUG UI (the full interactive debugger / DEBUG=True page), not merely a
+# leaked stack trace. Each string is distinctive enough to avoid firing on ordinary page content.
+_DEBUG_FINGERPRINT = re.compile(
+    r"Werkzeug Debugger|"                        # Flask / Werkzeug interactive debugger (leaks src + RCE console)
+    r"seeing this error because you have|"       # Django DEBUG = True technical-500 page
+    r"Better Errors|Rails\.root:|"               # Rails debug (better_errors / web-console)
+    r"Whoops, looks like something went wrong",  # Laravel / Symfony (Whoops) debug page
+    re.IGNORECASE)
+
 
 # ---- declarative matchers -------------------------------------------------------------------
 
@@ -1041,6 +1050,39 @@ def content_type_mismatch(ctx, probe) -> bool | None:
             return True
     ctx.evidence.update(checked=checked)
     return False if checked else None
+
+
+def debug_mode_enabled(ctx, probe) -> bool | None:
+    """Framework debug mode shipped to production: an error surfaces the full interactive debugger /
+    DEBUG page (Werkzeug, Django DEBUG=True, Rails Better Errors, Laravel Whoops), leaking source,
+    settings and env -- and, for Werkzeug, an RCE console. Strictly worse than a bare leaked stack
+    trace (qa-errhyg): this is the framework's debug UI. Inspects the error route (default /crash) and
+    probes for a live Werkzeug debugger resource. N/A when nothing could be inspected."""
+    inspected = False
+    target = probe.probe.get("target", "/crash")
+    if _served(ctx, target):
+        try:
+            resp = ctx.client.get(target)
+            inspected = True
+            if _DEBUG_FINGERPRINT.search(resp.text):
+                ctx.evidence.update(endpoint=target, status=resp.status_code, debug_ui=True)
+                return True
+        except (httpx.HTTPError, httpx.InvalidURL):
+            pass
+    # Werkzeug/Flask debug ships an interactive debugger reachable WITHOUT an error: it serves its own JS
+    # resource. A normal app 404s or returns HTML here; only a live debugger answers with javascript --
+    # gating on the javascript content-type avoids false-firing on a 404 page that reflects the query.
+    try:
+        r = ctx.client.get("/", params={"__debugger__": "yes", "cmd": "resource", "f": "debugger.js"})
+        inspected = True
+        if (r.status_code == 200 and "javascript" in r.headers.get("content-type", "").lower()
+                and "werkzeug" in r.text.lower()):
+            ctx.evidence.update(endpoint="/?__debugger__=yes", debug_ui=True, framework="werkzeug")
+            return True
+    except (httpx.HTTPError, httpx.InvalidURL):
+        pass
+    ctx.evidence.update(inspected=inspected, debug_ui=False)
+    return False if inspected else None
 
 
 def session_cookie_missing_flag(ctx, probe) -> bool | None:
@@ -2114,6 +2156,7 @@ PREDICATES = {
     "api_bola": api_bola,
     "data_integrity_roundtrip": data_integrity_roundtrip,
     "content_type_mismatch": content_type_mismatch,
+    "debug_mode_enabled": debug_mode_enabled,
     "session_cookie_missing_flag": session_cookie_missing_flag,
     "login_no_rate_limit": login_no_rate_limit,
     "csrf_missing": csrf_missing,
@@ -2177,6 +2220,7 @@ _PREDICATE_REASONS = {
     "api_bola": "one account's object (and its secret) was readable by another account (broken object-level auth)",
     "data_integrity_roundtrip": "a created object could not be read back afterward (non-durable write / silent data loss)",
     "content_type_mismatch": "a response's body contradicts its declared Content-Type (e.g. JSON served as text/html -> client breakage / reflected-JSON XSS)",
+    "debug_mode_enabled": "framework debug mode is on in production (interactive debugger / DEBUG page -> source, settings, env and an RCE console exposed)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
     "csrf_missing": "state-changing POST accepted cross-site with no token / SameSite",
     "idor_horizontal": "another account's object was readable by id (broken access control)",

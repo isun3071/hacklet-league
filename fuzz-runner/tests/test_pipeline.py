@@ -24,6 +24,7 @@ ALL_PROBES = [
     "sec-dos-001",  # decompression-bomb: decompresses gzip request bodies with no size cap
     "sec-headers-001", "sec-headers-002", "sec-headers-004", "sec-headers-005", "sec-headers-006",  # header depth (003=HSTS https-only); 006=X-Powered-By
     "qa-errhyg-001", "perf-ttfb-001",
+    "sec-debug-001",  # framework debug mode on in prod (Werkzeug debugger page at /crash)
     "sec-exposure-001", "sec-exposure-002", "sec-exposure-003", "sec-exposure-004",  # .env + .git + .aws/credentials
     "sec-idor-001",  # horizontal IDOR (self-as-oracle, two accounts)
     "qa-crash-010",  # crash-resistance: malformed input (values / JSON / decode-crashing path) -> 5xx
@@ -137,8 +138,9 @@ def test_vulnerable_app_accrues_slop():
     # seo: missing viewport/description meta -> 4 (own category).
     # http-conformance: text/html with no charset -> 3 (own category).
     # host-header injection -> 15. response-splitting -> 20. decompression-bomb -> 12. (own categories)
-    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8. -> total 496.
-    assert report.slop_score == 496
+    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8.
+    # debug-mode: Werkzeug debugger page at /crash -> 20 (own category, no decay). -> total 516.
+    assert report.slop_score == 516
 
 
 def test_hardened_app_is_clean():
@@ -179,6 +181,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["sec-dos-001"] == "not_applicable"    # no endpoint decompresses a request body
     assert o["sec-exposure-004"] == "clean"   # no /.aws/credentials served
     assert o["sec-headers-006"] == "clean"    # no X-Powered-By header
+    assert o["sec-debug-001"] == "clean"      # no debug UI: /crash absent, no live Werkzeug debugger
     assert o["sec-idor-001"] == "not_applicable"      # same gate
     assert o["sec-domxss-001"] == "not_applicable"    # browser-gated
     assert o["qa-race-001"] == "not_applicable"       # no password form -> can't self-register

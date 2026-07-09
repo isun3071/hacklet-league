@@ -35,6 +35,12 @@ MAX_DEPTH = 2
 # footgun — it's why an authed DVWA crawl kept dropping to the login page mid-run).
 _LOGOUT = re.compile(r"(?:^|[/_-])(?:logout|log-?out|log_?out|signout|sign-?out|sign_?out|logoff)\b", re.I)
 
+# Un-rendered client-side template syntax leaking into markup: `${x}` (JS template literal), `{{x}}`
+# (Angular/Vue/Handlebars/Jinja), or a stray backtick. A target that ships these in an href/name has a
+# rendering bug — they are never real server routes or params, so probing them chases ghost endpoints.
+# (`#{x}` Pug/Ruby needs no handling here: `#` is the URL-fragment delimiter, stripped before this check.)
+_TEMPLATE_ARTIFACT = re.compile(r"\$\{|\{\{|\}\}|`")
+
 
 def _same_origin_path(href: str, base_url: str, page_path: str) -> str | None:
     """Resolve href against the current page; return its path if same-origin (and not a logout link),
@@ -50,6 +56,8 @@ def _same_origin_path(href: str, base_url: str, page_path: str) -> str | None:
     path = target.path or "/"
     if _LOGOUT.search(path):
         return None  # crawling logout would destroy the authenticated session
+    if _TEMPLATE_ARTIFACT.search(path):
+        return None  # an un-rendered template literal in the href -> a ghost route, not a real endpoint
     return path
 
 
@@ -125,7 +133,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                         # includable GET param is testable — the crawl otherwise drops the query string
                         if "?" in href:
                             for name in parse_qs(href.split("?", 1)[1].split("#")[0], keep_blank_values=True):
-                                link_params.setdefault(p, set()).add(name)
+                                if not _TEMPLATE_ARTIFACT.search(name):  # skip a `${x}`/`{{x}}` param name
+                                    link_params.setdefault(p, set()).add(name)
                         if p not in visited:
                             queue.append((p, depth + 1))
 

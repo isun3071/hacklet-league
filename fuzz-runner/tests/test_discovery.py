@@ -61,6 +61,15 @@ def test_logout_links_are_excluded_from_the_crawl():
     assert _same_origin_path("/blog/post", "http://x", "/") == "/blog/post"
 
 
+def test_template_literal_artifacts_are_excluded_from_the_crawl():
+    # un-rendered client-side templates leaked into markup are ghost routes, not real endpoints
+    for href in ("/api/${apiBase}/items", "/{{userId}}/profile", "/list/{{i}}", "/x/`tpl`/y"):
+        assert _same_origin_path(href, "http://x", "/") is None, href
+    # a real route that merely contains a dollar sign or braces-free path is kept
+    assert _same_origin_path("/api/v1/items", "http://x", "/") == "/api/v1/items"
+    assert _same_origin_path("/prices$", "http://x", "/") == "/prices$"  # lone $, not a ${...} artifact
+
+
 def test_attribute_regexes_ignore_data_attrs():
     # data-* attributes must not be mistaken for href/name/action (no leading boundary -> phantoms).
     assert _LINK.findall('<a href="/real">x</a>') == ["/real"]

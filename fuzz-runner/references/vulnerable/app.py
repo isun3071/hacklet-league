@@ -143,7 +143,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 raise ValueError("kaboom while rendering report")
             except ValueError:
-                return self._send(500, "Internal Error\n\n" + traceback.format_exc())  # leaks trace
+                # Flask debug=True shipped to prod: the full interactive Werkzeug debugger (source + an
+                # RCE console), not merely a leaked trace. The traceback keeps qa-errhyg firing too.
+                page = ("<!DOCTYPE html><html><head><title>ValueError: kaboom // Werkzeug Debugger"
+                        "</title></head><body><h1 class=\"traceback\">Werkzeug Debugger</h1><pre>"
+                        + traceback.format_exc() + "</pre></body></html>")
+                return self._send(500, page)  # debug UI (sec-debug-001) + leaked trace (qa-errhyg)
         if self.path.startswith("/heavy"):
             time.sleep(1.5)  # slow: over the TTFB gate, but small enough to keep the suite fast
             return self._send(200, "done")
