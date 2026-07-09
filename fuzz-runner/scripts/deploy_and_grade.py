@@ -59,20 +59,47 @@ def _docker(*args, timeout=None, check=False):
     return p
 
 
-def _build_streamed(dockerfile, ctx, timeout=1200):
-    """docker build, STREAMING output to the terminal so a long base-image pull / npm-or-pip install is
-    visible (not a silent hang), while still capturing the tail for the LLM error-feedback loop."""
+_STEP = re.compile(r"^#\d+ \[[^\]]*\d+/\d+\]\s+(.+)")   # BuildKit step header, e.g. "#5 [2/6] RUN npm ci"
+_STEP_LEGACY = re.compile(r"^Step \d+/\d+ : (.+)")       # legacy builder
+_META = re.compile(r"load metadata for (\S+)")
+
+
+def _build_streamed(dockerfile, ctx, verbose=False, timeout=1200):
+    """docker build. verbose -> stream every line (prefixed '│'). Otherwise print only the high-level
+    steps: base-image pull, each RUN/COPY/WORKDIR instruction (so 'RUN npm install' / 'RUN pip install
+    -r requirements.txt' are visible), and errors — with a heartbeat during long steps. Always captures
+    the tail for the LLM error-feedback loop."""
     proc = subprocess.Popen(["docker", "build", "-f", str(dockerfile), "-t", APP, str(ctx)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    lines, start = [], time.time()
+    lines, start, dots = [], time.time(), 0
     for line in proc.stdout:
-        sys.stderr.write("    │ " + line)
-        sys.stderr.flush()
         lines.append(line)
+        if verbose:
+            sys.stderr.write("    │ " + line)
+            sys.stderr.flush()
+        else:
+            step = _STEP.match(line) or _STEP_LEGACY.match(line)
+            meta = _META.search(line)
+            if step or meta or (line.startswith("#") and "ERROR" in line):
+                if dots:
+                    sys.stderr.write("\n"); dots = 0
+                if step:
+                    sys.stderr.write("    ▸ " + step.group(1).split("@sha256:")[0].strip()[:90] + "\n")
+                elif meta:
+                    sys.stderr.write("    ▸ pulling base image " + meta.group(1) + "\n")
+                else:
+                    sys.stderr.write("    ✗ " + line.strip()[:120] + "\n")
+                sys.stderr.flush()
+            elif line.strip():          # suppressed detail -> a heartbeat so long installs show life
+                dots += 1
+                if dots % 80 == 0:
+                    sys.stderr.write("."); sys.stderr.flush()
         if time.time() - start > timeout:
             proc.kill()
             lines.append("\n(build exceeded %ds — killed)" % timeout)
             break
+    if dots:
+        sys.stderr.write("\n")
     proc.wait()
     return proc.returncode, "".join(lines)[-3000:]
 
@@ -212,7 +239,7 @@ def _start_db(db: dict):
     print("  (db readiness probe timed out — continuing anyway)")
 
 
-def execute(plan: dict, repo: pathlib.Path) -> str:
+def execute(plan: dict, repo: pathlib.Path, verbose: bool = False) -> str:
     _docker("rm", "-f", APP)
     _docker("network", "create", NET)  # idempotent-ish; ignore "already exists"
     _start_db(plan.get("db") or {"type": "none"})
@@ -226,7 +253,7 @@ def execute(plan: dict, repo: pathlib.Path) -> str:
     dockerfile.write_text(plan["dockerfile"])
 
     print("  docker build (streaming — base-image pull + npm/pip install is the slow part):")
-    rc, tail = _build_streamed(dockerfile, ctx)
+    rc, tail = _build_streamed(dockerfile, ctx, verbose=verbose)
     if rc != 0:
         raise DeployError("BUILD FAILED:\n" + tail)
 
@@ -279,6 +306,8 @@ def main():
     ap.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model id (default: %(default)s)")
     ap.add_argument("--attempts", type=int, default=3, help="max deploy attempts (LLM fixes errors between)")
     ap.add_argument("--browser", action="store_true", help="grade the browser surface too (a11y/CWV/DOM-XSS)")
+    ap.add_argument("-v", "--verbose", action="store_true",
+                    help="stream the full docker build output (default: high-level steps only)")
     ap.add_argument("--keep", action="store_true", help="don't tear the containers down after grading")
     args = ap.parse_args()
 
@@ -293,7 +322,7 @@ def main():
             if plan.get("notes"):
                 print(f"  notes: {plan['notes'][:200]}")
             try:
-                url = execute(plan, repo)
+                url = execute(plan, repo, verbose=args.verbose)
                 break
             except DeployError as e:
                 error = str(e)
