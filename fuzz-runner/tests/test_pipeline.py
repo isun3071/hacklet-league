@@ -127,20 +127,13 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-split-001"] == "slop_detected"
     # sec-dos-001: /ingest decompresses a gzip request body with no size cap -> zip-bomb exhaustible:
     assert o["sec-dos-001"] == "slop_detected"
-    # sqli 40 + secrets 35 + xss 30 + idor 40 + csrf 25 + cors 25 + redirect 20 + race 25 + ratelimit 15 + errhyg 8 + ttfb 5 + load 10 + compress 5.
-    # session: httponly 20 + samesite 15 + secure 15, sorted-desc decay -> 20 + 9 + 5.4 = 34.4.
-    # security-headers: nosniff x9 (3) + CSP 8 + clickjacking 5 + referrer 2 + X-Powered-By 2, sorted-desc decay.
-    # crash-resistance: ONE general finding -> 15 (was 7 reference-specific probes damped to ~14.58).
-    # caching: /config.js uncacheable -> 8 (own category, no decay).
-    # http-correctness: soft-404 -> 6 (own category).
-    # accessibility: static WCAG hard-fails -> 5 (qa-a11y variant group; browser qa-a11y-001 is N/A here).
-    # broken-links: a homepage <a href> dead-ends on a 4xx -> 10 (own category).
-    # seo: missing viewport/description meta -> 4 (own category).
-    # http-conformance: text/html with no charset -> 3 (own category).
-    # host-header injection -> 15. response-splitting -> 20. decompression-bomb -> 12. (own categories)
-    # exposure: .env 35 + .aws 35 + .git 30(grouped), sorted-desc -> 66.8.
-    # debug-mode: Werkzeug debugger page at /crash -> 20 (own category, no decay). -> total 516.
-    assert report.slop_score == 516
+    # Total decomposes by axis (the subtotals sum to slop_score). Penalties are risk-priced
+    # (frequency x severity, see the catalog): security holds its catastrophic per-instance ceiling (40),
+    # while qa/perf are priced up for their every-user frequency. On this deliberately security-riddled
+    # reference, security still dominates; a realistic janky app (references/qa-janky) leans qa/perf.
+    assert report.axis_slop == {"security": 412, "qa": 158, "performance": 68}
+    assert report.slop_score == 638
+    assert sum(report.axis_slop.values()) == report.slop_score
 
 
 def test_hardened_app_is_clean():

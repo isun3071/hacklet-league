@@ -3,7 +3,8 @@ bundle: qa
 category: http-correctness
 pool: public
 evidence_model: provable
-penalty: 6   # soft-404: a nonexistent URL served as 2xx -> caches/crawlers/monitors see phantom content
+penalty: 12   # soft-404: caches, crawlers and monitors treat phantom content as real ->
+              # recurring, moderate severity (corrupts SEO + observability).
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

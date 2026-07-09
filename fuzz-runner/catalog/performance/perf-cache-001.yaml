@@ -3,7 +3,8 @@ bundle: performance
 category: caching
 pool: public
 evidence_model: provable
-penalty: 8   # static asset not cacheable -> a full refetch on every page load (bandwidth + latency)
+penalty: 16   # an uncacheable static asset is refetched on every page load -> bandwidth
+              # + latency on every repeat visit across the whole user base.
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

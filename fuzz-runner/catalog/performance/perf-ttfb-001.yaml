@@ -3,7 +3,7 @@ bundle: performance
 category: speed
 pool: public
 evidence_model: provable
-penalty: 5
+penalty: 12   # slow TTFB (>1.0s) -> every request waits; the slow-server tax on all traffic.
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

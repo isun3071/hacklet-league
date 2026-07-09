@@ -3,7 +3,8 @@ bundle: performance
 category: compression
 pool: public
 evidence_model: provable
-penalty: 5
+penalty: 12   # sizeable text served uncompressed -> a heavier, slower load every time,
+              # worse on mobile. Perf is the highest-frequency harm axis.
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

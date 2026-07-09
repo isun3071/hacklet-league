@@ -3,7 +3,8 @@ bundle: performance
 category: load-time
 pool: public
 evidence_model: provable
-penalty: 15   # the flagship user-facing metric: computed load time crosses the ~5s abandonment ceiling
+penalty: 34   # load past the ~5s abandonment ceiling. 53% of mobile visits bounce >3s
+              # (Google 2016); 79% won't return (Akamai). Flagship high-freq churn -> qa/perf top.
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

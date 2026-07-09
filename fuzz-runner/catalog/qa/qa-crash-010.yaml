@@ -3,7 +3,8 @@ bundle: qa
 category: crash-resistance
 pool: public
 evidence_model: provable
-penalty: 15   # unhandled 5xx on malformed input (missing input validation) — general, fans the surface
+penalty: 32   # unhandled 5xx on malformed input; every wrong-order user hits it. ~32% of
+              # users churn after ONE bad experience (PwC 2018) -> near the qa/perf top.
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

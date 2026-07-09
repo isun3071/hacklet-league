@@ -118,6 +118,25 @@ case. A fake `ctx` is `type("C", (), {"base_url": url, "headers": None, "client"
 Delete the YAML — the runner stops loading it. Remove its assertion in `tests/`. For an event-grade
 catalog, *deprecate in the changelog* rather than silently delete, so past results stay interpretable.
 
+## Pricing a penalty (risk = frequency × severity)
+A penalty is **expected harm**, not raw severity. Price it by how often a real user is hurt × how badly:
+
+- **Security = low-frequency × terminal-severity.** A DB-dumping SQLi / auth-bypass / RCE is rare per app
+  (injection incidence ~3% of endpoints, Verizon DBIR / OWASP) but a single one is company-ending (avg
+  breach $4.4M, IBM 2025). These sit at the **per-instance ceiling (≈40)** and no other class outranks a
+  single one. Defense-in-depth (missing headers) is low × low → stays small.
+- **QA / performance = high-frequency × moderate-severity.** Every visitor on slow 4G hits the slow page
+  (~53% bounce past 3s, Google 2016; ~79% never return); every wrong-order user hits the crash (~32%
+  churn after one bad experience, PwC 2018); ~16% of people are barred by a11y failures (WHO 2023). Priced
+  **up toward the deadly range but strictly below the catastrophic-security ceiling** — no single qa/perf
+  penalty ≥ the worst single security penalty.
+- **Net effect (deliberate):** the aggregate leans qa/perf (high-frequency harm stacks across many probes
+  and instances), while the per-incident ceiling stays with catastrophic security.
+
+Don't multiply ordinal severities (Cox 2008, *What's Wrong with Risk Matrices?* — ordinal labels aren't
+cardinal). These magnitudes are a **designed table** with a consequence-triggered override band (terminal
+severity keeps the ceiling regardless of low frequency), the practice NIST 800-30 / MIL-STD-882E use.
+
 ## The calibration gate (non-negotiable)
 Every add/change must keep `uv run pytest` green. A probe must read **slop on `references/vulnerable`,
 clean on `references/hardened`, and N/A or clean on `references/minimal`** — the same surface, three
@@ -131,8 +150,8 @@ verdicts. If your probe needs a surface the references lack, add it (broken in `
 That coupling is the point: a probe that can't separate defended-from-broken-from-absent does not merge.
 
 **The score:** `tests/test_pipeline.py` holds the **single authoritative** vulnerable-app score
-(`assert report.slop_score == N`, with a breakdown comment). A probe that fires on `vulnerable` changes
-`N` by its (damped) penalty — update it there, in **one** place. `test_remote.py` and the docker tests
+(`assert report.slop_score == N`, plus an `axis_slop` decomposition assertion that must sum to it). A
+probe that fires on `vulnerable` changes `N` by its (damped) penalty — update it there, in **one** place. `test_remote.py` and the docker tests
 assert *deployer-equivalence* (they equal the SubprocessDeployer baseline), so they self-track and never
 need editing for a scoring change.
 

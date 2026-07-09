@@ -3,7 +3,8 @@ bundle: qa
 category: console-errors
 pool: public
 evidence_model: oracle
-penalty: 8
+penalty: 22   # an uncaught JS error on load breaks interactivity for every visitor ->
+              # high-frequency functional failure of a client-rendered app.
 applicability:
   requires: [browser]   # needs a rendered page; N/A without --browser
 probe:
