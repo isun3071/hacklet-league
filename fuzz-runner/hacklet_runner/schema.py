@@ -85,6 +85,7 @@ class Report:
     outcomes: list[Outcome] = field(default_factory=list)
     axis_slop: dict = field(default_factory=dict)          # per-bundle damped subtotal; sums to slop_score
     surface: dict = field(default_factory=dict)            # what discovery SAW (discovery.surface_metrics)
+    coverage: dict = field(default_factory=dict)           # how much of the battery APPLIED (coverage_metrics)
 
     @property
     def by_id(self) -> dict[str, str]:

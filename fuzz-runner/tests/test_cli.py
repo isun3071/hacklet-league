@@ -1,6 +1,7 @@
 """CLI output renderers — pure text builders, no server/Docker, so they run on the dev box."""
-from hacklet_runner.aggregate import compute_axis_slop, compute_slop_score
+from hacklet_runner.aggregate import compute_axis_slop, compute_slop_score, coverage_metrics
 from hacklet_runner.cli import (
+    _coverage_text,
     _failed_text,
     _fmt_evidence,
     _report_payload,
@@ -69,9 +70,22 @@ def test_report_payload_shape():
     p = _report_payload(_report())
     assert p["slop_score"] == 33
     assert "surface" in p                      # observed-surface fingerprint rides in --json
+    assert "coverage" in p                      # test-coverage fingerprint rides in --json too
     assert len(p["outcomes"]) == 4
     assert p["outcomes"][0]["probe_id"] == "sec-xss-001"
     assert p["outcomes"][0]["target"] == "/search"
+
+
+def test_coverage_text_shows_pct_and_na_kinds():
+    outs = [Outcome("h", "security", "security-headers", "slop_detected", 3),
+            Outcome("s", "security", "sql-injection", "not_applicable", 0)]
+    t = _coverage_text(Report(slop_score=3, outcomes=outs, coverage=coverage_metrics(outs)))
+    assert "1/2 tests applicable (50%)" in t
+    assert "sql-injection" in t                 # the n/a kind is named — the calibration signal
+
+
+def test_coverage_text_empty_without_coverage():
+    assert _coverage_text(Report(slop_score=0)) == ""   # old/coverage-less reports render nothing
 
 
 def test_report_payload_carries_evidence():

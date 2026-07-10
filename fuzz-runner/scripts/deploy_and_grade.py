@@ -497,10 +497,15 @@ def main():
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
         result.update(slop_score=report.slop_score, axis_slop=report.axis_slop,
                       observed_surface=report.surface,   # what discovery SAW (parity numerator vs expected)
+                      coverage=report.coverage,          # how much of the battery APPLIED (calibration input)
                       findings=[{"probe_id": o.probe_id, "bundle": o.bundle, "category": o.category,
                                  "penalty": o.penalty, "group": o.variant_group_id, "reason": o.reason,
                                  "target": o.target, "evidence": o.evidence} for o in slop])   # full provenance
         print(f"\n  SLOP SCORE: {report.slop_score}   ({_axis_str(report.axis_slop)})")
+        cov = report.coverage
+        if cov.get("probes_total"):   # test coverage: how much of the battery applied vs went n/a (calibration)
+            print(f"  COVERAGE: {cov['probes_applicable']}/{cov['probes_total']} tests applicable "
+                  f"({cov['pct_applicable']}%)   n/a kinds: {', '.join(cov['na_kinds']) or 'none'}")
         # ALL findings, grouped bundle -> category. The category shows its DAMPED subtotal (what it adds
         # to the score); the rows under it are each flaw's RAW penalty, which taper within the category
         # (within-category diminishing returns + variant-group), so the rows can exceed the subtotal.

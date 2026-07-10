@@ -1,5 +1,5 @@
 """Aggregation dampers (format_spec §4.2 composition rules)."""
-from hacklet_runner.aggregate import compute_axis_slop, compute_slop_score
+from hacklet_runner.aggregate import compute_axis_slop, compute_slop_score, coverage_metrics
 from hacklet_runner.schema import Outcome
 
 
@@ -49,3 +49,23 @@ def test_axis_slop_decomposes_and_sums_to_total():
     axis = compute_axis_slop(outs)
     assert axis == {"security": 40, "qa": 48, "performance": 12}
     assert sum(axis.values()) == compute_slop_score(outs)
+
+
+def test_coverage_counts_applicable_vs_na_by_probe_and_kind():
+    outs = [
+        _o("headers-1", "security-headers", 3, outcome="slop_detected"),   # ran (fired)
+        _o("headers-1", "security-headers", 3, outcome="clean"),           # same probe, fan-out -> still ran
+        _o("xss-1", "xss", 30, outcome="clean"),                           # ran (clean = applicable)
+        _o("sqli-1", "sql-injection", 40, outcome="not_applicable"),       # no input surface -> n/a
+        _o("csrf-1", "csrf", 15, outcome="not_applicable"),                # n/a
+    ]
+    c = coverage_metrics(outs)
+    assert c["probes_total"] == 4 and c["probes_applicable"] == 2 and c["probes_na"] == 2
+    assert c["pct_applicable"] == 50                       # half the battery applied
+    assert c["ran_kinds"] == ["security-headers", "xss"]   # kinds that ran (any probe applied)
+    assert c["na_kinds"] == ["csrf", "sql-injection"]      # kinds entirely n/a — the calibration signal
+
+
+def test_coverage_empty_outcomes():
+    c = coverage_metrics([])
+    assert c["probes_total"] == 0 and c["pct_applicable"] == 0 and c["na_kinds"] == []

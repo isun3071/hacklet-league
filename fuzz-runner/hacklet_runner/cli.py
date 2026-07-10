@@ -31,7 +31,23 @@ _DEPLOY_FAILURES = (RuntimeError, TimeoutError, subprocess.SubprocessError, OSEr
 
 def _report_payload(report) -> dict:
     return {"slop_score": report.slop_score, "axis_slop": report.axis_slop,
-            "surface": report.surface, "outcomes": [asdict(o) for o in report.outcomes]}
+            "surface": report.surface, "coverage": report.coverage,
+            "outcomes": [asdict(o) for o in report.outcomes]}
+
+
+def _coverage_text(report) -> str:
+    """Terminal view of test COVERAGE — what % of the battery applied, and which KINDS ran vs n/a — so a
+    low slop score is legible as 'clean' or 'we had little to test'. Empty when no coverage was computed."""
+    c = report.coverage
+    if not c or not c.get("probes_total"):
+        return ""
+    lines = [f"  Test coverage: {c['probes_applicable']}/{c['probes_total']} tests applicable "
+             f"({c['pct_applicable']}%) · {c['probes_na']} n/a"]
+    if c.get("ran_kinds"):
+        lines.append(f"    ran ({len(c['ran_kinds'])} kinds): " + ", ".join(c["ran_kinds"]))
+    if c.get("na_kinds"):
+        lines.append(f"    n/a ({len(c['na_kinds'])} kinds): " + ", ".join(c["na_kinds"]))
+    return "\n".join(lines)
 
 
 def _axis_line(report) -> str:
@@ -54,9 +70,12 @@ def _summary_text(report, source: str) -> str:
     ]
     if report.axis_slop:
         lines.append(_axis_line(report))
+    cov = _coverage_text(report)
+    if cov:
+        lines += ["", cov]
     lines += [
         "",
-        f"  {len(slop)} slop · {clean} clean · {na} n/a        ({len(outs)} probe runs)",
+        f"  {len(slop)} slop · {clean} clean · {na} n/a        ({len(outs)} checks incl. fan-out)",
         "",
     ]
     if slop:

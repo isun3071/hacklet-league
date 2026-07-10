@@ -37,6 +37,7 @@ def _row(rec: dict) -> dict:
     sp = rec.get("stack_profile") or {}
     obs = rec.get("observed_surface") or {}
     exp = rec.get("expected_surface") or {}
+    cov = rec.get("coverage") or {}
     slop = rec.get("slop_score")
     size = obs.get("surface_size")
     return {
@@ -57,6 +58,10 @@ def _row(rec: dict) -> dict:
         "exp_login": exp.get("login"), "exp_upload": exp.get("upload"),
         "exp_search": exp.get("search"), "exp_api": exp.get("api"), "exp_views": exp.get("views"),
         "slop_score": slop, "findings": len(rec.get("findings", [])),
+        # how much of the battery APPLIED — the fuzzer's-eye coverage. Low pct or many n/a kinds = we
+        # tested little here (blind, or a genuinely tiny app); a low slop score then means little.
+        "pct_applicable": cov.get("pct_applicable"),
+        "na_kinds": len(cov.get("na_kinds") or []),
         # slop normalized by how much we SAW: high surface + low ratio = clean; low surface = suspect
         "slop_per_surface": round(slop / size, 2) if (slop is not None and size) else None,
     }
@@ -85,6 +90,7 @@ def group_parity(rows: list, key: str) -> dict:
         out[g] = {
             "n": len(rs), "deployed": sum(r["deployed"] for r in rs),
             "surface_avg": _avg([r["obs_surface_size"] for r in dep]),
+            "coverage_avg": _avg([r["pct_applicable"] for r in dep]),   # avg % of battery that applied
             "findings_avg": _avg([r["findings"] for r in dep]),
             "slop_avg": _avg([r["slop_score"] for r in dep]),
             "slop_per_surface_avg": _avg([r["slop_per_surface"] for r in dep]),
@@ -109,7 +115,8 @@ def blind_spots(rows: list, key: str) -> list:
 _CSV_COLS = ["repo", "app_kind", "web_gradeable", "deployed", "framework", "routing", "api_style", "stack",
              "n_features", "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints", "obs_surface_size",
              "obs_login", "obs_upload", "obs_api", "exp_login", "exp_upload", "exp_search",
-             "exp_api", "exp_views", "slop_score", "findings", "slop_per_surface"]
+             "exp_api", "exp_views", "pct_applicable", "na_kinds", "slop_score", "findings",
+             "slop_per_surface"]
 
 
 def main():
@@ -163,16 +170,18 @@ def main():
     for g, agg in sorted(gp.items(), key=lambda kv: -kv[1]["n"]):
         print(f"  {g:16} {agg['n']:>3} apps  ({agg['deployed']} deployed)")
 
-    # per-stack observed surface + TYPE parity (saw / should-have-seen)
+    # per-stack observed surface + test COVERAGE + TYPE parity. cov% = avg share of the battery that
+    # applied; a low cov% (lots of n/a) means a low slop score is uninformative, not necessarily clean.
     print(f"\nOBSERVED SURFACE & TYPE PARITY  (per {args.by}; parity = saw / source-says-exists)")
-    print(f"  {'stack':16} {'dep':>4} {'surf':>5} {'find':>5} {'slop':>5}   "
+    print(f"  {'stack':16} {'dep':>4} {'surf':>5} {'cov%':>5} {'find':>5} {'slop':>5}   "
           + "  ".join(f"{t:>9}" for t in _TYPES))
     for g, agg in sorted(gp.items(), key=lambda kv: -kv[1]["n"]):
         par = "  ".join(
             (f"{o}/{e}".rjust(9) if e else "   —".rjust(9)) for o, e in
             (agg["parity"][t] for t in _TYPES))
         print(f"  {g:16} {agg['deployed']:>4} {str(agg['surface_avg']):>5} "
-              f"{str(agg['findings_avg']):>5} {str(agg['slop_avg']):>5}   {par}")
+              f"{str(agg['coverage_avg']):>5} {str(agg['findings_avg']):>5} "
+              f"{str(agg['slop_avg']):>5}   {par}")
 
     # blind-spot ranking (prevalence × brokenness = # apps where we missed a surface the source implies)
     print("\nBLIND SPOTS  (fix order — apps where the source says a surface exists but we didn't see it)")
