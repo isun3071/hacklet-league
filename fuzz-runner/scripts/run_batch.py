@@ -46,6 +46,7 @@ def _record_wedge(results, rec, secs):
     with open(results, "a") as f:
         f.write(json.dumps({
             "repo": rec["repo"], "deployed": False, "timeout": "wedge",
+            "timings": {"total_s": float(secs)},   # it ran at least this long before we killed it
             "deploy_error": f"WEDGED — killed after {secs}s (hung past internal build/grade caps)",
             "ts": time.time(), "hackathon": rec.get("hackathon"),
             "project": rec.get("project"), "winner": rec.get("winner"),

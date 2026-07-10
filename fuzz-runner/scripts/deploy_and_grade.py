@@ -446,15 +446,23 @@ def main():
               "browser": args.browser, "ts": time.time(), **meta}   # ts: recorder stamps it (sortable)
 
     plan, url, error, repo = None, None, "", None
+    # wall-clock per phase, as MEASUREMENT not just gates — which stacks are expensive to deploy vs grade,
+    # and how that correlates with slop/coverage. Accumulated across retries; partial on an early return.
+    timings = {"clone_s": 0.0, "plan_s": 0.0, "deploy_s": 0.0, "grade_s": 0.0, "total_s": 0.0}
+    t_app = time.monotonic()
     try:
+        _t = time.monotonic()
         repo = clone(args.repo, timeout=args.clone_timeout)
+        timings["clone_s"] = round(time.monotonic() - _t, 1)
         context = gather_context(repo)
         for attempt in range(1, args.attempts + 1):
             result["attempts_used"] = attempt
             online = attempt >= 2 and args.web_search   # attempt 1 cheap/no-search; retries look up recent stacks
             print(f"\n=== attempt {attempt}/{args.attempts}: planning deploy ({args.model}"
                   f"{' + web search' if online else ''}) ===")
+            _t = time.monotonic()
             plan = plan_deploy(context, args.model, error=error, prev=plan, online=online)
+            timings["plan_s"] += round(time.monotonic() - _t, 1)   # LLM planning, summed across attempts
             _routing = (plan.get("stack_profile") or {}).get("routing", "?")
             print(f"  stack: {plan.get('stack')} [{_routing}]  port: {plan.get('port')}  "
                   f"db: {(plan.get('db') or {}).get('type')}")
@@ -468,10 +476,13 @@ def main():
                 result["skip_reason"] = f"not web-gradeable (app_kind={plan.get('app_kind') or '?'})"
                 print(f"\n  SKIP — {result['skip_reason']}; recorded, not graded (no fabricated deploy)")
                 return
+            _t = time.monotonic()
             try:
                 url = execute(plan, repo, verbose=args.verbose, build_timeout=args.build_timeout)
+                timings["deploy_s"] += round(time.monotonic() - _t, 1)   # build + db + run + health
                 break
             except DeployError as e:
+                timings["deploy_s"] += round(time.monotonic() - _t, 1)   # a failed attempt cost time too
                 error = str(e)
                 result["deploy_error"] = (error.strip().splitlines() or ["unknown"])[0][:200]
                 if "BUILD TIMEOUT" in result["deploy_error"]:
@@ -485,15 +496,18 @@ def main():
             return   # result (deployed=False, deploy_error) is written in the finally
         result.update(deployed=True)
         print(f"\n=== grading {url} ===")
+        _t = time.monotonic()
         try:
             report = grade(url, args.browser, timeout=args.grade_timeout)
         except GradeTimeout as e:
+            timings["grade_s"] = round(time.monotonic() - _t, 1)
             result["grade_timeout"] = True         # deployed but ungradeable in budget (broken/pathological
             result["timeout"] = "grade"            # target); the 'took forever' signal + shows in stats
             result["deploy_error"] = f"GRADE TIMEOUT (>{args.grade_timeout}s)"
             print(f"\n  GRADE TIMEOUT — {e}. Target too pathological to grade in budget; "
                   f"recorded, moving on.")
             return   # the finally writes the record (deployed=True, grade_timeout=True) + tears down
+        timings["grade_s"] = round(time.monotonic() - _t, 1)
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
         result.update(slop_score=report.slop_score, axis_slop=report.axis_slop,
                       observed_surface=report.surface,   # what discovery SAW (parity numerator vs expected)
@@ -533,6 +547,11 @@ def main():
             result["timeout"] = "clone"
         print(f"  {e}")
     finally:
+        timings["total_s"] = round(time.monotonic() - t_app, 1)
+        result["timings"] = timings
+        print(f"  timing: clone {timings['clone_s']:.0f}s · plan {timings['plan_s']:.0f}s · "
+              f"deploy {timings['deploy_s']:.0f}s · grade {timings['grade_s']:.0f}s · "
+              f"total {timings['total_s']:.0f}s")
         if args.record:
             with open(args.record, "a") as f:
                 f.write(json.dumps(result) + "\n")

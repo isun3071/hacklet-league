@@ -45,6 +45,12 @@ def test_blind_spots_rank_by_prevalence_times_brokenness_and_ignore_stack_random
     assert not any(s["stack"] == "server-rendered" for s in spots)   # matched surface isn't flagged
 
 
+def test_row_carries_phase_timings():
+    r = _row({"repo": "a", "timings": {"deploy_s": 48.0, "grade_s": 55.0, "total_s": 111.0}})
+    assert r["deploy_s"] == 48.0 and r["grade_s"] == 55.0 and r["total_s"] == 111.0
+    assert _row({"repo": "b"})["total_s"] is None        # missing timings -> None, not a crash
+
+
 def test_row_flags_non_web_apps_and_defaults_gradeable_true():
     assert _row({"repo": "a", "app_kind": "mobile", "web_gradeable": False})["web_gradeable"] is False
     assert _row({"repo": "b"})["web_gradeable"] is True      # old/unknown records still count toward parity

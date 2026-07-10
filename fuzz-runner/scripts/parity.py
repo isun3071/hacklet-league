@@ -38,6 +38,7 @@ def _row(rec: dict) -> dict:
     obs = rec.get("observed_surface") or {}
     exp = rec.get("expected_surface") or {}
     cov = rec.get("coverage") or {}
+    tm = rec.get("timings") or {}
     slop = rec.get("slop_score")
     size = obs.get("surface_size")
     return {
@@ -62,6 +63,8 @@ def _row(rec: dict) -> dict:
         # tested little here (blind, or a genuinely tiny app); a low slop score then means little.
         "pct_applicable": cov.get("pct_applicable"),
         "na_kinds": len(cov.get("na_kinds") or []),
+        # wall-clock per phase (measurement): which stacks are expensive to deploy vs grade
+        "deploy_s": tm.get("deploy_s"), "grade_s": tm.get("grade_s"), "total_s": tm.get("total_s"),
         # slop normalized by how much we SAW: high surface + low ratio = clean; low surface = suspect
         "slop_per_surface": round(slop / size, 2) if (slop is not None and size) else None,
     }
@@ -115,8 +118,8 @@ def blind_spots(rows: list, key: str) -> list:
 _CSV_COLS = ["repo", "app_kind", "web_gradeable", "deployed", "framework", "routing", "api_style", "stack",
              "n_features", "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints", "obs_surface_size",
              "obs_login", "obs_upload", "obs_api", "exp_login", "exp_upload", "exp_search",
-             "exp_api", "exp_views", "pct_applicable", "na_kinds", "slop_score", "findings",
-             "slop_per_surface"]
+             "exp_api", "exp_views", "pct_applicable", "na_kinds", "deploy_s", "grade_s", "total_s",
+             "slop_score", "findings", "slop_per_surface"]
 
 
 def main():

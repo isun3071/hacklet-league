@@ -115,6 +115,12 @@ def main():
     graded = [r for r in deployed if "slop_score" in r]
     ungraded = [r for r in deployed if "slop_score" not in r]   # came up but grading aborted (e.g. timeout)
     scores = [r["slop_score"] for r in graded]
+    timed = [r for r in recs if r.get("timings")]               # per-phase wall-clock, as measurement
+    _PHASES = [("clone_s", "clone"), ("plan_s", "plan(LLM)"), ("deploy_s", "deploy"),
+               ("grade_s", "grade"), ("total_s", "total")]
+
+    def _phase(key):
+        return [r["timings"][key] for r in timed if r["timings"].get(key)]
 
     # ---- (d) deploy-success rate (the hackathon-reproducibility finding) ----
     skipped = [r for r in recs if r.get("skipped")]        # not a web app -> OUT OF SCOPE, not a failure
@@ -169,6 +175,8 @@ def main():
             "non_winners": {"n": len(non_scores), "avg": round(statistics.mean(non_scores), 1) if non_scores else None},
             "anomalies": {"zeros": [r["repo"] for r in zeros], "thin": [r["repo"] for r in thin],
                           "high_outliers": [(r["repo"], r["slop_score"]) for r in highs]},
+            "timing_s": {label: {"avg": round(statistics.mean(xs), 1), "median": round(statistics.median(xs), 1),
+                                 "max": max(xs)} for key, label in _PHASES for xs in [_phase(key)] if xs},
         }, indent=2))
         return
 
@@ -240,6 +248,23 @@ def main():
         else:
             print("      (none)")
     print(f"\n    → audit any probe: scripts/stats.py {args.results} --audit <probe-id>\n")
+
+    # (f) TIMING — measurement, not just gates: where the wall-clock goes, and the slowest apps
+    if timed:
+        print(f"(f) TIMING  (wall-clock seconds per phase, across {len(timed)} apps)")
+        for key, label in _PHASES:
+            xs = _phase(key)
+            if xs:
+                print(f"    {label:10} {_stat_line(xs)}")
+        slow = sorted((r for r in timed if r["timings"].get("total_s")),
+                      key=lambda r: -r["timings"]["total_s"])[:5]
+        if slow:
+            print("    slowest (total):")
+            for r in slow:
+                t = r["timings"]
+                print(f"      {r['repo'][:48]:48} {t['total_s']:>5.0f}s   "
+                      f"(deploy {t.get('deploy_s', 0):.0f} · grade {t.get('grade_s', 0):.0f})")
+        print()
 
 
 if __name__ == "__main__":
