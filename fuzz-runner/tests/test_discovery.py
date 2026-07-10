@@ -214,3 +214,20 @@ def test_scan_associates_nearest_label():
     fields, _, _ = _scan_form_inputs('<label>Username</label><input type="text">'
                                      '<label>Bio</label><textarea></textarea>')
     assert fields == ["username", "bio"]
+
+
+# --- observed-surface fingerprint (the parity denominator) --------------------------------------
+from hacklet_runner.discovery import surface_metrics  # noqa: E402
+
+
+def test_surface_metrics_fingerprints_discovered_surface(serve):
+    s = surface_metrics(discover(serve("vulnerable")))
+    assert s["has_login"] is True and s["forms"] >= 2 and s["inputs"] >= 2
+    assert s["surface_size"] == s["routes"] + s["inputs"] + s["endpoints"]   # composite is the sum
+
+
+def test_surface_metrics_low_on_a_form_less_landing_page(serve):
+    # the 'blind-or-trivial' end: minimal app (one route, no forms/api) -> tiny surface, no categorical hits
+    s = surface_metrics(discover(serve("minimal")))
+    assert s["forms"] == 0 and s["surface_size"] == 1        # just the "/" route
+    assert s["has_login"] is False and s["has_upload"] is False and s["has_api"] is False

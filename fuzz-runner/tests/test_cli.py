@@ -68,6 +68,7 @@ def test_failed_lists_only_slop():
 def test_report_payload_shape():
     p = _report_payload(_report())
     assert p["slop_score"] == 33
+    assert "surface" in p                      # observed-surface fingerprint rides in --json
     assert len(p["outcomes"]) == 4
     assert p["outcomes"][0]["probe_id"] == "sec-xss-001"
     assert p["outcomes"][0]["target"] == "/search"

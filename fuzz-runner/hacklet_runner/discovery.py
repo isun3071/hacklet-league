@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import httpx
 
 from . import jsmine, openapi
-from .auth import is_password_change_form
+from .auth import is_password_change_form, login_form
 from .net import make_client
 from .schema import Endpoint, Form, Profile
 
@@ -353,3 +353,30 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
     }
     return Profile(base_url=base_url, routes=list(routes), forms=forms, capabilities=capabilities,
                    endpoints=endpoints)
+
+
+def surface_metrics(profile: Profile) -> dict:
+    """A quantitative + categorical fingerprint of the surface discovery actually SAW. This is the
+    denominator that separates a low slop score that means 'clean' from one that means 'we were blind':
+    genuine cleanliness shows HIGH observed surface + few findings, blindness shows LOW observed surface
+    + few findings (and, at batch scale, CLUSTERS on a stack). The same quantity feeds surface-aware
+    scoring, so it's a first-class Report field, not a script-local calc. Categorical flags (has_login/
+    upload/api) enable TYPE parity — did we see the login form five login apps each expose? — not just a
+    coverage percentage."""
+    forms = profile.forms
+    inputs = sum(len(f.fields) for f in forms)
+    caps = profile.capabilities
+    return {
+        "routes": len(profile.routes),
+        "forms": len(forms),
+        "inputs": inputs,
+        "endpoints": len(profile.endpoints),
+        "has_login": login_form(forms) is not None,
+        "has_upload": any(f.file_fields for f in forms),
+        "has_api": bool(profile.endpoints),
+        "browser_rendered": bool(caps.get("browser")),
+        "accepts_text_input": bool(caps.get("any_endpoint_accepts_text_input")),
+        "has_password_form": bool(caps.get("any_form_has_password")),
+        # composite "how much observable attack surface we saw" — the parity/normalization denominator
+        "surface_size": len(profile.routes) + inputs + len(profile.endpoints),
+    }

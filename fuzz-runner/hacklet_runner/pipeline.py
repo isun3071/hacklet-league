@@ -14,7 +14,7 @@ import httpx
 from . import secretscan
 from .aggregate import compute_axis_slop, compute_slop_score
 from .deploy import Deployer
-from .discovery import discover
+from .discovery import discover, surface_metrics
 from .net import make_client
 from .probes import MATCHERS, PREDICATES, describe
 from .schema import Form, Outcome, Probe, Profile, Report
@@ -166,7 +166,7 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         if source_dir:   # static source scan (submission zip / --source DIR); absent for a bare --target
             outcomes.append(_source_secret_outcome(source_dir))
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes,
-                      axis_slop=compute_axis_slop(outcomes))
+                      axis_slop=compute_axis_slop(outcomes), surface=surface_metrics(profile))
     finally:
         deployer.teardown()
 

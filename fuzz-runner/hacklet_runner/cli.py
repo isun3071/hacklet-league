@@ -31,7 +31,7 @@ _DEPLOY_FAILURES = (RuntimeError, TimeoutError, subprocess.SubprocessError, OSEr
 
 def _report_payload(report) -> dict:
     return {"slop_score": report.slop_score, "axis_slop": report.axis_slop,
-            "outcomes": [asdict(o) for o in report.outcomes]}
+            "surface": report.surface, "outcomes": [asdict(o) for o in report.outcomes]}
 
 
 def _axis_line(report) -> str:
