@@ -9,9 +9,9 @@ The LLM ONLY figures out the deploy; the fuzzer does the grading.
     export OPENROUTER_API_KEY=sk-or-...
     # optional: export OPENROUTER_MODEL=...   (default deepseek/deepseek-v4-flash — cheap; deploy-planning
     #   is a read-the-repo/write-a-Dockerfile task, not frontier work, and the retry loop covers misses)
-    uv run python scripts/deploy_and_grade.py https://github.com/user/repo
-    uv run python scripts/deploy_and_grade.py --browser --attempts 4 https://github.com/user/repo
-    uv run python scripts/deploy_and_grade.py /path/to/local/repo         # skip the clone
+    uv run python scripts/deploy_and_grade.py https://github.com/user/repo   # browser grade (default)
+    uv run python scripts/deploy_and_grade.py --no-browser --attempts 4 https://github.com/user/repo
+    uv run python scripts/deploy_and_grade.py /path/to/local/repo            # skip the clone
 
 Safety: builds + runs UNTRUSTED code in Docker. Run it on a sandbox/firewalled box (your RMM workstation
 is ideal). It does NOT inject real secrets — an app needing an external API key may only partly boot; the
@@ -313,7 +313,10 @@ def main():
     ap.add_argument("repo", help="a git URL or a local path")
     ap.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model id (default: %(default)s)")
     ap.add_argument("--attempts", type=int, default=3, help="max deploy attempts (LLM fixes errors between)")
-    ap.add_argument("--browser", action="store_true", help="grade the browser surface too (a11y/CWV/DOM-XSS)")
+    ap.add_argument("--no-browser", dest="browser", action="store_false",
+                    help="skip the browser-rendered surface (faster). DEFAULT is browser ON for grading: "
+                         "the render finds SPA forms/routes a static crawl misses (biggest recall win) + "
+                         "adds a11y / Core Web Vitals / DOM-XSS / console-error probes")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="stream the full docker build output (default: high-level steps only)")
     ap.add_argument("--keep", action="store_true", help="don't tear the containers down after grading")

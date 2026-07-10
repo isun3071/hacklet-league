@@ -6,7 +6,7 @@ each repo's {hackathon, project, winner} into the record so the stats are labell
     export OPENROUTER_API_KEY=sk-or-...
     uv run python scripts/run_batch.py --hackathon madhacks-fall-2025 --limit 15 --results run1.jsonl
     uv run python scripts/run_batch.py --search flask --completed --hackathons 5 --limit 20 \
-        --results run2.jsonl --browser
+        --results run2.jsonl          # browser grade by default; add --no-browser for a fast pass
 
 Builds + runs UNTRUSTED code in Docker per repo — use a sandboxed/firewalled box. Failures don't stop the
 batch (they're recorded as deployed=False for the reproducibility stat). Re-running with the same
@@ -32,7 +32,9 @@ def main():
     ap.add_argument("--pages", type=int, default=1, help="submission pages per hackathon")
     ap.add_argument("--limit", type=int, default=25, help="max repos to grade")
     ap.add_argument("--results", required=True, metavar="FILE", help="JSONL to append results to")
-    ap.add_argument("--browser", action="store_true", help="grade the browser surface too")
+    ap.add_argument("--no-browser", dest="browser", action="store_false",
+                    help="skip the browser-rendered surface (faster; default is browser ON for grading — "
+                         "the render finds SPA forms a static crawl misses, the #1 recall win)")
     ap.add_argument("--attempts", type=int, default=3, help="deploy attempts per repo")
     ap.add_argument("--model", metavar="ID", help="OpenRouter model (default: deploy_and_grade's)")
     args = ap.parse_args()
@@ -60,8 +62,8 @@ def main():
                     "--attempts", str(args.attempts), "--meta", json.dumps(
                         {"hackathon": rec.get("hackathon"), "project": rec.get("project"),
                          "winner": rec.get("winner")})]
-        if args.browser:
-            cmd += ["--browser"]
+        if not args.browser:
+            cmd += ["--no-browser"]
         if args.model:
             cmd += ["--model", args.model]
         try:
