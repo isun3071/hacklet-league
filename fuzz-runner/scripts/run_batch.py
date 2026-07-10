@@ -78,8 +78,8 @@ def main():
                     help="per-repo docker build timeout in seconds (default 480; lower = more throughput)")
     ap.add_argument("--grade-timeout", type=int, default=180, dest="grade_timeout",
                     help="per-repo grading wall-clock cap in seconds (default 180; bounds a broken target)")
-    ap.add_argument("--app-timeout", type=int, default=900, dest="app_timeout",
-                    help="HARD per-repo wall-clock (default 900s). Backstop for a wedge the in-process "
+    ap.add_argument("--app-timeout", type=int, default=1000, dest="app_timeout",
+                    help="HARD per-repo wall-clock (default 1000s). Backstop for a wedge the in-process "
                          "caps can't stop — a GIL-holding CPU spin (e.g. Playwright after a browser "
                          "crash) ignores the grade-timeout signal; only an external SIGKILL ends it")
     ap.add_argument("--model", metavar="ID", help="OpenRouter model (default: deploy_and_grade's)")
