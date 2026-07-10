@@ -267,7 +267,10 @@ def execute(plan: dict, repo: pathlib.Path, verbose: bool = False, build_timeout
     print("  docker build (streaming — base-image pull + npm/pip install is the slow part):")
     rc, tail = _build_streamed(dockerfile, ctx, verbose=verbose, timeout=build_timeout)
     if rc != 0:
-        raise DeployError("BUILD FAILED:\n" + tail)
+        # a timeout-kill is its own signal (undeployably heavy/bloated deps), not a broken build — tag it
+        # distinctly so it's the first error line and stats can count "too slow to build" separately.
+        kind = f"BUILD TIMEOUT (>{build_timeout}s)" if "build exceeded" in tail else "BUILD FAILED"
+        raise DeployError(f"{kind}:\n" + tail)
 
     app_env = plan.get("app_env") or {}
     env_args = []
