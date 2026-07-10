@@ -77,9 +77,12 @@ def main():
             print("\ninterrupted — running stats on what we have so far ...")
             break
 
-    # 3) aggregate
+    # 3) aggregate: slop distribution/anomalies, then the cross-stack parity (blind-spot calibration)
     print(f"\n\n{'=' * 60}\nAGGREGATE STATISTICS\n{'=' * 60}", flush=True)
     subprocess.run(PY + [str(_HERE / "stats.py"), args.results])
+    print(f"\n\n{'=' * 60}\nCROSS-STACK PARITY (is a low score clean, or were we blind?)\n{'=' * 60}",
+          flush=True)
+    subprocess.run(PY + [str(_HERE / "parity.py"), args.results])
 
 
 if __name__ == "__main__":
