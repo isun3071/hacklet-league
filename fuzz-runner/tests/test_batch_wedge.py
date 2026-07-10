@@ -61,3 +61,13 @@ def test_record_wedge_writes_a_findable_row(tmp_path):
     _record_wedge(str(f), {"repo": "gh/x", "hackathon": "h", "project": "p", "winner": False}, 900)
     r = json.loads(f.read_text())
     assert r["repo"] == "gh/x" and r["deployed"] is False and "WEDGED" in r["deploy_error"]
+
+
+def test_record_wedge_recovers_checkpointed_stack_id(tmp_path):
+    # a wedged app keeps the classification the child checkpointed before it was killed -> deploy-parity
+    f = tmp_path / "r.jsonl"
+    extra = {"app_kind": "web-app", "stack_profile": {"routing": "spa-path"}, "features": [{"name": "x"}]}
+    _record_wedge(str(f), {"repo": "gh/w", "hackathon": "h", "project": "p", "winner": False}, 900, extra=extra)
+    r = json.loads(f.read_text())
+    assert r["app_kind"] == "web-app" and r["stack_profile"]["routing"] == "spa-path"
+    assert r["timeout"] == "wedge" and r["deployed"] is False   # base fields not clobbered by extra

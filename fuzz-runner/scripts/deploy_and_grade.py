@@ -18,6 +18,7 @@ is ideal). It does NOT inject real secrets — an app needing an external API ke
 grader still probes whatever comes up.
 """
 import argparse
+import contextlib
 import json
 import os
 import pathlib
@@ -428,6 +429,8 @@ def main():
                          "this bounds it so one bad app can't stall the batch")
     ap.add_argument("--clone-timeout", type=int, default=300, dest="clone_timeout",
                     help="git clone timeout in seconds (default 300; a timeout is recorded, not a crash)")
+    ap.add_argument("--checkpoint", metavar="FILE", help="write the stack-ID here right after planning, so "
+                    "an external kill (wedge) can still recover the app's classification for deploy-parity")
     ap.add_argument("--no-browser", dest="browser", action="store_false",
                     help="skip the browser-rendered surface (faster). DEFAULT is browser ON for grading: "
                          "the render finds SPA forms/routes a static crawl misses (biggest recall win) + "
@@ -471,6 +474,12 @@ def main():
             if notes:   # a few wrapped, hanging-indented lines (was one 200-char line cut mid-sentence)
                 for i, line in enumerate(textwrap.wrap(notes, width=100)[:6]):
                     print(("  notes: " if i == 0 else "         ") + line)
+            if args.checkpoint and attempt == 1:   # persist the stack-ID BEFORE the risky deploy/grade, so
+                _ck = {}                            # a wedge-kill still yields a labelled record (deploy-parity)
+                _record_plan_meta(_ck, plan)
+                with contextlib.suppress(OSError):
+                    with open(args.checkpoint, "w") as _f:
+                        json.dump(_ck, _f)
             if plan.get("web_gradeable") is False:   # not a runnable web service (mobile/CLI/notebook/...)
                 _record_plan_meta(result, plan)      # -> SKIP: no fabricated server, no meaningless score
                 result["skipped"] = True

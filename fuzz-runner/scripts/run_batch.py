@@ -20,6 +20,7 @@ import pathlib
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 _HERE = pathlib.Path(__file__).resolve().parent
@@ -40,17 +41,22 @@ def _cleanup_containers():
     subprocess.run(["docker", "rm", "-f", "-v", "hl-deploy-app", "hl-db"], capture_output=True)
 
 
-def _record_wedge(results, rec, secs):
+def _record_wedge(results, rec, secs, extra=None):
     """A wedged app is killed mid-run, so its own finally never writes a record — write one here so it
-    isn't silently dropped from the batch (shows as a distinct WEDGED reason in the stats deploy view)."""
+    isn't silently dropped from the batch (shows as a distinct WEDGED reason in the stats deploy view).
+    `extra` is the stack-ID the child checkpointed before it wedged, so the app keeps its classification
+    (app_kind / routing) for deploy-parity — else wedged apps show as '?' and can't be grouped by stack."""
+    row = {
+        "repo": rec["repo"], "deployed": False, "timeout": "wedge",
+        "timings": {"total_s": float(secs)},   # it ran at least this long before we killed it
+        "deploy_error": f"WEDGED — killed after {secs}s (hung past internal build/grade caps)",
+        "ts": time.time(), "hackathon": rec.get("hackathon"),
+        "project": rec.get("project"), "winner": rec.get("winner"),
+    }
+    for k, v in (extra or {}).items():
+        row.setdefault(k, v)   # recovered stack_profile / app_kind / features / expected_surface
     with open(results, "a") as f:
-        f.write(json.dumps({
-            "repo": rec["repo"], "deployed": False, "timeout": "wedge",
-            "timings": {"total_s": float(secs)},   # it ran at least this long before we killed it
-            "deploy_error": f"WEDGED — killed after {secs}s (hung past internal build/grade caps)",
-            "ts": time.time(), "hackathon": rec.get("hackathon"),
-            "project": rec.get("project"), "winner": rec.get("winner"),
-        }) + "\n")
+        f.write(json.dumps(row) + "\n")
 
 
 def main():
@@ -99,9 +105,11 @@ def main():
     # 2) deploy + grade each, appending to --results (failures recorded, batch continues)
     for i, rec in enumerate(records, 1):
         print(f"\n{'#' * 60}\n[{i}/{len(records)}] {rec['repo']}\n{'#' * 60}", flush=True)
+        ckpt = pathlib.Path(tempfile.gettempdir()) / "hl-deploy-ckpt.json"
+        ckpt.unlink(missing_ok=True)   # stale from the previous app -> clear before this one writes its own
         cmd = PY + [str(_HERE / "deploy_and_grade.py"), rec["repo"], "--record", args.results,
                     "--attempts", str(args.attempts), "--build-timeout", str(args.build_timeout),
-                    "--grade-timeout", str(args.grade_timeout),
+                    "--grade-timeout", str(args.grade_timeout), "--checkpoint", str(ckpt),
                     "--meta", json.dumps(
                         {"hackathon": rec.get("hackathon"), "project": rec.get("project"),
                          "winner": rec.get("winner")})]
@@ -117,9 +125,13 @@ def main():
         except subprocess.TimeoutExpired:
             _hard_kill(proc)
             _cleanup_containers()
-            _record_wedge(args.results, rec, args.app_timeout)
+            stack = {}                            # recover the stack-ID the child checkpointed before wedging
+            if ckpt.exists():
+                with contextlib.suppress(Exception):
+                    stack = json.loads(ckpt.read_text())
+            _record_wedge(args.results, rec, args.app_timeout, extra=stack)
             print(f"\n  !! WEDGED — killed after {args.app_timeout}s (hung past its internal caps); "
-                  f"recorded, moving on", flush=True)
+                  f"recorded{' (stack recovered)' if stack else ''}, moving on", flush=True)
         except KeyboardInterrupt:
             _hard_kill(proc)
             _cleanup_containers()
