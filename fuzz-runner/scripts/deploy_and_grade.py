@@ -175,9 +175,26 @@ Constraints and environment you are targeting:
   are known to be mutually compatible (e.g. Flask 2.0.x needs Werkzeug 2.0.x). Install deps, copy the
   app code (many repos' Dockerfiles forget to COPY the code), set the workdir, expose the port.
 
+Also IDENTIFY THE TECH STACK and the user-facing surface the SOURCE implies (stack_profile +
+expected_surface below). This calibrates a black-box tester across frameworks — base it on the actual
+code you see (routes, components, framework config), not guesses. Routing especially matters: a hash-
+routed SPA (React HashRouter, `/#/route`, common on GitHub Pages) is discovered very differently from a
+path-routed SPA or a server-rendered app.
+
 JSON schema (all keys required unless marked optional):
 {
-  "stack": "short description, e.g. 'Flask + Postgres'",
+  "stack": "short description, e.g. 'React hash-routed SPA' or 'Flask + Jinja + Postgres'",
+  "stack_profile": {
+    "framework": "primary framework/library: React|Next.js|Vue|Svelte|Angular|Flask|Django|FastAPI|Express|Rails|... or 'static'",
+    "routing": "one of: spa-hash | spa-path | ssr | server-rendered | static | api-only",
+    "frontend": "e.g. 'React SPA' | 'server-rendered templates' | 'none'",
+    "backend": "e.g. 'Flask' | 'Express' | 'none (static site)'",
+    "api_style": "one of: rest | graphql | none"
+  },
+  "expected_surface": {
+    "login": true, "signup": false, "upload": false, "search": false, "api": true,
+    "views": 5
+  },
   "dockerfile": "the FULL Dockerfile text to write at the build_context root",
   "files": { "relative/path": "full file contents to overwrite/create (repairs, e.g. a fixed requirements.txt)" },  // optional, may be {}
   "build_context": ".",                       // subdir (relative to repo root) holding the app
@@ -349,7 +366,9 @@ def main():
             result["attempts_used"] = attempt
             print(f"\n=== attempt {attempt}/{args.attempts}: planning deploy ({args.model}) ===")
             plan = plan_deploy(context, args.model, error=error, prev=plan)
-            print(f"  stack: {plan.get('stack')}  port: {plan.get('port')}  db: {(plan.get('db') or {}).get('type')}")
+            _routing = (plan.get("stack_profile") or {}).get("routing", "?")
+            print(f"  stack: {plan.get('stack')} [{_routing}]  port: {plan.get('port')}  "
+                  f"db: {(plan.get('db') or {}).get('type')}")
             if plan.get("notes"):
                 print(f"  notes: {plan['notes'][:200]}")
             try:
@@ -360,14 +379,19 @@ def main():
                 result["deploy_error"] = (error.strip().splitlines() or ["unknown"])[0][:200]
                 print(f"  deploy failed:\n{error[-800:]}")
                 _docker("rm", "-f", "-v", APP, DB)   # tear down this attempt's containers + volume
+        if plan:   # stack identity + source-implied surface — recorded even on deploy FAILURE, so the
+            result["stack"] = plan.get("stack")               # stack-distribution half of the parity
+            result["stack_profile"] = plan.get("stack_profile")   # data doesn't drop undeployable apps
+            result["expected_surface"] = plan.get("expected_surface")
         if not url:
             print("\nGAVE UP — could not deploy after all attempts.")
             return   # result (deployed=False, deploy_error) is written in the finally
-        result.update(deployed=True, stack=plan.get("stack"))
+        result.update(deployed=True)
         print(f"\n=== grading {url} ===")
         report = grade(url, args.browser)
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
         result.update(slop_score=report.slop_score, axis_slop=report.axis_slop,
+                      observed_surface=report.surface,   # what discovery SAW (parity numerator vs expected)
                       findings=[{"probe_id": o.probe_id, "bundle": o.bundle, "category": o.category,
                                  "penalty": o.penalty, "group": o.variant_group_id, "reason": o.reason,
                                  "target": o.target, "evidence": o.evidence} for o in slop])   # full provenance
