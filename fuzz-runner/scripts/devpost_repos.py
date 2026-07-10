@@ -34,7 +34,10 @@ _SUBS = "https://{slug}.devpost.com/submissions/search?page={page}"
 _PROJ = re.compile(r"https://devpost\.com/software/[a-z0-9][a-z0-9-]*")
 _SLUG = re.compile(r"https?://([a-z0-9][a-z0-9-]*)\.devpost\.com")
 _GH = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-_APP_LINKS = re.compile(r"app-links.*?</ul>", re.S)
+_APP_LINKS = re.compile(r'class="[^"]*app-links.*?</ul>', re.S)   # the submission's own links list
+# Devpost embeds a vendor RUM script (New Relic) whose OWN source repo link sits in the page JS on
+# EVERY project — never a submission's repo. Deny-list it so it can't be mistaken for the project.
+_VENDOR_REPO = re.compile(r"github\.com/newrelic/", re.I)
 
 
 def _get(client, url, **kw):
@@ -87,12 +90,18 @@ def page_projects(client, slug, page):
 
 
 def repo_for(client, project_url):
-    """The project's declared GitHub repo (first github link in its app-links block), or None."""
+    """The project's declared GitHub repo — the FIRST github link INSIDE its app-links block, or None.
+    We do NOT fall back to a whole-page scan: a project that links no repo still has Devpost's embedded
+    vendor URL (github.com/newrelic/newrelic-browser-agent, in the RUM script on every page) in its
+    markup, and grabbing that would clone+deploy+grade the wrong thing entirely. So app-links absent, or
+    holding no non-vendor github link, -> None (the project is skipped)."""
     r = _get(client, project_url)
     if not r or r.status_code != 200:
         return None
     block = _APP_LINKS.search(r.text)
-    repos = list(dict.fromkeys(_GH.findall(block.group(0) if block else r.text)))
+    if not block:
+        return None
+    repos = [g for g in dict.fromkeys(_GH.findall(block.group(0))) if not _VENDOR_REPO.search(g)]
     return repos[0].rstrip('.,);"\'') if repos else None
 
 
