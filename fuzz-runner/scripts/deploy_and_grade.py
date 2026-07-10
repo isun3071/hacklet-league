@@ -27,6 +27,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 from collections import defaultdict
 
@@ -403,8 +404,10 @@ def main():
             _routing = (plan.get("stack_profile") or {}).get("routing", "?")
             print(f"  stack: {plan.get('stack')} [{_routing}]  port: {plan.get('port')}  "
                   f"db: {(plan.get('db') or {}).get('type')}")
-            if plan.get("notes"):
-                print(f"  notes: {plan['notes'][:200]}")
+            notes = (plan.get("notes") or "").strip()
+            if notes:   # a few wrapped, hanging-indented lines (was one 200-char line cut mid-sentence)
+                for i, line in enumerate(textwrap.wrap(notes, width=100)[:6]):
+                    print(("  notes: " if i == 0 else "         ") + line)
             try:
                 url = execute(plan, repo, verbose=args.verbose, build_timeout=args.build_timeout)
                 break
