@@ -45,6 +45,22 @@ def test_blind_spots_rank_by_prevalence_times_brokenness_and_ignore_stack_random
     assert not any(s["stack"] == "server-rendered" for s in spots)   # matched surface isn't flagged
 
 
+def test_row_flags_non_web_apps_and_defaults_gradeable_true():
+    assert _row({"repo": "a", "app_kind": "mobile", "web_gradeable": False})["web_gradeable"] is False
+    assert _row({"repo": "b"})["web_gradeable"] is True      # old/unknown records still count toward parity
+    assert _row({"repo": "c", "features": [{"name": "x"}, {"name": "y"}]})["n_features"] == 2
+
+
+def test_parity_is_computed_over_web_gradeable_only():
+    # a mobile app (not web-gradeable) must not pollute a routing group's parity — it's out of scope
+    web = [_row(_rec("w0", "spa-hash", exp={"login": True}, obs={"has_login": False}))]
+    nonweb = [_row({"repo": "m", "app_kind": "mobile", "web_gradeable": False,
+                    "stack_profile": {"routing": "none"}})]
+    # main() filters to web-gradeable before calling; blind_spots on the web set flags the hash-router miss
+    assert blind_spots(web, "routing")[0]["stack"] == "spa-hash"
+    assert nonweb[0]["web_gradeable"] is False   # and the mobile app is excluded upstream
+
+
 def test_group_parity_dashes_a_type_with_no_expected_label():
     # an app with no expected_surface labels -> that type has no denominator, so parity is (0, 0)
     rows = [_row(_rec("a", "ssr", exp={}, obs={"has_api": True}))]

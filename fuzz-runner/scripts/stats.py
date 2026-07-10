@@ -117,8 +117,10 @@ def main():
     scores = [r["slop_score"] for r in graded]
 
     # ---- (d) deploy-success rate (the hackathon-reproducibility finding) ----
-    fails = [r for r in recs if not r.get("deployed")]
+    skipped = [r for r in recs if r.get("skipped")]        # not a web app -> OUT OF SCOPE, not a failure
+    fails = [r for r in recs if not r.get("deployed") and not r.get("skipped")]
     err_kinds = Counter((r.get("deploy_error") or "unknown")[:60] for r in fails)
+    timeouts = Counter(r["timeout"] for r in recs if r.get("timeout"))   # 'took forever' — a signal itself
 
     # ---- per-app category subtotals (rebuilt, faithful) ----
     per_app_cats = {r["repo"]: cat_subtotals(r) for r in graded}
@@ -174,14 +176,23 @@ def main():
 
     # (d)
     print(f"\n(d) DEPLOY-SUCCESS RATE (hackathon reproducibility)")
-    print(f"    {len(deployed)}/{len(recs)} deployed  ({len(deployed)/len(recs)*100:.0f}%)   "
-          f"— {len(recs)-len(deployed)} failed to come up")
+    n_try = len(recs) - len(skipped)   # rate is over web apps we actually tried, not out-of-scope skips
+    print(f"    {len(deployed)}/{n_try} deployed  ({len(deployed)/(n_try or 1)*100:.0f}%)   "
+          f"— {n_try - len(deployed)} failed to come up"
+          + (f"   ({len(skipped)} skipped as non-web, excluded)" if skipped else ""))
     for kind, n in err_kinds.most_common(6):
         print(f"      {n:>3}× {kind}")
     if ungraded:   # deployed but no score (grade timeout / abort) — else these vanish from every view
         print(f"    {len(ungraded)} deployed but NOT graded:")
         for kind, n in Counter((r.get("deploy_error") or "unknown")[:60] for r in ungraded).most_common(4):
             print(f"      {n:>3}× {kind}")
+    if skipped:    # not web apps -> correctly NOT deployed/graded (out of scope, not a reproducibility fail)
+        print(f"    {len(skipped)} SKIPPED (not a web app — out of scope, not a failure):")
+        for kind, n in Counter(r.get("app_kind") or "?" for r in skipped).most_common():
+            print(f"      {n:>3}× {kind}")
+    if timeouts:   # the 'took forever' signal — bloated build / broken grade / wedge
+        print(f"    TOOK FOREVER (timeouts — a deployability/quality signal): "
+              + ", ".join(f"{n}× {k}" for k, n in timeouts.most_common()))
 
     # (a)
     print(f"\n(a) SLOP-SCORE DISTRIBUTION  (deployed+graded apps)")

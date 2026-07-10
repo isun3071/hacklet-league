@@ -22,7 +22,7 @@ import json
 import pathlib
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
@@ -42,6 +42,10 @@ def _row(rec: dict) -> dict:
     return {
         "repo": rec.get("repo"),
         "deployed": bool(rec.get("deployed")),
+        "app_kind": rec.get("app_kind") or "?",
+        # web_gradeable defaults True when unknown (old records) so they still count toward parity
+        "web_gradeable": rec.get("web_gradeable") is not False,
+        "n_features": len(rec.get("features") or []),
         "framework": sp.get("framework") or "?",
         "routing": sp.get("routing") or "?",
         "api_style": sp.get("api_style") or "?",
@@ -102,8 +106,8 @@ def blind_spots(rows: list, key: str) -> list:
     return sorted(spots, key=lambda s: (-s["missed"], -s["expected"]))
 
 
-_CSV_COLS = ["repo", "deployed", "framework", "routing", "api_style", "stack",
-             "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints", "obs_surface_size",
+_CSV_COLS = ["repo", "app_kind", "web_gradeable", "deployed", "framework", "routing", "api_style", "stack",
+             "n_features", "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints", "obs_surface_size",
              "obs_login", "obs_upload", "obs_api", "exp_login", "exp_upload", "exp_search",
              "exp_api", "exp_views", "slop_score", "findings", "slop_per_surface"]
 
@@ -129,14 +133,30 @@ def main():
         print(f"wrote {len(rows)} rows -> {args.csv}")
         return
 
-    gp = group_parity(rows, args.by)
-    spots = blind_spots(rows, args.by)
+    # parity/blind-spots are only meaningful for apps the black-box HTTP grader can actually assess —
+    # a mobile/CLI/notebook scoring low isn't a blind spot, it's out of scope. Split them out.
+    web = [r for r in rows if r["web_gradeable"]]
+    nonweb = [r for r in rows if not r["web_gradeable"]]
+    gp = group_parity(web, args.by)
+    spots = blind_spots(web, args.by)
 
     if args.json:
-        print(json.dumps({"group_by": args.by, "groups": gp, "blind_spots": spots}, indent=2))
+        kinds = Counter(r["app_kind"] for r in rows)
+        print(json.dumps({"n_apps": len(rows), "web_gradeable": len(web),
+                          "app_kinds": dict(kinds), "group_by": args.by,
+                          "groups": gp, "blind_spots": spots}, indent=2))
         return
 
-    print(f"\n═══ cross-stack parity — {len(rows)} apps, grouped by {args.by} ═══")
+    print(f"\n═══ cross-stack parity — {len(rows)} apps ({len(web)} web-gradeable), grouped by {args.by} ═══")
+
+    # APP-KIND distribution — how much of the field is even a web app? (out-of-scope ≠ blind spot)
+    print("\nAPP-KIND DISTRIBUTION  (only web apps are gradeable; the rest are out of scope, not blind spots)")
+    for kind, n in Counter(r["app_kind"] for r in rows).most_common():
+        tag = "" if kind in ("web-app", "web-api", "static-site", "?") else "   ← not web-gradeable"
+        print(f"  {kind:14} {n:>3}{tag}")
+    if nonweb:
+        print(f"  → {len(nonweb)}/{len(rows)} ({len(nonweb)/len(rows)*100:.0f}%) are NOT web apps — "
+              f"excluded from the parity below")
 
     # stack DISTRIBUTION (which stacks dominate — the head to cover first)
     print("\nSTACK DISTRIBUTION  (cover the head)")
