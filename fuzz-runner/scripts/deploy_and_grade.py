@@ -7,8 +7,8 @@ failures by feeding the error back to the LLM, and finally grade the running app
 The LLM ONLY figures out the deploy; the fuzzer does the grading.
 
     export OPENROUTER_API_KEY=sk-or-...
-    # optional: export OPENROUTER_MODEL=...   (default deepseek/deepseek-v4-flash — cheap; deploy-planning
-    #   is a read-the-repo/write-a-Dockerfile task, not frontier work, and the retry loop covers misses)
+    # optional: export OPENROUTER_MODEL=...   (default qwen/qwen3.7-plus — cheap + a strong anti-hallucinator,
+    #   which this identify-the-app task needs; retries can web-search for stack versions it doesn't know)
     uv run python scripts/deploy_and_grade.py https://github.com/user/repo   # browser grade (default)
     uv run python scripts/deploy_and_grade.py --no-browser --attempts 4 https://github.com/user/repo
     uv run python scripts/deploy_and_grade.py /path/to/local/repo            # skip the clone
@@ -48,12 +48,12 @@ def _axis_str(axis: dict) -> str:
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Cheap + WELL-CALIBRATED: this task hinges on the LLM admitting "not a web app" / not inventing features.
-# On AA-Omniscience (the hallucination benchmark), gpt-5-mini has the lowest hallucination among BUDGET
-# models (~54%); the genuinely low-hallucination leaders (Qwen3.7 Max ~23%, Command A+ ~14%) are pricier
-# flagships — set OPENROUTER_MODEL=qwen/qwen3.7-max to trade cost for half the hallucination. Recency of
-# stack knowledge is handled separately by web-search on retries (see plan_deploy `online`), so the base
-# model needn't be bleeding-edge. Override with OPENROUTER_MODEL.
-DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-5-mini")
+# Qwen3.7 Plus ($0.32/$1.28, 1M context) is a strong anti-hallucinator — the 3.7 generation halved
+# AA-Omniscience hallucination (44%->23% on Max, best in group) by ABSTAINING rather than guessing, which
+# is exactly the instinct the gradeability gate needs. Recency of stack knowledge is handled separately by
+# web-search on retries (see plan_deploy `online`), so the base model needn't be bleeding-edge. Override
+# with OPENROUTER_MODEL (e.g. qwen/qwen3.7-max for even lower hallucination, openai/gpt-5-mini for OpenAI).
+DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.7-plus")
 NET = "hl-deploy-net"
 APP = "hl-deploy-app"
 DB = "hl-db"
