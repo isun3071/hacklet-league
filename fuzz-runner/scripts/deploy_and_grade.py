@@ -111,9 +111,13 @@ def _build_streamed(dockerfile, ctx, verbose=False, timeout=1200):
 
 
 def _teardown():
-    _docker("rm", "-f", APP, DB)
+    _docker("rm", "-f", "-v", APP, DB)   # -v reaps the sidecar's anonymous data volume (else it orphans)
     _docker("network", "rm", NET)
     _docker("rmi", "-f", APP)   # drop this repo's app image; base images stay cached (speeds later builds)
+    # reclaim THIS repo's build cache (downloaded npm/pip/go/apt layers). Different repos share no RUN
+    # layers, so it's dead weight once torn down; base *images* live in `docker images`, not here, so
+    # later builds still skip the base-image pull. Without this the cache grows unbounded across a batch.
+    _docker("builder", "prune", "-f")
 
 
 # ---- 1. clone + gather deploy context -------------------------------------------------------------
@@ -245,10 +249,10 @@ def _start_db(db: dict):
     print("  (db readiness probe timed out — continuing anyway)")
 
 
-def execute(plan: dict, repo: pathlib.Path, verbose: bool = False) -> str:
+def execute(plan: dict, repo: pathlib.Path, verbose: bool = False, build_timeout: int = 480) -> str:
     # clean slate: drop BOTH the app AND the db sidecar from any prior attempt (or a killed prior run),
     # else the next `docker run --name hl-db` Conflicts and every retry fails identically.
-    _docker("rm", "-f", APP, DB)
+    _docker("rm", "-f", "-v", APP, DB)   # -v also reaps any leftover sidecar volume from a killed run
     _docker("network", "create", NET)  # idempotent-ish; ignore "already exists"
     _start_db(plan.get("db") or {"type": "none"})
 
@@ -261,7 +265,7 @@ def execute(plan: dict, repo: pathlib.Path, verbose: bool = False) -> str:
     dockerfile.write_text(plan["dockerfile"])
 
     print("  docker build (streaming — base-image pull + npm/pip install is the slow part):")
-    rc, tail = _build_streamed(dockerfile, ctx, verbose=verbose)
+    rc, tail = _build_streamed(dockerfile, ctx, verbose=verbose, timeout=build_timeout)
     if rc != 0:
         raise DeployError("BUILD FAILED:\n" + tail)
 
@@ -313,6 +317,9 @@ def main():
     ap.add_argument("repo", help="a git URL or a local path")
     ap.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model id (default: %(default)s)")
     ap.add_argument("--attempts", type=int, default=3, help="max deploy attempts (LLM fixes errors between)")
+    ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
+                    help="kill a docker build after N seconds (default 480). Lower = better batch "
+                         "throughput but risks false-killing a genuinely heavy build; 300 is aggressive")
     ap.add_argument("--no-browser", dest="browser", action="store_false",
                     help="skip the browser-rendered surface (faster). DEFAULT is browser ON for grading: "
                          "the render finds SPA forms/routes a static crawl misses (biggest recall win) + "
@@ -343,13 +350,13 @@ def main():
             if plan.get("notes"):
                 print(f"  notes: {plan['notes'][:200]}")
             try:
-                url = execute(plan, repo, verbose=args.verbose)
+                url = execute(plan, repo, verbose=args.verbose, build_timeout=args.build_timeout)
                 break
             except DeployError as e:
                 error = str(e)
                 result["deploy_error"] = (error.strip().splitlines() or ["unknown"])[0][:200]
                 print(f"  deploy failed:\n{error[-800:]}")
-                _docker("rm", "-f", APP, DB)   # tear down this attempt's containers before the next
+                _docker("rm", "-f", "-v", APP, DB)   # tear down this attempt's containers + volume
         if not url:
             print("\nGAVE UP — could not deploy after all attempts.")
             return   # result (deployed=False, deploy_error) is written in the finally

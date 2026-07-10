@@ -37,6 +37,8 @@ def main():
                     help="skip the browser-rendered surface (faster; default is browser ON for grading — "
                          "the render finds SPA forms a static crawl misses, the #1 recall win)")
     ap.add_argument("--attempts", type=int, default=3, help="deploy attempts per repo")
+    ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
+                    help="per-repo docker build timeout in seconds (default 480; lower = more throughput)")
     ap.add_argument("--model", metavar="ID", help="OpenRouter model (default: deploy_and_grade's)")
     args = ap.parse_args()
 
@@ -61,7 +63,8 @@ def main():
     for i, rec in enumerate(records, 1):
         print(f"\n{'#' * 60}\n[{i}/{len(records)}] {rec['repo']}\n{'#' * 60}", flush=True)
         cmd = PY + [str(_HERE / "deploy_and_grade.py"), rec["repo"], "--record", args.results,
-                    "--attempts", str(args.attempts), "--meta", json.dumps(
+                    "--attempts", str(args.attempts), "--build-timeout", str(args.build_timeout),
+                    "--meta", json.dumps(
                         {"hackathon": rec.get("hackathon"), "project": rec.get("project"),
                          "winner": rec.get("winner")})]
         if not args.browser:
