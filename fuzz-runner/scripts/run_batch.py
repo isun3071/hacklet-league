@@ -13,13 +13,43 @@ batch (they're recorded as deployed=False for the reproducibility stat). Re-runn
 --results appends; stats dedupes by repo (latest wins).
 """
 import argparse
+import contextlib
 import json
+import os
 import pathlib
+import signal
 import subprocess
 import sys
+import time
 
 _HERE = pathlib.Path(__file__).resolve().parent
 PY = [sys.executable]   # the uv-run venv interpreter (hacklet_runner importable)
+
+
+def _hard_kill(proc):
+    """SIGKILL the child AND its descendants (headless chrome, docker CLI) via the process group. An
+    external SIGKILL is the ONLY thing that stops a GIL-holding C-spin (e.g. Playwright's sync transport
+    busy-looping after the browser dies) — an in-process alarm/watchdog can't get a turn to run."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    with contextlib.suppress(Exception):
+        proc.wait(timeout=10)
+
+
+def _cleanup_containers():
+    subprocess.run(["docker", "rm", "-f", "-v", "hl-deploy-app", "hl-db"], capture_output=True)
+
+
+def _record_wedge(results, rec, secs):
+    """A wedged app is killed mid-run, so its own finally never writes a record — write one here so it
+    isn't silently dropped from the batch (shows as a distinct WEDGED reason in the stats deploy view)."""
+    with open(results, "a") as f:
+        f.write(json.dumps({
+            "repo": rec["repo"], "deployed": False,
+            "deploy_error": f"WEDGED — killed after {secs}s (hung past internal build/grade caps)",
+            "ts": time.time(), "hackathon": rec.get("hackathon"),
+            "project": rec.get("project"), "winner": rec.get("winner"),
+        }) + "\n")
 
 
 def main():
@@ -41,6 +71,10 @@ def main():
                     help="per-repo docker build timeout in seconds (default 480; lower = more throughput)")
     ap.add_argument("--grade-timeout", type=int, default=180, dest="grade_timeout",
                     help="per-repo grading wall-clock cap in seconds (default 180; bounds a broken target)")
+    ap.add_argument("--app-timeout", type=int, default=900, dest="app_timeout",
+                    help="HARD per-repo wall-clock (default 900s). Backstop for a wedge the in-process "
+                         "caps can't stop — a GIL-holding CPU spin (e.g. Playwright after a browser "
+                         "crash) ignores the grade-timeout signal; only an external SIGKILL ends it")
     ap.add_argument("--model", metavar="ID", help="OpenRouter model (default: deploy_and_grade's)")
     args = ap.parse_args()
 
@@ -74,9 +108,20 @@ def main():
             cmd += ["--no-browser"]
         if args.model:
             cmd += ["--model", args.model]
+        # own process group (start_new_session) so a wedge -> we SIGKILL the child + its chrome/docker
+        # descendants. Live output inherits our stdio.
+        proc = subprocess.Popen(cmd, start_new_session=True)
         try:
-            subprocess.run(cmd)   # live output; non-zero doesn't stop the batch
+            proc.wait(timeout=args.app_timeout)   # non-zero exit doesn't stop the batch; a WEDGE does get killed
+        except subprocess.TimeoutExpired:
+            _hard_kill(proc)
+            _cleanup_containers()
+            _record_wedge(args.results, rec, args.app_timeout)
+            print(f"\n  !! WEDGED — killed after {args.app_timeout}s (hung past its internal caps); "
+                  f"recorded, moving on", flush=True)
         except KeyboardInterrupt:
+            _hard_kill(proc)
+            _cleanup_containers()
             print("\ninterrupted — running stats on what we have so far ...")
             break
 
