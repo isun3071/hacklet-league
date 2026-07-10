@@ -9,7 +9,24 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
-from run_batch import _hard_kill, _record_wedge  # noqa: E402
+from run_batch import _done_repos, _hard_kill, _record_wedge  # noqa: E402
+
+
+def test_done_repos_skips_graded_and_skipped_but_not_failed(tmp_path):
+    # resume semantics: successfully graded + skipped-as-non-web = done; deploy-failed / wedged = retry
+    f = tmp_path / "r.jsonl"
+    f.write_text("\n".join(json.dumps(r) for r in [
+        {"repo": "gh/graded", "deployed": True, "slop_score": 40},
+        {"repo": "gh/skipped", "skipped": True, "app_kind": "mobile"},
+        {"repo": "gh/build-failed", "deployed": False, "deploy_error": "BUILD FAILED:"},
+        {"repo": "gh/wedged", "deployed": False, "timeout": "wedge"},
+        {"repo": "gh/grade-timeout", "deployed": True, "grade_timeout": True},   # deployed but no score -> retry
+    ]))
+    assert _done_repos(str(f)) == {"gh/graded", "gh/skipped"}
+
+
+def test_done_repos_empty_when_file_absent(tmp_path):
+    assert _done_repos(str(tmp_path / "nope.jsonl")) == set()
 
 # a child that IGNORES SIGTERM (so only SIGKILL ends it) + spawns a 'chrome-like' descendant + CPU-spins
 _SPIN = (

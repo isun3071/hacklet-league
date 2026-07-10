@@ -41,6 +41,24 @@ def _cleanup_containers():
     subprocess.run(["docker", "rm", "-f", "-v", "hl-deploy-app", "hl-db"], capture_output=True)
 
 
+def _done_repos(results_path):
+    """Repos already FINISHED in a prior run of this --results file: successfully graded (has a slop_score)
+    OR skipped as non-web (out of scope). A re-run doesn't retest these — only untested (new) repos and
+    FAILED ones (deploy-failed / wedged / timed-out, i.e. no score and not skipped) run again."""
+    done = set()
+    p = pathlib.Path(results_path)
+    if not p.exists():
+        return done
+    for line in p.read_text().splitlines():
+        if not line.strip():
+            continue
+        with contextlib.suppress(json.JSONDecodeError):
+            r = json.loads(line)
+            if r.get("slop_score") is not None or r.get("skipped"):
+                done.add(r.get("repo"))
+    return done
+
+
 def _record_wedge(results, rec, secs, extra=None):
     """A wedged app is killed mid-run, so its own finally never writes a record — write one here so it
     isn't silently dropped from the batch (shows as a distinct WEDGED reason in the stats deploy view).
@@ -76,14 +94,18 @@ def main():
     ap.add_argument("--attempts", type=int, default=3, help="deploy attempts per repo")
     ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
                     help="per-repo docker build timeout in seconds (default 480; lower = more throughput)")
-    ap.add_argument("--grade-timeout", type=int, default=180, dest="grade_timeout",
-                    help="per-repo grading wall-clock cap in seconds (default 180; bounds a broken target)")
-    ap.add_argument("--app-timeout", type=int, default=1000, dest="app_timeout",
-                    help="HARD per-repo wall-clock (default 1000s). Backstop for a wedge the in-process "
-                         "caps can't stop — a GIL-holding CPU spin (e.g. Playwright after a browser "
-                         "crash) ignores the grade-timeout signal; only an external SIGKILL ends it")
+    ap.add_argument("--grade-timeout", type=int, default=480, dest="grade_timeout",
+                    help="grading's OWN wall-clock budget in seconds (default 480), externally enforced — "
+                         "independent of deploy time so a slow 3-attempt deploy can't leave grading no room")
+    ap.add_argument("--app-timeout", type=int, default=None, dest="app_timeout",
+                    help="HARD per-repo wall-clock backstop (default: DERIVED from the phase caps — clone + "
+                         "attempts x build + grade + margin). Build and grade are each separately bounded "
+                         "now (grade in its own killable subprocess), so this only fires on a whole-child "
+                         "runaway; deriving it means deploy time can't starve grading's budget")
     ap.add_argument("--model", metavar="ID", help="OpenRouter model (default: deploy_and_grade's)")
     args = ap.parse_args()
+    if args.app_timeout is None:   # sum of the phase budgets (clone 300 + per-attempt build + grade) + margin
+        args.app_timeout = 300 + args.attempts * (args.build_timeout + 90) + args.grade_timeout + 120
 
     # 1) fetch repos (+ metadata) from Devpost
     dp = PY + [str(_HERE / "devpost_repos.py"), "--json", "--limit", str(args.limit),
@@ -100,11 +122,18 @@ def main():
     records = json.loads(got.stdout or "[]")
     if not records:
         sys.exit("no repos found")
-    print(f"== {len(records)} repos to deploy + grade ==\n", flush=True)
+    # resume: skip repos already graded/skipped in this --results file; re-run only new + failed ones
+    done = _done_repos(args.results)
+    to_run = [rec for rec in records if rec["repo"] not in done]
+    if done:
+        print(f"== {len(records)} repos · {len(done)} already done (graded/skipped) → "
+              f"{len(to_run)} to (re)run ==\n", flush=True)
+    else:
+        print(f"== {len(to_run)} repos to deploy + grade ==\n", flush=True)
 
     # 2) deploy + grade each, appending to --results (failures recorded, batch continues)
-    for i, rec in enumerate(records, 1):
-        print(f"\n{'#' * 60}\n[{i}/{len(records)}] {rec['repo']}\n{'#' * 60}", flush=True)
+    for i, rec in enumerate(to_run, 1):
+        print(f"\n{'#' * 60}\n[{i}/{len(to_run)}] {rec['repo']}\n{'#' * 60}", flush=True)
         ckpt = pathlib.Path(tempfile.gettempdir()) / "hl-deploy-ckpt.json"
         ckpt.unlink(missing_ok=True)   # stale from the previous app -> clear before this one writes its own
         cmd = PY + [str(_HERE / "deploy_and_grade.py"), rec["repo"], "--record", args.results,

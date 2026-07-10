@@ -20,8 +20,10 @@ grader still probes whatever comes up.
 import argparse
 import contextlib
 import json
+import multiprocessing as mp
 import os
 import pathlib
+import queue
 import re
 import shutil
 import signal
@@ -390,26 +392,46 @@ def _grade_heartbeat(done, total, probe, outcomes):
         sys.stderr.flush()
 
 
-def grade(url: str, use_browser: bool, timeout: int = 180, features=None):
-    """Grade the running app, HARD-bounded to `timeout` seconds via SIGALRM — the alarm interrupts the
-    blocked syscall (e.g. an httpx read hanging on a broken server) so the grade can't run unbounded.
-    Raises GradeTimeout on expiry. SIGALRM is main-thread + Unix only, which the batch always is.
-    `features` (the deploy LLM's source inventory) seeds discovery so an api-only app is gradeable."""
-    render = browser.render_routes if use_browser else None
-
-    def _fire(signum, frame):
-        raise GradeTimeout(f"grading exceeded {timeout}s")
-
-    prev = signal.signal(signal.SIGALRM, _fire)
-    signal.alarm(timeout)
+def _grade_worker(url, use_browser, features, q):
+    os.setsid()   # own process group so the parent can SIGKILL this child AND its headless chrome together
     try:
-        return run(RemoteDeployer(url, health_timeout=20), load_catalog(str(_ROOT / "catalog")),
-                   render=render, on_progress=_grade_heartbeat, seed_features=features)
+        render = browser.render_routes if use_browser else None
+        report = run(RemoteDeployer(url, health_timeout=20), load_catalog(str(_ROOT / "catalog")),
+                     render=render, on_progress=_grade_heartbeat, seed_features=features)
+        q.put(("ok", report))
+    except BaseException as e:   # report ANY failure back to the parent instead of dying silently
+        q.put(("err", f"{type(e).__name__}: {e}"))
+
+
+def grade(url: str, use_browser: bool, timeout: int = 480, features=None):
+    """Grade the running app in a CHILD PROCESS with its OWN hard wall-clock budget. Why a subprocess and
+    not an in-process SIGALRM: a signal can't interrupt a Playwright CPU-spin (the browser probes), so an
+    in-process cap silently overruns — but an EXTERNAL SIGKILL of the child + its chrome always works. And
+    because it's the grade's own budget, it's independent of how long deploy took (the shared per-app total
+    used to starve grading). Raises GradeTimeout on expiry. `features` seeds discovery for api-only apps."""
+    ctx = mp.get_context("fork")
+    q = ctx.Queue()
+    p = ctx.Process(target=_grade_worker, args=(url, use_browser, features, q))
+    p.start()
+    try:
+        result = q.get(timeout=timeout)              # up to `timeout` for the report to arrive
+    except queue.Empty:
+        result = None
     finally:
-        signal.alarm(0)                              # cancel the alarm (also on the timeout path)
-        signal.signal(signal.SIGALRM, prev)          # restore any prior handler
         sys.stderr.write("\r" + " " * 44 + "\r")     # wipe the heartbeat line
         sys.stderr.flush()
+    if result is None:                               # timed out (or the child vanished) -> hard-kill the group
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            os.killpg(p.pid, signal.SIGKILL)         # p.pid IS the child's pgid after its setsid() (+ chrome)
+        with contextlib.suppress(Exception):
+            p.kill()
+        p.join(5)
+        raise GradeTimeout(f"grading exceeded {timeout}s")
+    p.join(5)
+    kind, payload = result
+    if kind == "err":
+        raise RuntimeError(f"grade worker failed: {payload}")
+    return payload
 
 
 def main():
@@ -423,10 +445,10 @@ def main():
     ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
                     help="kill a docker build after N seconds (default 480). Lower = better batch "
                          "throughput but risks false-killing a genuinely heavy build; 300 is aggressive")
-    ap.add_argument("--grade-timeout", type=int, default=180, dest="grade_timeout",
-                    help="hard wall-clock cap (seconds) on the grading phase (default 180). A broken "
-                         "target (every route hangs) makes fan-out probes grind for tens of minutes; "
-                         "this bounds it so one bad app can't stall the batch")
+    ap.add_argument("--grade-timeout", type=int, default=480, dest="grade_timeout",
+                    help="hard wall-clock cap (seconds) on the grading phase (default 480), enforced by an "
+                         "external kill of a grade subprocess — so grading gets its OWN budget independent "
+                         "of deploy time, and even a Playwright CPU-spin (which a signal can't touch) is bounded")
     ap.add_argument("--clone-timeout", type=int, default=300, dest="clone_timeout",
                     help="git clone timeout in seconds (default 300; a timeout is recorded, not a crash)")
     ap.add_argument("--checkpoint", metavar="FILE", help="write the stack-ID here right after planning, so "
