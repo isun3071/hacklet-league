@@ -45,6 +45,14 @@ _NON_HTML_EXT = re.compile(
     r"\.(?:js|mjs|cjs|css|map|json|xml|svg|png|jpe?g|gif|webp|ico|bmp|woff2?|ttf|otf|eot|pdf|"
     r"zip|gz|mp4|webm|mp3|wav|wasm|txt|csv)$", re.I)
 
+# Bundled third-party library paths — served BY the app but not its own surface. A 3D/mapping app
+# (Potree, three.js, Cesium) serves 60+ such files, padding the surface count without being real attack
+# surface, so they're excluded from surface_metrics' denominator (not from probing).
+_VENDOR_PATH = re.compile(
+    r"/(?:potree|node_modules|bower_components|vendor|libs?|three|cesium|draco|ammo|jquery|bootstrap|"
+    r"leaflet|mapbox|openlayers|d3|chartjs|plotly|ace|monaco|pdfjs|tesseract|opencv|wasm)(?:[/.\-]|$)",
+    re.I)
+
 MAX_PAGES = 25
 MAX_DEPTH = 2
 _BROWSER_ROUTE_CAP = 12  # max routes to browser-render for forms (one launch, but each goto has a cost)
@@ -214,8 +222,30 @@ def _formless_form(html: str, page_path: str) -> Form | None:
     )
 
 
+def _endpoints_from_features(features) -> list:
+    """Turn the deploy LLM's source-read feature inventory ([{name, kind, path, method}]) into Endpoints
+    so the catalog can fire on an api-only app whose JSON API has NO crawlable HTML — the #1 discovery
+    blind spot (Foodgrid: 7 endpoints in source, 0 found by crawling '/'). Best-effort: a hallucinated
+    path just 404s harmlessly. A search-kind endpoint gets common query params (the source rarely names
+    them) so injection has a target; a templated /x/{id}/ yields path_params for BOLA/traversal."""
+    out = []
+    for f in features or []:
+        raw = (f.get("path") or "").strip()
+        if not raw.startswith("/") or _TEMPLATE_ARTIFACT.search(raw):
+            continue
+        method = (f.get("method") or "get").lower()
+        if method not in ("get", "post", "put", "patch", "delete"):
+            method = "get"
+        path_params = re.findall(r"\{([^}]+)\}", raw)
+        concrete = re.sub(r"\{[^}]+\}", "1", raw)          # {id} -> 1 for fan-out fetches; injection uses raw
+        qp = ["q", "search", "query"] if f.get("kind") == "search" else []
+        out.append(Endpoint(path=concrete, method=method, query_params=qp,
+                            path_params=path_params, raw_path=raw))
+    return out
+
+
 def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH,
-             headers=None) -> Profile:
+             headers=None, seed_features=None) -> Profile:
     routes: dict[str, None] = {}      # insertion-ordered set
     forms: list[Form] = []
     seen_forms: set[tuple] = set()
@@ -275,10 +305,11 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                         if p not in visited:
                             queue.append((p, depth + 1))
 
-        # API surface from a served OpenAPI/Swagger spec, plus paths mined from an SPA's JS bundles.
-        # Both surface a form-less API the HTML crawl can't see; the fan-out and injection probes target
-        # them. Neither present -> [] (the HTML-only path is unchanged). Dedup by (method, raw_path).
-        endpoints = openapi.ingest(base_url, c) + jsmine.ingest(c, js_urls)
+        # API surface from a served OpenAPI/Swagger spec, paths mined from an SPA's JS bundles, and the
+        # deploy LLM's source-read feature inventory (the last activates the catalog on an api-only app
+        # with no crawlable HTML — otherwise surface_size collapses to 1). Dedup by (method, raw_path).
+        endpoints = (openapi.ingest(base_url, c) + jsmine.ingest(c, js_urls)
+                     + _endpoints_from_features(seed_features))
         endpoints += [Endpoint(path=p, method="get", query_params=sorted(params), raw_path=p)
                       for p, params in link_params.items()]
         seen_eps: set[tuple] = set()
@@ -366,8 +397,12 @@ def surface_metrics(profile: Profile) -> dict:
     forms = profile.forms
     inputs = sum(len(f.fields) for f in forms)
     caps = profile.capabilities
+    # count APP routes, not bundled libraries: a Potree/three.js/etc. app serves 60+ vendor files
+    # (/potree/libs/...) that pad the denominator and flatter its slop-to-surface ratio. Strip them.
+    app_routes = [r for r in profile.routes if not _VENDOR_PATH.search(r)]
     return {
-        "routes": len(profile.routes),
+        "routes": len(app_routes),
+        "routes_all": len(profile.routes),           # incl. vendor assets, for reference
         "forms": len(forms),
         "inputs": inputs,
         "endpoints": len(profile.endpoints),
@@ -377,6 +412,6 @@ def surface_metrics(profile: Profile) -> dict:
         "browser_rendered": bool(caps.get("browser")),
         "accepts_text_input": bool(caps.get("any_endpoint_accepts_text_input")),
         "has_password_form": bool(caps.get("any_form_has_password")),
-        # composite "how much observable attack surface we saw" — the parity/normalization denominator
-        "surface_size": len(profile.routes) + inputs + len(profile.endpoints),
+        # composite "how much observable APP surface we saw" — the parity/normalization denominator
+        "surface_size": len(app_routes) + inputs + len(profile.endpoints),
     }

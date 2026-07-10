@@ -118,3 +118,22 @@ def test_password_only_inferred_form_is_withheld_as_change_form():
     # when ONLY the password field could be inferred (no identity field), it's indistinguishable from a
     # password-CHANGE form, so it's treated as one and withheld — the safe default (never auto-submit it).
     assert is_password_change_form(Form(action="/login", method="post", fields=["password"]))
+
+
+# --- json-login discovery must not fire on a static SPA (the rate-limit false positive) -----------
+from hacklet_runner.auth import find_json_login  # noqa: E402
+
+
+def test_find_json_login_rejects_a_static_spa_shell():
+    # a static SPA answers ANY POST with its 200 text/html index shell — that is NOT a login endpoint,
+    # so we must not treat it as one (else the rate-limit probe reports a phantom no-throttle finding)
+    c = httpx.Client(base_url="http://t", transport=httpx.MockTransport(
+        lambda req: httpx.Response(200, headers={"content-type": "text/html"}, text="<html>spa</html>")))
+    assert find_json_login(c) == (None, None, None)
+
+
+def test_find_json_login_accepts_a_real_auth_failure():
+    c = httpx.Client(base_url="http://t", transport=httpx.MockTransport(
+        lambda req: httpx.Response(401, json={"error": "invalid credentials"})))
+    path, _creds, r = find_json_login(c)
+    assert path is not None and r.status_code == 401

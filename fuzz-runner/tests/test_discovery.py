@@ -231,3 +231,29 @@ def test_surface_metrics_low_on_a_form_less_landing_page(serve):
     s = surface_metrics(discover(serve("minimal")))
     assert s["forms"] == 0 and s["surface_size"] == 1        # just the "/" route
     assert s["has_login"] is False and s["has_upload"] is False and s["has_api"] is False
+
+
+# --- api-only feature seeding + vendor-path stripping -------------------------------------------
+from hacklet_runner.discovery import _VENDOR_PATH, _endpoints_from_features  # noqa: E402
+from hacklet_runner.schema import Profile  # noqa: E402
+
+
+def test_endpoints_from_features_seeds_api_surface():
+    eps = _endpoints_from_features([
+        {"kind": "crud-read", "path": "/api/x/{id}/", "method": "get"},   # templated -> path_params
+        {"kind": "search", "path": "/api/s/", "method": "get"},           # search -> query params
+        {"kind": "other", "path": "not-a-path"},                          # not a "/path" -> skipped
+    ])
+    assert len(eps) == 2
+    tid = next(e for e in eps if e.raw_path == "/api/x/{id}/")
+    assert tid.path == "/api/x/1/" and tid.path_params == ["id"]          # {id} concretized + captured
+    assert next(e for e in eps if e.raw_path == "/api/s/").query_params == ["q", "search", "query"]
+
+
+def test_surface_metrics_excludes_bundled_vendor_paths():
+    # a Potree/three.js app serving 60+ /libs files must not inflate the surface denominator
+    p = Profile(base_url="http://t", routes=["/", "/dashboard", "/potree/libs/three.js",
+                                             "/node_modules/x.js"], forms=[], capabilities={}, endpoints=[])
+    s = surface_metrics(p)
+    assert s["routes"] == 2 and s["routes_all"] == 4 and s["surface_size"] == 2
+    assert bool(_VENDOR_PATH.search("/libs/d3.min.js")) and not _VENDOR_PATH.search("/api/v1/tracts/")

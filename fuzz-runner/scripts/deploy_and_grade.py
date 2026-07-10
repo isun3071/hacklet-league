@@ -389,10 +389,11 @@ def _grade_heartbeat(done, total, probe, outcomes):
         sys.stderr.flush()
 
 
-def grade(url: str, use_browser: bool, timeout: int = 180):
+def grade(url: str, use_browser: bool, timeout: int = 180, features=None):
     """Grade the running app, HARD-bounded to `timeout` seconds via SIGALRM — the alarm interrupts the
     blocked syscall (e.g. an httpx read hanging on a broken server) so the grade can't run unbounded.
-    Raises GradeTimeout on expiry. SIGALRM is main-thread + Unix only, which the batch always is."""
+    Raises GradeTimeout on expiry. SIGALRM is main-thread + Unix only, which the batch always is.
+    `features` (the deploy LLM's source inventory) seeds discovery so an api-only app is gradeable."""
     render = browser.render_routes if use_browser else None
 
     def _fire(signum, frame):
@@ -402,7 +403,7 @@ def grade(url: str, use_browser: bool, timeout: int = 180):
     signal.alarm(timeout)
     try:
         return run(RemoteDeployer(url, health_timeout=20), load_catalog(str(_ROOT / "catalog")),
-                   render=render, on_progress=_grade_heartbeat)
+                   render=render, on_progress=_grade_heartbeat, seed_features=features)
     finally:
         signal.alarm(0)                              # cancel the alarm (also on the timeout path)
         signal.signal(signal.SIGALRM, prev)          # restore any prior handler
@@ -480,6 +481,8 @@ def main():
             try:
                 url = execute(plan, repo, verbose=args.verbose, build_timeout=args.build_timeout)
                 timings["deploy_s"] += round(time.monotonic() - _t, 1)   # build + db + run + health
+                result.pop("deploy_error", None)   # a later attempt SUCCEEDED -> drop the earlier failure's
+                result.pop("timeout", None)        # error/timeout so a deployed app isn't tagged as failed
                 break
             except DeployError as e:
                 timings["deploy_s"] += round(time.monotonic() - _t, 1)   # a failed attempt cost time too
@@ -498,7 +501,7 @@ def main():
         print(f"\n=== grading {url} ===")
         _t = time.monotonic()
         try:
-            report = grade(url, args.browser, timeout=args.grade_timeout)
+            report = grade(url, args.browser, timeout=args.grade_timeout, features=plan.get("features"))
         except GradeTimeout as e:
             timings["grade_s"] = round(time.monotonic() - _t, 1)
             result["grade_timeout"] = True         # deployed but ungradeable in budget (broken/pathological
@@ -509,12 +512,26 @@ def main():
             return   # the finally writes the record (deployed=True, grade_timeout=True) + tears down
         timings["grade_s"] = round(time.monotonic() - _t, 1)
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
+        # Collapse fan-out to ONE finding per (probe, reason): a header probe fires once per asset (civ2:
+        # 61 identical x-content-type-options rows). The score damper already handles the penalty; the
+        # findings list shouldn't carry 60 duplicates. Keep `count` + up to 5 sample targets. stats.py
+        # expands by `count` when it rebuilds the damped subtotals, so the score math is unaffected.
+        findings, _seen = [], {}
+        for o in slop:
+            key = (o.probe_id, o.reason)
+            f = _seen.get(key)
+            if f is not None:
+                f["count"] += 1
+                if o.target and o.target not in f["targets"] and len(f["targets"]) < 5:
+                    f["targets"].append(o.target)
+                continue
+            f = {"probe_id": o.probe_id, "bundle": o.bundle, "category": o.category, "penalty": o.penalty,
+                 "group": o.variant_group_id, "reason": o.reason, "target": o.target, "count": 1,
+                 "targets": [o.target] if o.target else [], "evidence": o.evidence}
+            _seen[key] = f
+            findings.append(f)
         result.update(slop_score=report.slop_score, axis_slop=report.axis_slop,
-                      observed_surface=report.surface,   # what discovery SAW (parity numerator vs expected)
-                      coverage=report.coverage,          # how much of the battery APPLIED (calibration input)
-                      findings=[{"probe_id": o.probe_id, "bundle": o.bundle, "category": o.category,
-                                 "penalty": o.penalty, "group": o.variant_group_id, "reason": o.reason,
-                                 "target": o.target, "evidence": o.evidence} for o in slop])   # full provenance
+                      observed_surface=report.surface, coverage=report.coverage, findings=findings)
         print(f"\n  SLOP SCORE: {report.slop_score}   ({_axis_str(report.axis_slop)})")
         cov = report.coverage
         if cov.get("probes_total"):   # test coverage: how much of the battery applied vs went n/a (calibration)

@@ -45,9 +45,12 @@ def cat_subtotals(rec):
     (variant-group collapse + within-category decay)."""
     by_cat = defaultdict(list)
     for f in rec.get("findings", []):
-        by_cat[(f["bundle"], f["category"])].append(
-            Outcome(f["probe_id"], f["bundle"], f["category"], "slop_detected", f["penalty"],
-                    variant_group_id=f.get("group")))
+        # findings are deduped-with-count (one row per probe+reason); expand so the fan-out fired
+        # instances are all present for the variant-group / decay dampers to reproduce the live score.
+        for _ in range(f.get("count", 1)):
+            by_cat[(f["bundle"], f["category"])].append(
+                Outcome(f["probe_id"], f["bundle"], f["category"], "slop_detected", f["penalty"],
+                        variant_group_id=f.get("group")))
     return {k: _damped_total(v, CATEGORY_DECAY) for k, v in by_cat.items()}
 
 

@@ -197,8 +197,11 @@ def _bearer_token(resp: httpx.Response) -> str | None:
 
 def find_json_login(client: httpx.Client):
     """Probe common JSON login endpoints with a wrong-creds body; return (path, creds, response) for
-    the first that behaves like a login (responds, not 404/405/501), else (None, None, None). Lets the
-    rate-limit probe reach JSON-API apps that have no HTML login form."""
+    the first that behaves like a REAL login, else (None, None, None). Lets the rate-limit probe reach
+    JSON-API apps with no HTML login form — WITHOUT firing on a static SPA, whose catch-all serves the
+    index.html shell (200 text/html) for any POST, which would look like an always-succeeding 'login'
+    and produce a phantom no-rate-limit finding. So we require an auth-shaped answer to wrong creds:
+    an auth-failure status, or a JSON body — never a 2xx HTML shell (the SPA) or 404/405/501."""
     creds = {"email": "hacklet_probe_rl@example.com", "username": "hacklet_probe_rl",
              "password": "hl-wrong-password"}
     for path in _JSON_LOGIN_PATHS:
@@ -206,7 +209,12 @@ def find_json_login(client: httpx.Client):
             r = client.post(path, json=creds)
         except (httpx.HTTPError, httpx.InvalidURL):
             continue
-        if r.status_code not in (404, 405, 501):
+        if r.status_code in (404, 405, 501):
+            continue
+        ct = r.headers.get("content-type", "").lower()
+        # a genuine login rejects wrong creds (400/401/403/422) or answers in JSON; a static SPA returns
+        # 200 text/html (its shell) for everything — that's not a login surface, so keep looking.
+        if r.status_code in (400, 401, 403, 422) or "json" in ct:
             return path, creds, r
     return None, None, None
 
