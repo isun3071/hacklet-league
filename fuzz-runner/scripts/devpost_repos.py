@@ -66,17 +66,29 @@ def hackathon_slugs(client, query, count, completed):
     return slugs
 
 
+_GALLERY_SPLIT = re.compile(r'(?=class="[^"]*gallery-item)')
+
+
 def project_urls(client, slug, pages):
-    """Devpost project-page URLs submitted to one hackathon, across the first `pages` gallery pages."""
-    out = []
+    """(project_url, winner) per submission, across the first `pages` gallery pages. `winner` is BEST-EFFORT
+    from a 'winner' marker in the gallery entry — Devpost only badges winners post-judging and often on a
+    separate view, so it's frequently False/None; override per app with deploy_and_grade --meta if you have
+    the real result."""
+    out, seen = [], set()
     for page in range(1, pages + 1):
         r = _get(client, _SUBS.format(slug=slug, page=page))
         if not r or r.status_code != 200:
             break
-        found = [u for u in dict.fromkeys(_PROJ.findall(r.text)) if u not in out]
-        if not found:
+        page_hits = []
+        for block in _GALLERY_SPLIT.split(r.text)[1:]:
+            m = _PROJ.search(block)
+            if not m or m.group(0) in seen:
+                continue
+            seen.add(m.group(0))
+            page_hits.append((m.group(0), bool(re.search(r"\bwinner\b", block, re.I))))
+        if not page_hits:
             break
-        out.extend(found)
+        out.extend(page_hits)
         time.sleep(0.3)
     return out
 
@@ -101,7 +113,8 @@ def main():
                     help="(--search) only ended / winners-announced hackathons (real submissions)")
     ap.add_argument("--pages", type=int, default=1, help="submissions pages per hackathon (default 1)")
     ap.add_argument("--limit", type=int, default=25, help="max repos to output (default 25)")
-    ap.add_argument("--json", action="store_true", help="emit {hackathon, project, repo} JSON records")
+    ap.add_argument("--json", action="store_true",
+                    help="emit {hackathon, project, repo, winner} JSON records (feeds a batch driver)")
     args = ap.parse_args()
 
     with httpx.Client(follow_redirects=True) as c:
@@ -116,13 +129,14 @@ def main():
                 break
             projects = project_urls(c, slug, args.pages)
             sys.stderr.write(f"  {slug}: {len(projects)} projects\n")
-            for p in projects:
+            for project_url, winner in projects:
                 if len(records) >= args.limit:
                     break
-                repo = repo_for(c, p)
+                repo = repo_for(c, project_url)
                 if repo and repo not in seen:
                     seen.add(repo)
-                    records.append({"hackathon": slug, "project": p, "repo": repo})
+                    records.append({"hackathon": slug, "project": project_url, "repo": repo,
+                                    "winner": winner})   # best-effort: True=badge found; False=none seen
                     if not args.json:
                         print(repo, flush=True)
                 time.sleep(0.2)
