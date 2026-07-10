@@ -55,6 +55,7 @@ _VENDOR_PATH = re.compile(
 
 MAX_PAGES = 25
 MAX_DEPTH = 2
+_BASELINE_CAP = 60   # cap the per-endpoint health baseline requests (a huge mined API shouldn't 10x the grade)
 _BROWSER_ROUTE_CAP = 12  # max routes to browser-render for forms (one launch, but each goto has a cost)
 
 
@@ -315,6 +316,16 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         seen_eps: set[tuple] = set()
         endpoints = [e for e in endpoints
                      if (e.method, e.raw_path) not in seen_eps and not seen_eps.add((e.method, e.raw_path))]
+        # Baseline each endpoint with a well-formed (read-only GET) request: an env-var-gated endpoint
+        # (dummy Supabase/API key) 500s on EVERYTHING, so a baseline 5xx marks it reached-but-DEAD. This
+        # separates "healthy-observed" surface (parity's real denominator) from merely "reached", and lets
+        # behavioral probes skip an endpoint that never works. GET-only stays side-effect-free (a POST-only
+        # endpoint answers 405 = alive; its POST deadness is handled by the crash probe's own baseline).
+        for ep in endpoints[:_BASELINE_CAP]:
+            try:
+                ep.baseline_status = c.get(ep.path).status_code
+            except (httpx.HTTPError, httpx.InvalidURL):
+                ep.baseline_status = None
         for ep in endpoints:
             routes.setdefault(ep.path, None)
 
@@ -400,18 +411,24 @@ def surface_metrics(profile: Profile) -> dict:
     # count APP routes, not bundled libraries: a Potree/three.js/etc. app serves 60+ vendor files
     # (/potree/libs/...) that pad the denominator and flatter its slop-to-surface ratio. Strip them.
     app_routes = [r for r in profile.routes if not _VENDOR_PATH.search(r)]
+    # HEALTHY endpoints only: an env-var-dead endpoint (baseline >=500) is reached but not testable — count
+    # it as unobserved so 'reached-but-half-dead' (sapling: ~95 reached, many 500) isn't scored well-covered.
+    eps = profile.endpoints
+    healthy_eps = [e for e in eps if (e.baseline_status or 0) < 500]
     return {
         "routes": len(app_routes),
         "routes_all": len(profile.routes),           # incl. vendor assets, for reference
         "forms": len(forms),
         "inputs": inputs,
-        "endpoints": len(profile.endpoints),
+        "endpoints": len(healthy_eps),               # healthy = responds to a baseline without a 5xx
+        "endpoints_reached": len(eps),               # incl. env-var-dead (reached but not testable)
+        "endpoints_dead": len(eps) - len(healthy_eps),
         "has_login": login_form(forms) is not None,
         "has_upload": any(f.file_fields for f in forms),
-        "has_api": bool(profile.endpoints),
+        "has_api": bool(healthy_eps),
         "browser_rendered": bool(caps.get("browser")),
         "accepts_text_input": bool(caps.get("any_endpoint_accepts_text_input")),
         "has_password_form": bool(caps.get("any_form_has_password")),
-        # composite "how much observable APP surface we saw" — the parity/normalization denominator
-        "surface_size": len(app_routes) + inputs + len(profile.endpoints),
+        # composite "how much observable & HEALTHY APP surface we saw" — the parity denominator
+        "surface_size": len(app_routes) + inputs + len(healthy_eps),
     }

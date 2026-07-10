@@ -55,14 +55,21 @@ def response_contains(resp, arg) -> bool:
     return str(arg) in resp.text
 
 
+# A config-POLICY check (headers/CORS/compression) is meaningless on a server error: an env-var-dead
+# endpoint's 500 error page isn't the app's header policy, and counting it manufactures findings from a
+# broken endpoint. The probe fans over many routes, so a HEALTHY page still catches a real omission.
+def _policy_applies(resp) -> bool:
+    return resp.status_code < 500
+
+
 def response_missing_header(resp, arg) -> bool:
-    return str(arg) not in resp.headers  # httpx headers are case-insensitive
+    return _policy_applies(resp) and str(arg) not in resp.headers  # httpx headers are case-insensitive
 
 
 def response_missing_clickjacking_defense(resp, arg=None) -> bool:
     # Clickjacking is defended by EITHER X-Frame-Options OR a CSP frame-ancestors directive;
     # checking only one header would false-positive on an app that uses the other.
-    if "x-frame-options" in resp.headers:
+    if not _policy_applies(resp) or "x-frame-options" in resp.headers:
         return False
     return "frame-ancestors" not in resp.headers.get("content-security-policy", "").lower()
 
@@ -71,6 +78,8 @@ def response_cors_misconfigured(resp, arg=None) -> bool:
     # Slop when the app reflects the request Origin into Access-Control-Allow-Origin AND allows
     # credentials: any site can then make credentialed cross-origin reads. Bare ACAO:* is excluded
     # (browsers refuse credentials with *), so this flags only the genuinely exploitable case.
+    if not _policy_applies(resp):
+        return False
     sent_origin = resp.request.headers.get("origin", "")
     acao = resp.headers.get("access-control-allow-origin", "")
     creds = resp.headers.get("access-control-allow-credentials", "").lower() == "true"
@@ -87,6 +96,8 @@ def response_uncompressed(resp, arg=1024) -> bool:
     # bandwidth and slower loads. Gate on size — small bodies don't benefit from compression, so a
     # server that skips them is correct, not slop. httpx always sends Accept-Encoding and keeps the
     # Content-Encoding header, so its presence means the server compressed.
+    if not _policy_applies(resp):
+        return False
     ctype = resp.headers.get("content-type", "").lower()
     if not any(t in ctype for t in ("text/", "javascript", "json", "xml", "svg")):
         return False
@@ -96,7 +107,7 @@ def response_uncompressed(resp, arg=1024) -> bool:
 
 
 def response_has_header(resp, arg) -> bool:
-    return str(arg) in resp.headers  # presence is the slop (e.g. X-Powered-By leaks the stack)
+    return _policy_applies(resp) and str(arg) in resp.headers  # presence is slop (X-Powered-By leaks stack)
 
 
 def response_is_aws_credentials(resp, arg=None) -> bool:
@@ -2114,6 +2125,11 @@ def crash_resistance(ctx, probe) -> bool | None:
             [f.action for f in ctx.profile.forms if (f.method or "").lower() == "post"]
             + [e.path for e in ctx.profile.endpoints if e.method.lower() == "post"]))
         for path in posts:
+            try:                                           # baseline: a WELL-FORMED empty JSON body. If THAT
+                if c.post(path, json={}).status_code >= 500:   # already 5xx, the endpoint is env-var-dead
+                    continue                               # (dummy key) — its 500 isn't OUR malformed input
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
             for body in _CRASH_JSON:
                 if budget <= 0:
                     break

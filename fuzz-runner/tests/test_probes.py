@@ -1,14 +1,32 @@
 """Detection-primitive unit tests. Focus: precision of the content matchers — they must catch real
 problems and must NOT flag benign content (a false positive wrongly penalizes).
 """
+import httpx
+
 from hacklet_runner.probes import (
     _csrf_candidates,
+    response_has_header,
     response_is_dotenv,
     response_is_git_config,
     response_is_git_head,
     response_leaks_secret,
+    response_missing_header,
 )
 from hacklet_runner.schema import Form, Profile
+
+
+def _resp(status, headers=None):
+    return httpx.Response(status, headers=headers or {}, request=httpx.Request("GET", "http://t/"))
+
+
+def test_header_policy_matchers_ignore_server_errors():
+    # a missing/leaked header on a 200 is a real config finding; on a 500 (env-var-dead endpoint's error
+    # page) it isn't the app's policy — counting it manufactures findings from a broken endpoint
+    assert response_missing_header(_resp(200, {}), "x-content-type-options") is True
+    assert response_missing_header(_resp(500, {}), "x-content-type-options") is False
+    assert response_missing_header(_resp(404, {}), "x-content-type-options") is True   # 4xx is still real
+    assert response_has_header(_resp(200, {"x-powered-by": "Express"}), "x-powered-by") is True
+    assert response_has_header(_resp(503, {"x-powered-by": "Express"}), "x-powered-by") is False
 
 
 def test_csrf_candidates_exclude_password_change_forms():

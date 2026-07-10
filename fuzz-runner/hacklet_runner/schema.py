@@ -48,6 +48,8 @@ class Endpoint:
     body_fields: list[str] = field(default_factory=list)   # JSON/form request-body property names
     path_params: list[str] = field(default_factory=list)   # path-template param names (BOLA/IDOR)
     raw_path: str = ""                                      # original template, e.g. /users/v1/{username}
+    baseline_status: int | None = None                     # status of a well-formed baseline request;
+    #                                    >=500 => env-var-dead (dummy key), so it's reached-but-not-healthy
 
 
 @dataclass

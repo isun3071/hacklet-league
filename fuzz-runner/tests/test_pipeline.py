@@ -50,9 +50,12 @@ def test_vulnerable_app_accrues_slop():
     o = report.by_id
     for probe in ALL_PROBES:
         assert o[probe] == "slop_detected", f"{probe} should fire on the vulnerable app"
-    # sec-headers-001 fans across every discovered route (now 9: + /dom):
+    # sec-headers-001 fans across every discovered route (9). /crash returns 500, and header POLICY isn't
+    # assessed on a server error (an env-var-dead endpoint's 500 page isn't the app's config) -> clean
+    # there, slop on the 8 healthy routes. Score unchanged: the damper collapses the fan-out regardless.
     header_hits = [x for x in report.outcomes if x.probe_id == "sec-headers-001"]
-    assert len(header_hits) == 9 and all(x.outcome == "slop_detected" for x in header_hits)
+    assert len(header_hits) == 9 and sum(x.outcome == "slop_detected" for x in header_hits) == 8
+    assert all(x.outcome == "clean" for x in header_hits if (x.evidence.get("status") or 0) >= 500)
     # header-depth probes check the homepage once (global headers); HSTS is https-only -> N/A over http:
     assert o["sec-headers-002"] == "slop_detected"   # missing Content-Security-Policy
     assert o["sec-headers-004"] == "slop_detected"   # no X-Frame-Options and no CSP frame-ancestors

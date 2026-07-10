@@ -54,6 +54,8 @@ def _row(rec: dict) -> dict:
         "stack": rec.get("stack") or "?",
         "obs_routes": obs.get("routes"), "obs_forms": obs.get("forms"),
         "obs_inputs": obs.get("inputs"), "obs_endpoints": obs.get("endpoints"),
+        # endpoints reached vs healthy: many-reached-few-healthy = env-var-dead surface (dummy keys)
+        "obs_endpoints_reached": obs.get("endpoints_reached"), "obs_endpoints_dead": obs.get("endpoints_dead"),
         "obs_surface_size": size,
         "obs_login": obs.get("has_login"), "obs_upload": obs.get("has_upload"), "obs_api": obs.get("has_api"),
         "exp_login": exp.get("login"), "exp_upload": exp.get("upload"),
@@ -116,7 +118,8 @@ def blind_spots(rows: list, key: str) -> list:
 
 
 _CSV_COLS = ["repo", "app_kind", "web_gradeable", "deployed", "framework", "routing", "api_style", "stack",
-             "n_features", "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints", "obs_surface_size",
+             "n_features", "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints",
+             "obs_endpoints_reached", "obs_endpoints_dead", "obs_surface_size",
              "obs_login", "obs_upload", "obs_api", "exp_login", "exp_upload", "exp_search",
              "exp_api", "exp_views", "pct_applicable", "na_kinds", "deploy_s", "grade_s", "total_s",
              "slop_score", "findings", "slop_per_surface"]

@@ -250,6 +250,17 @@ def test_endpoints_from_features_seeds_api_surface():
     assert next(e for e in eps if e.raw_path == "/api/s/").query_params == ["q", "search", "query"]
 
 
+def test_surface_metrics_counts_only_healthy_endpoints():
+    from hacklet_runner.schema import Endpoint
+    eps = [Endpoint(path="/api/a", raw_path="/api/a", baseline_status=200),   # healthy
+           Endpoint(path="/api/b", raw_path="/api/b", baseline_status=500),   # env-var-dead
+           Endpoint(path="/api/c", raw_path="/api/c", baseline_status=None)]  # untested -> counts as healthy
+    p = Profile(base_url="http://t", routes=["/"], forms=[], capabilities={}, endpoints=eps)
+    s = surface_metrics(p)
+    assert s["endpoints"] == 2 and s["endpoints_reached"] == 3 and s["endpoints_dead"] == 1
+    assert s["surface_size"] == 1 + 2      # 1 route + 2 healthy endpoints (dead one excluded)
+
+
 def test_surface_metrics_excludes_bundled_vendor_paths():
     # a Potree/three.js app serving 60+ /libs files must not inflate the surface denominator
     p = Profile(base_url="http://t", routes=["/", "/dashboard", "/potree/libs/three.js",
