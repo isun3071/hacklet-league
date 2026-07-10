@@ -142,10 +142,43 @@ def test_path_bearing_target_crawls_the_entry_page_and_binds_to_origin():
 
 
 # --- which routes get browser-rendered for forms (pure filter, no browser) ----------------------
-from hacklet_runner.discovery import _renderable_route  # noqa: E402
+from hacklet_runner.discovery import _formless_form, _renderable_route  # noqa: E402
 
 
 def test_renderable_route_filters_static_assets():
     assert _renderable_route("/login") and _renderable_route("/api/broadcast")
     assert not _renderable_route("/assets/index-abc.js")
     assert not _renderable_route("/logo.png") and not _renderable_route("/data.json")
+
+
+# --- formless inputs: SPA fetch()-submit controls with no <form> wrapper (pure parser, no browser) ----
+def test_formless_file_input_becomes_multipart_upload_target():
+    # a bare <input type=file> + <button>, NO <form> (phish-school's uploader); id= is the sole identifier
+    f = _formless_form('<div><input type="file" id="file-upload" accept=".png">'
+                       '<button>Analyze</button></div>', "/detector")
+    assert f is not None
+    assert f.action == "/detector" and f.method == "post"           # upload -> POST to the page itself
+    assert f.enctype == "multipart/form-data" and f.file_fields == ["file-upload"]
+
+
+def test_formless_login_flips_to_post_with_password():
+    f = _formless_form('<input name="email"><input name="password" type="password">'
+                       '<button>Sign in</button>', "/login")
+    assert f is not None and f.method == "post" and set(f.fields) == {"email", "password"}
+
+
+def test_formless_search_is_get():
+    # a loose text/search box with no password/file -> GET (folds into query-param injection)
+    f = _formless_form('<input name="q" type="search"><button>Go</button>', "/results")
+    assert f is not None and f.method == "get" and f.fields == ["q"]
+
+
+def test_formless_ignores_inputs_inside_a_real_form():
+    # inputs wrapped in <form> are handled by _parse_forms; synthesizing here too would double-count
+    assert _formless_form('<form action="/x"><input name="a"></form>', "/") is None
+
+
+def test_formless_skips_noninjectable_and_nameless():
+    # submit/hidden/checkbox carry no injectable free text; a nameless+idless input is unaddressable
+    assert _formless_form('<input type="submit" value="go"><input type="hidden" name="csrf" value="x">'
+                          '<input type="checkbox" name="agree"><input type="text">', "/") is None

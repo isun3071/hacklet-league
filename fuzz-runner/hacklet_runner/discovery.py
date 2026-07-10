@@ -27,6 +27,14 @@ _FIELD = re.compile(r'<(?:input|textarea|select)\b[^>]*(?<![-\w])name=["\']([^"\
 _INPUT_TAG = re.compile(r"<input\b[^>]*>", re.I)
 _IS_FILE = re.compile(r'(?<![-\w])type=["\']?file\b', re.I)
 
+# Formless-input parsing (SPA controls submitted via fetch() with no <form> wrapper): scan single tags.
+_INPUTISH = re.compile(r"<(input|textarea|select)\b([^>]*)>", re.I)
+_ATTR_NAME = re.compile(r'(?<![-\w])name=["\']([^"\']+)["\']', re.I)
+_ATTR_ID = re.compile(r'(?<![-\w])id=["\']([^"\']+)["\']', re.I)
+_ATTR_TYPE = re.compile(r'(?<![-\w])type=["\']?([a-zA-Z]+)', re.I)
+# input types that carry no injectable free text (a submit button, a toggle, a color swatch, ...)
+_NONINJECTABLE_INPUT = frozenset({"submit", "button", "reset", "image", "hidden",
+                                  "checkbox", "radio", "range", "color"})
 # routes NOT worth browser-rendering for forms — static assets / JSON blobs, never an HTML page with a form
 _NON_HTML_EXT = re.compile(
     r"\.(?:js|mjs|cjs|css|map|json|xml|svg|png|jpe?g|gif|webp|ico|bmp|woff2?|ttf|otf|eot|pdf|"
@@ -100,6 +108,49 @@ def _renderable_route(path: str) -> bool:
 def _form_key(form: Form) -> tuple:
     """Dedup identity for a discovered form (across the static crawl and every rendered route)."""
     return (form.action, form.method, tuple(form.fields))
+
+
+def _formless_form(html: str, page_path: str) -> Form | None:
+    """Synthesize a Form from interactive inputs NOT wrapped in a <form> — the modern-SPA pattern
+    (React/Vue controlled inputs submitted via fetch(), e.g. phish-school's bare <input type=file> +
+    <button> with no <form>). The <form>-anchored parser structurally cannot see these, so on such apps
+    the entire login/upload/search surface is invisible and every injection/upload/auth probe reads N/A.
+
+    Best-effort by nature: the real submit endpoint lives in JS, so the action is the page itself —
+    correct for same-path server actions / Next.js API routes / PHP self-post, and a harmless no-op
+    elsewhere (a wrong target just returns the SPA shell, which yields no oracle differential, so this
+    can't manufacture a false positive). The identifier falls back to id= because SPA inputs are
+    frequently name-less (React-controlled). Returns None when the page has no such inputs."""
+    body = _FORM.sub(" ", html)   # drop real <form>s (handled by _parse_forms) -> only UNwrapped inputs
+    fields: list[str] = []
+    file_fields: list[str] = []
+    has_password = False
+    for tag, attrs in _INPUTISH.findall(body):
+        nm = _ATTR_NAME.search(attrs) or _ATTR_ID.search(attrs)
+        if not nm or _TEMPLATE_ARTIFACT.search(nm.group(1)):
+            continue  # nameless-and-idless, or a `${x}`/`{{x}}` template artifact leaked into the id/name
+        name = nm.group(1)
+        tm = _ATTR_TYPE.search(attrs)
+        itype = tm.group(1).lower() if tm else "text"
+        is_input = tag.lower() == "input"
+        if is_input and itype in _NONINJECTABLE_INPUT:
+            continue
+        if is_input and itype == "file":
+            if name not in file_fields:
+                file_fields.append(name)
+        elif name not in fields:
+            fields.append(name)
+            has_password = has_password or itype == "password"
+    names = fields + [f for f in file_fields if f not in fields]
+    if not names:
+        return None
+    return Form(
+        action=page_path,                                        # best-effort: the page's own path
+        method="post" if (file_fields or has_password) else "get",  # login/upload POST; search-ish GET
+        fields=names,
+        enctype="multipart/form-data" if file_fields else "",
+        file_fields=file_fields,
+    )
 
 
 def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH,
@@ -199,7 +250,11 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             if extra:                               # phase 2: render the rest of the HTML surface
                 rendered.update(render(base_url, extra, headers=headers) or {})
             for path, dom in rendered.items():
-                for form in _parse_forms(_FORM.findall(dom), base_url, path):
+                candidates = _parse_forms(_FORM.findall(dom), base_url, path)
+                formless = _formless_form(dom, path)   # SPA inputs with no <form> wrapper
+                if formless is not None:
+                    candidates.append(formless)
+                for form in candidates:
                     key = _form_key(form)
                     if key not in seen_forms:
                         seen_forms.add(key)

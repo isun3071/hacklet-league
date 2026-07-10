@@ -1,18 +1,20 @@
-"""SPA reference (stdlib only). Every form is built by client-side JS, so none appear in the static
-HTML source — a static crawl misses them, browser-rendered discovery finds them. Exercises the
-client-rendered form surfaces the harness has to handle:
-  (1) a <form> on the ENTRY page          -> rendering "/" finds it
-  (2) a <form> on a SUB-route (/login)    -> only MULTI-route rendering reaches it
+"""SPA reference (stdlib only). Every form/input is built by client-side JS, so none appear in the
+static HTML source — a static crawl misses them, browser-rendered discovery finds them. Exercises the
+three client-rendered surfaces the harness has to handle:
+  (1) a <form> on the ENTRY page              -> rendering "/" finds it
+  (2) a <form> on a SUB-route (/login)        -> only MULTI-route rendering reaches it
+  (3) FORMLESS inputs on /upload (bare <input type=file> + <button>, no <form>) -> the fetch()-submit
+      pattern the <form>-anchored parser can't see; discovery synthesizes a target from the loose inputs
 """
 import http.server
 import os
 
 PORT = int(os.environ.get("PORT", "8080"))
 
-# (1) entry page: JS-built <form action=/register> + a nav link so discovery finds the sub-route
+# (1) entry page: JS-built <form action=/register> + nav links so discovery finds the sub-routes
 HOME = b"""<!doctype html><html><body>
 <h1>spa</h1>
-<nav><a href="/login">login</a></nav>
+<nav><a href="/login">login</a> <a href="/upload">upload</a></nav>
 <div id="app"></div>
 <script>
   var f = document.createElement('form');
@@ -37,7 +39,18 @@ LOGIN = b"""<!doctype html><html><body>
 </script>
 </body></html>"""
 
-_ROUTES = {"/": HOME, "/login": LOGIN}
+# (3) sub-route: FORMLESS — a bare file input + button, NO <form> (the SPA reads the File, POSTs via fetch)
+UPLOAD = b"""<!doctype html><html><body>
+<h1>upload</h1><div id="app"></div>
+<script>
+  var app = document.getElementById('app');
+  var i = document.createElement('input');
+  i.setAttribute('type', 'file'); i.setAttribute('id', 'file-upload'); app.appendChild(i);
+  var b = document.createElement('button'); b.textContent = 'Analyze'; app.appendChild(b);
+</script>
+</body></html>"""
+
+_ROUTES = {"/": HOME, "/login": LOGIN, "/upload": UPLOAD}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

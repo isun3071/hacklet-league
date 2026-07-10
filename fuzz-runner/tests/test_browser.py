@@ -45,6 +45,14 @@ def test_browser_discovery_finds_subroute_form(spa_url):
     assert any(f.action == "/session" and "password" in f.fields for f in profile.forms)
 
 
+def test_browser_discovery_finds_formless_inputs(spa_url):
+    # /upload has a bare <input type=file> + <button> with NO <form> — the SPA fetch() upload pattern
+    profile = discover(spa_url, render=browser.render_routes)
+    up = [f for f in profile.forms if f.file_fields]
+    assert up and up[0].action == "/upload" and up[0].enctype == "multipart/form-data"
+    assert profile.capabilities["any_endpoint_accepts_text_input"] is True
+
+
 @pytest.fixture
 def serve():
     deployers = []
