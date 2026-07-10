@@ -29,7 +29,8 @@ def main():
     mode.add_argument("--search", metavar="QUERY", help="auto-pick hackathons matching QUERY")
     ap.add_argument("--hackathons", type=int, default=5, help="(--search) how many hackathons")
     ap.add_argument("--completed", action="store_true", help="(--search) only ended hackathons")
-    ap.add_argument("--pages", type=int, default=1, help="submission pages per hackathon")
+    ap.add_argument("--max-pages", type=int, default=25, dest="max_pages",
+                    help="safety cap on gallery pages per hackathon (pages auto-fetched to fill --limit)")
     ap.add_argument("--limit", type=int, default=25, help="max repos to grade")
     ap.add_argument("--results", required=True, metavar="FILE", help="JSONL to append results to")
     ap.add_argument("--no-browser", dest="browser", action="store_false",
@@ -40,7 +41,8 @@ def main():
     args = ap.parse_args()
 
     # 1) fetch repos (+ metadata) from Devpost
-    dp = PY + [str(_HERE / "devpost_repos.py"), "--json", "--limit", str(args.limit), "--pages", str(args.pages)]
+    dp = PY + [str(_HERE / "devpost_repos.py"), "--json", "--limit", str(args.limit),
+               "--max-pages", str(args.max_pages)]
     if args.hackathon:
         dp += ["--hackathon", args.hackathon]
     else:

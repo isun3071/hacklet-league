@@ -69,27 +69,20 @@ def hackathon_slugs(client, query, count, completed):
 _GALLERY_SPLIT = re.compile(r'(?=class="[^"]*gallery-item)')
 
 
-def project_urls(client, slug, pages):
-    """(project_url, winner) per submission, across the first `pages` gallery pages. `winner` is BEST-EFFORT
-    from a 'winner' marker in the gallery entry — Devpost only badges winners post-judging and often on a
-    separate view, so it's frequently False/None; override per app with deploy_and_grade --meta if you have
-    the real result."""
+def page_projects(client, slug, page):
+    """(project_url, winner) for ONE submissions gallery page (Devpost serves ~24/page); [] when the page
+    is empty (gallery exhausted) or unreachable. `winner` is BEST-EFFORT from a 'winner' marker in the
+    gallery entry — Devpost only badges winners post-judging and often on a separate view, so it's
+    frequently False; override per app with deploy_and_grade --meta if you have the real result."""
+    r = _get(client, _SUBS.format(slug=slug, page=page))
+    if not r or r.status_code != 200:
+        return []
     out, seen = [], set()
-    for page in range(1, pages + 1):
-        r = _get(client, _SUBS.format(slug=slug, page=page))
-        if not r or r.status_code != 200:
-            break
-        page_hits = []
-        for block in _GALLERY_SPLIT.split(r.text)[1:]:
-            m = _PROJ.search(block)
-            if not m or m.group(0) in seen:
-                continue
+    for block in _GALLERY_SPLIT.split(r.text)[1:]:
+        m = _PROJ.search(block)
+        if m and m.group(0) not in seen:
             seen.add(m.group(0))
-            page_hits.append((m.group(0), bool(re.search(r"\bwinner\b", block, re.I))))
-        if not page_hits:
-            break
-        out.extend(page_hits)
-        time.sleep(0.3)
+            out.append((m.group(0), bool(re.search(r"\bwinner\b", block, re.I))))
     return out
 
 
@@ -111,8 +104,10 @@ def main():
     ap.add_argument("--hackathons", type=int, default=5, help="(--search) how many hackathons (default 5)")
     ap.add_argument("--completed", action="store_true",
                     help="(--search) only ended / winners-announced hackathons (real submissions)")
-    ap.add_argument("--pages", type=int, default=1, help="submissions pages per hackathon (default 1)")
-    ap.add_argument("--limit", type=int, default=25, help="max repos to output (default 25)")
+    ap.add_argument("--limit", type=int, default=25,
+                    help="max repos to output — pages are fetched automatically until this is met (default 25)")
+    ap.add_argument("--max-pages", type=int, default=25, dest="max_pages",
+                    help="safety cap on gallery pages fetched per hackathon (~24 projects/page; default 25)")
     ap.add_argument("--json", action="store_true",
                     help="emit {hackathon, project, repo, winner} JSON records (feeds a batch driver)")
     args = ap.parse_args()
@@ -127,19 +122,26 @@ def main():
         for slug in slugs:
             if len(records) >= args.limit:
                 break
-            projects = project_urls(c, slug, args.pages)
-            sys.stderr.write(f"  {slug}: {len(projects)} projects\n")
-            for project_url, winner in projects:
-                if len(records) >= args.limit:
+            got, page = 0, 1
+            while len(records) < args.limit and page <= args.max_pages:
+                hits = page_projects(c, slug, page)
+                if not hits:                      # empty page -> gallery exhausted
                     break
-                repo = repo_for(c, project_url)
-                if repo and repo not in seen:
-                    seen.add(repo)
-                    records.append({"hackathon": slug, "project": project_url, "repo": repo,
-                                    "winner": winner})   # best-effort: True=badge found; False=none seen
-                    if not args.json:
-                        print(repo, flush=True)
-                time.sleep(0.2)
+                for project_url, winner in hits:
+                    if len(records) >= args.limit:
+                        break
+                    repo = repo_for(c, project_url)
+                    if repo and repo not in seen:
+                        seen.add(repo)
+                        got += 1
+                        records.append({"hackathon": slug, "project": project_url, "repo": repo,
+                                        "winner": winner})   # best-effort: True=badge found; False=none seen
+                        if not args.json:
+                            print(repo, flush=True)
+                    time.sleep(0.2)
+                page += 1
+                time.sleep(0.3)
+            sys.stderr.write(f"  {slug}: {got} repos (through page {page - 1})\n")
         if args.json:
             print(json.dumps(records, indent=2))
         sys.stderr.write(f"\n{len(records)} repos.\n")
