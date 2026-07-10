@@ -45,7 +45,7 @@ def _record_wedge(results, rec, secs):
     isn't silently dropped from the batch (shows as a distinct WEDGED reason in the stats deploy view)."""
     with open(results, "a") as f:
         f.write(json.dumps({
-            "repo": rec["repo"], "deployed": False,
+            "repo": rec["repo"], "deployed": False, "timeout": "wedge",
             "deploy_error": f"WEDGED — killed after {secs}s (hung past internal build/grade caps)",
             "ts": time.time(), "hackathon": rec.get("hackathon"),
             "project": rec.get("project"), "winner": rec.get("winner"),

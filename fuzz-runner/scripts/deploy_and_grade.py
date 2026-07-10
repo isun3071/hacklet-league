@@ -47,7 +47,13 @@ def _axis_str(axis: dict) -> str:
     return " · ".join(f"{b} {round(axis[b])}" for b in ("security", "qa", "performance") if b in axis)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
+# Cheap + WELL-CALIBRATED: this task hinges on the LLM admitting "not a web app" / not inventing features.
+# On AA-Omniscience (the hallucination benchmark), gpt-5-mini has the lowest hallucination among BUDGET
+# models (~54%); the genuinely low-hallucination leaders (Qwen3.7 Max ~23%, Command A+ ~14%) are pricier
+# flagships — set OPENROUTER_MODEL=qwen/qwen3.7-max to trade cost for half the hallucination. Recency of
+# stack knowledge is handled separately by web-search on retries (see plan_deploy `online`), so the base
+# model needn't be bleeding-edge. Override with OPENROUTER_MODEL.
+DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-5-mini")
 NET = "hl-deploy-net"
 APP = "hl-deploy-app"
 DB = "hl-db"
@@ -131,16 +137,35 @@ _CONTEXT_FILES = ("README.md", "README", "readme.md", "package.json", "requireme
                   "manage.py", "wsgi.py", "asgi.py")
 
 
-def clone(url_or_path: str) -> pathlib.Path:
+class CloneError(Exception):
+    """git clone failed or timed out. A timeout ('took forever to clone' — usually a huge / Git-LFS repo)
+    is itself a signal, so it's recorded distinctly instead of crashing the run with a traceback."""
+
+
+def clone(url_or_path: str, timeout: int = 300) -> pathlib.Path:
     if pathlib.Path(url_or_path).exists():
         return pathlib.Path(url_or_path).resolve()
-    dest = pathlib.Path(tempfile.mkdtemp(prefix="hl-deploy-")) / "repo"
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hl-deploy-"))
+    dest = tmp / "repo"
     print(f"  cloning {url_or_path} ...")
-    p = subprocess.run(["git", "clone", "--depth", "1", url_or_path, str(dest)],
-                       capture_output=True, text=True, timeout=180)
-    if p.returncode != 0:
-        sys.exit(f"clone failed: {p.stderr.strip()[:300]}")
+    try:
+        p = subprocess.run(["git", "clone", "--depth", "1", url_or_path, str(dest)],
+                           capture_output=True, text=True, timeout=timeout)
+        if p.returncode != 0:
+            raise CloneError(f"clone failed: {p.stderr.strip()[:200]}")
+    except (subprocess.TimeoutExpired, CloneError) as e:
+        shutil.rmtree(tmp, ignore_errors=True)   # don't leak a partial/huge clone on failure
+        raise CloneError(f"CLONE TIMEOUT (>{timeout}s)"
+                         if isinstance(e, subprocess.TimeoutExpired) else str(e))
     return dest
+
+
+def _record_plan_meta(result: dict, plan: dict) -> None:
+    """Copy the LLM's identification (kind + stack + source-implied surface + features) onto the record —
+    recorded even when the app is skipped or fails to deploy, so the stack/kind DISTRIBUTION and the
+    parity ground-truth don't drop those apps."""
+    for k in ("app_kind", "web_gradeable", "stack", "stack_profile", "expected_surface", "features"):
+        result[k] = plan.get(k)
 
 
 def gather_context(repo: pathlib.Path) -> str:
@@ -177,18 +202,28 @@ Constraints and environment you are targeting:
   are known to be mutually compatible (e.g. Flask 2.0.x needs Werkzeug 2.0.x). Install deps, copy the
   app code (many repos' Dockerfiles forget to COPY the code), set the workdir, expose the port.
 
-Also IDENTIFY THE TECH STACK and the user-facing surface the SOURCE implies (stack_profile +
-expected_surface below). This calibrates a black-box tester across frameworks — base it on the actual
-code you see (routes, components, framework config), not guesses. Routing especially matters: a hash-
-routed SPA (React HashRouter, `/#/route`, common on GitHub Pages) is discovered very differently from a
-path-routed SPA or a server-rendered app.
+FIRST, decide whether this repo is even a RUNNABLE WEB SERVICE a black-box HTTP tester can grade. Many
+hackathon repos are NOT: native mobile apps (iOS/Swift/SwiftUI, Android/Kotlin, React Native, Flutter),
+CLIs / libraries, desktop-native apps, Discord/Slack bots, Jupyter/ML notebooks or training scripts,
+games (Unity/Unreal/Pygame), hardware/embedded. If it is NOT something you can serve over HTTP, set
+"web_gradeable": false with the right "app_kind", and DO NOT fabricate a placeholder server just to pass
+the health check (a hollow server produces a meaningless slop score that poisons the dataset) — leave the
+deploy fields empty. Only when web_gradeable is true do you need a real Dockerfile / port / health_path.
+
+Then IDENTIFY THE TECH STACK (stack_profile), the user-facing surface (expected_surface), and inventory
+the app's actual FEATURES from the code (features). Base everything on the code you SEE — routes,
+components, models, forms, framework config — not guesses; if unsure, prefer fewer claims over invented
+ones. Routing especially matters: a hash-routed SPA (React HashRouter, `/#/route`, common on GitHub
+Pages) is discovered very differently from a path-routed SPA or a server-rendered app.
 
 JSON schema (all keys required unless marked optional):
 {
-  "stack": "short description, e.g. 'React hash-routed SPA' or 'Flask + Jinja + Postgres'",
+  "app_kind": "one of: web-app | web-api | static-site | cli | library | mobile | desktop | bot | notebook-ml | game | other",
+  "web_gradeable": true,     // false => a black-box HTTP grader can't assess it; SKIP deploy, do NOT fake a server
+  "stack": "short description, e.g. 'React hash-routed SPA' or 'Flask + Jinja + Postgres' or 'iOS SwiftUI app'",
   "stack_profile": {
-    "framework": "primary framework/library: React|Next.js|Vue|Svelte|Angular|Flask|Django|FastAPI|Express|Rails|... or 'static'",
-    "routing": "one of: spa-hash | spa-path | ssr | server-rendered | static | api-only",
+    "framework": "primary framework/library: React|Next.js|Vue|Svelte|Angular|Flask|Django|FastAPI|Express|Rails|SwiftUI|... or 'static'",
+    "routing": "one of: spa-hash | spa-path | ssr | server-rendered | static | api-only | none",
     "frontend": "e.g. 'React SPA' | 'server-rendered templates' | 'none'",
     "backend": "e.g. 'Flask' | 'Express' | 'none (static site)'",
     "api_style": "one of: rest | graphql | none"
@@ -197,7 +232,14 @@ JSON schema (all keys required unless marked optional):
     "login": true, "signup": false, "upload": false, "search": false, "api": true,
     "views": 5
   },
-  "dockerfile": "the FULL Dockerfile text to write at the build_context root",
+  "features": [   // the app's actual features/operations inferred FROM THE CODE — ground truth for fine-grained
+                  // parity. Each: {name, kind, path?, method?}. kind in: form|crud-create|crud-read|crud-update|
+                  // crud-delete|search|upload|auth|realtime|payment|other. [] if none/unsure. e.g.:
+    {"name": "create project", "kind": "crud-create", "path": "/projects", "method": "post"},
+    {"name": "delete project", "kind": "crud-delete", "path": "/projects/{id}", "method": "delete"},
+    {"name": "semantic search", "kind": "search", "path": "/api/search", "method": "get"}
+  ],
+  "dockerfile": "the FULL Dockerfile text to write at the build_context root (may be \"\" if web_gradeable is false)",
   "files": { "relative/path": "full file contents to overwrite/create (repairs, e.g. a fixed requirements.txt)" },  // optional, may be {}
   "build_context": ".",                       // subdir (relative to repo root) holding the app
   "port": 8000,                                // the port the app listens on inside the container
@@ -211,7 +253,7 @@ If a previous attempt failed, you will be given the error — fix the specific c
 port, dep conflict, missing build tool, wrong start command, DB not ready, etc.)."""
 
 
-def plan_deploy(context: str, model: str, error: str = "", prev: dict = None) -> dict:
+def plan_deploy(context: str, model: str, error: str = "", prev: dict = None, online: bool = False) -> dict:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         sys.exit("OPENROUTER_API_KEY is not set. export it and re-run.")
@@ -221,6 +263,11 @@ def plan_deploy(context: str, model: str, error: str = "", prev: dict = None) ->
                  f"\n\nError output:\n{error[:4000]}\n\nReturn a corrected JSON plan.")
     body = {"model": model, "temperature": 0.2,
             "messages": [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": user}]}
+    if online:   # retries: let the model WEB-SEARCH for current dep versions / deploy config it may not know
+        body["plugins"] = [{"id": "web", "max_results": 3, "search_prompt":
+                            "Use these web results for CURRENT dependency versions, framework config, and "
+                            "Docker/build setup for this stack (the app may use versions newer than your "
+                            "training data):"}]
     try:
         r = httpx.post(OPENROUTER_URL, json=body, timeout=120,
                        headers={"Authorization": "Bearer " + key,
@@ -367,6 +414,9 @@ def main():
     ap = argparse.ArgumentParser(description="LLM-assisted deploy + fuzz-grade of a hackathon repo.")
     ap.add_argument("repo", help="a git URL or a local path")
     ap.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model id (default: %(default)s)")
+    ap.add_argument("--no-web-search", dest="web_search", action="store_false",
+                    help="don't let the LLM web-search on retries (default: retries CAN search OpenRouter's "
+                         "web plugin for current dep versions / deploy config, ~$0.02/retry)")
     ap.add_argument("--attempts", type=int, default=3, help="max deploy attempts (LLM fixes errors between)")
     ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
                     help="kill a docker build after N seconds (default 480). Lower = better batch "
@@ -375,6 +425,8 @@ def main():
                     help="hard wall-clock cap (seconds) on the grading phase (default 180). A broken "
                          "target (every route hangs) makes fan-out probes grind for tens of minutes; "
                          "this bounds it so one bad app can't stall the batch")
+    ap.add_argument("--clone-timeout", type=int, default=300, dest="clone_timeout",
+                    help="git clone timeout in seconds (default 300; a timeout is recorded, not a crash)")
     ap.add_argument("--no-browser", dest="browser", action="store_false",
                     help="skip the browser-rendered surface (faster). DEFAULT is browser ON for grading: "
                          "the render finds SPA forms/routes a static crawl misses (biggest recall win) + "
@@ -393,14 +445,16 @@ def main():
     result = {"repo": args.repo, "deployed": False, "attempts_used": 0,
               "browser": args.browser, "ts": time.time(), **meta}   # ts: recorder stamps it (sortable)
 
-    repo = clone(args.repo)
-    context = gather_context(repo)
-    plan, url, error = None, None, ""
+    plan, url, error, repo = None, None, "", None
     try:
+        repo = clone(args.repo, timeout=args.clone_timeout)
+        context = gather_context(repo)
         for attempt in range(1, args.attempts + 1):
             result["attempts_used"] = attempt
-            print(f"\n=== attempt {attempt}/{args.attempts}: planning deploy ({args.model}) ===")
-            plan = plan_deploy(context, args.model, error=error, prev=plan)
+            online = attempt >= 2 and args.web_search   # attempt 1 cheap/no-search; retries look up recent stacks
+            print(f"\n=== attempt {attempt}/{args.attempts}: planning deploy ({args.model}"
+                  f"{' + web search' if online else ''}) ===")
+            plan = plan_deploy(context, args.model, error=error, prev=plan, online=online)
             _routing = (plan.get("stack_profile") or {}).get("routing", "?")
             print(f"  stack: {plan.get('stack')} [{_routing}]  port: {plan.get('port')}  "
                   f"db: {(plan.get('db') or {}).get('type')}")
@@ -408,18 +462,24 @@ def main():
             if notes:   # a few wrapped, hanging-indented lines (was one 200-char line cut mid-sentence)
                 for i, line in enumerate(textwrap.wrap(notes, width=100)[:6]):
                     print(("  notes: " if i == 0 else "         ") + line)
+            if plan.get("web_gradeable") is False:   # not a runnable web service (mobile/CLI/notebook/...)
+                _record_plan_meta(result, plan)      # -> SKIP: no fabricated server, no meaningless score
+                result["skipped"] = True
+                result["skip_reason"] = f"not web-gradeable (app_kind={plan.get('app_kind') or '?'})"
+                print(f"\n  SKIP — {result['skip_reason']}; recorded, not graded (no fabricated deploy)")
+                return
             try:
                 url = execute(plan, repo, verbose=args.verbose, build_timeout=args.build_timeout)
                 break
             except DeployError as e:
                 error = str(e)
                 result["deploy_error"] = (error.strip().splitlines() or ["unknown"])[0][:200]
+                if "BUILD TIMEOUT" in result["deploy_error"]:
+                    result["timeout"] = "build"   # 'took forever to build' — a bloat/deployability signal
                 print(f"  deploy failed:\n{error[-800:]}")
                 _docker("rm", "-f", "-v", APP, DB)   # tear down this attempt's containers + volume
-        if plan:   # stack identity + source-implied surface — recorded even on deploy FAILURE, so the
-            result["stack"] = plan.get("stack")               # stack-distribution half of the parity
-            result["stack_profile"] = plan.get("stack_profile")   # data doesn't drop undeployable apps
-            result["expected_surface"] = plan.get("expected_surface")
+        if plan:   # kind + stack + features + source-implied surface — recorded even on deploy FAILURE, so
+            _record_plan_meta(result, plan)          # the stack-distribution + parity ground-truth stay whole
         if not url:
             print("\nGAVE UP — could not deploy after all attempts.")
             return   # result (deployed=False, deploy_error) is written in the finally
@@ -429,7 +489,8 @@ def main():
             report = grade(url, args.browser, timeout=args.grade_timeout)
         except GradeTimeout as e:
             result["grade_timeout"] = True         # deployed but ungradeable in budget (broken/pathological
-            result["deploy_error"] = f"GRADE TIMEOUT (>{args.grade_timeout}s)"   # target); shows in stats
+            result["timeout"] = "grade"            # target); the 'took forever' signal + shows in stats
+            result["deploy_error"] = f"GRADE TIMEOUT (>{args.grade_timeout}s)"
             print(f"\n  GRADE TIMEOUT — {e}. Target too pathological to grade in budget; "
                   f"recorded, moving on.")
             return   # the finally writes the record (deployed=True, grade_timeout=True) + tears down
@@ -461,6 +522,11 @@ def main():
             print(f"      {cat:22} {round(subs[key]):>3}")
             for o in sorted(cat_probes[key], key=lambda o: -o.penalty):
                 print(f"        {o.probe_id:20} {o.penalty:>3}  {o.reason[:56]}")
+    except CloneError as e:   # clone failed/timed out BEFORE the deploy loop — record it, don't crash
+        result["deploy_error"] = str(e)
+        if "TIMEOUT" in str(e):
+            result["timeout"] = "clone"
+        print(f"  {e}")
     finally:
         if args.record:
             with open(args.record, "a") as f:
