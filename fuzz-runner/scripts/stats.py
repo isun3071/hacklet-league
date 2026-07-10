@@ -113,6 +113,7 @@ def main():
 
     deployed = [r for r in recs if r.get("deployed")]
     graded = [r for r in deployed if "slop_score" in r]
+    ungraded = [r for r in deployed if "slop_score" not in r]   # came up but grading aborted (e.g. timeout)
     scores = [r["slop_score"] for r in graded]
 
     # ---- (d) deploy-success rate (the hackathon-reproducibility finding) ----
@@ -177,6 +178,10 @@ def main():
           f"— {len(recs)-len(deployed)} failed to come up")
     for kind, n in err_kinds.most_common(6):
         print(f"      {n:>3}× {kind}")
+    if ungraded:   # deployed but no score (grade timeout / abort) — else these vanish from every view
+        print(f"    {len(ungraded)} deployed but NOT graded:")
+        for kind, n in Counter((r.get("deploy_error") or "unknown")[:60] for r in ungraded).most_common(4):
+            print(f"      {n:>3}× {kind}")
 
     # (a)
     print(f"\n(a) SLOP-SCORE DISTRIBUTION  (deployed+graded apps)")

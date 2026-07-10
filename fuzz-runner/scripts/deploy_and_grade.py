@@ -23,6 +23,7 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -326,10 +327,39 @@ def execute(plan: dict, repo: pathlib.Path, verbose: bool = False, build_timeout
 
 # ---- 4. grade + main ------------------------------------------------------------------------------
 
-def grade(url: str, use_browser: bool):
+class GradeTimeout(Exception):
+    """The grading phase blew its wall-clock budget. A pathological target — e.g. every HTML response
+    hangs the socket — makes each fan-out probe pay a full read timeout per route, so grading can grind
+    for tens of minutes. This bounds it so one broken app can't stall a batch."""
+
+
+def _grade_heartbeat(done, total, probe, outcomes):
+    # on_progress fires twice per probe; the pre-run call (outcomes is None) is the 'still alive' tick so
+    # a slow grade is visibly PROGRESSING, not frozen. \r-updates one stderr line (cleared in grade()).
+    if outcomes is None:
+        sys.stderr.write(f"\r  grading {done + 1:>2}/{total}  {probe.id:24}")
+        sys.stderr.flush()
+
+
+def grade(url: str, use_browser: bool, timeout: int = 180):
+    """Grade the running app, HARD-bounded to `timeout` seconds via SIGALRM — the alarm interrupts the
+    blocked syscall (e.g. an httpx read hanging on a broken server) so the grade can't run unbounded.
+    Raises GradeTimeout on expiry. SIGALRM is main-thread + Unix only, which the batch always is."""
     render = browser.render_routes if use_browser else None
-    report = run(RemoteDeployer(url, health_timeout=20), load_catalog(str(_ROOT / "catalog")), render=render)
-    return report
+
+    def _fire(signum, frame):
+        raise GradeTimeout(f"grading exceeded {timeout}s")
+
+    prev = signal.signal(signal.SIGALRM, _fire)
+    signal.alarm(timeout)
+    try:
+        return run(RemoteDeployer(url, health_timeout=20), load_catalog(str(_ROOT / "catalog")),
+                   render=render, on_progress=_grade_heartbeat)
+    finally:
+        signal.alarm(0)                              # cancel the alarm (also on the timeout path)
+        signal.signal(signal.SIGALRM, prev)          # restore any prior handler
+        sys.stderr.write("\r" + " " * 44 + "\r")     # wipe the heartbeat line
+        sys.stderr.flush()
 
 
 def main():
@@ -340,6 +370,10 @@ def main():
     ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
                     help="kill a docker build after N seconds (default 480). Lower = better batch "
                          "throughput but risks false-killing a genuinely heavy build; 300 is aggressive")
+    ap.add_argument("--grade-timeout", type=int, default=180, dest="grade_timeout",
+                    help="hard wall-clock cap (seconds) on the grading phase (default 180). A broken "
+                         "target (every route hangs) makes fan-out probes grind for tens of minutes; "
+                         "this bounds it so one bad app can't stall the batch")
     ap.add_argument("--no-browser", dest="browser", action="store_false",
                     help="skip the browser-rendered surface (faster). DEFAULT is browser ON for grading: "
                          "the render finds SPA forms/routes a static crawl misses (biggest recall win) + "
@@ -388,7 +422,14 @@ def main():
             return   # result (deployed=False, deploy_error) is written in the finally
         result.update(deployed=True)
         print(f"\n=== grading {url} ===")
-        report = grade(url, args.browser)
+        try:
+            report = grade(url, args.browser, timeout=args.grade_timeout)
+        except GradeTimeout as e:
+            result["grade_timeout"] = True         # deployed but ungradeable in budget (broken/pathological
+            result["deploy_error"] = f"GRADE TIMEOUT (>{args.grade_timeout}s)"   # target); shows in stats
+            print(f"\n  GRADE TIMEOUT — {e}. Target too pathological to grade in budget; "
+                  f"recorded, moving on.")
+            return   # the finally writes the record (deployed=True, grade_timeout=True) + tears down
         slop = [o for o in report.outcomes if o.outcome == "slop_detected"]
         result.update(slop_score=report.slop_score, axis_slop=report.axis_slop,
                       observed_surface=report.surface,   # what discovery SAW (parity numerator vs expected)
