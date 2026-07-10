@@ -100,3 +100,21 @@ def test_create_form_skips_a_password_change_form():
 def test_is_csrf_field():
     assert is_csrf_field("csrf_token") and is_csrf_field("authenticity_token") and is_csrf_field("_token")
     assert not is_csrf_field("username") and not is_csrf_field("text")
+
+
+# --- login forms recovered from INFERRED fields (anonymous SPA inputs -> [email, password]) -------
+from hacklet_runner.auth import login_form  # noqa: E402
+
+
+def test_inferred_email_password_is_a_detectable_login_not_a_change_form():
+    # phish-school's /login after field inference: [email, password]. "email" is an identity field, so this
+    # is a real login credential form — NOT withheld as a password-change form, and login-detectable.
+    f = Form(action="/login", method="post", fields=["email", "password"])
+    assert not is_password_change_form(f)
+    assert login_form([f]) is f
+
+
+def test_password_only_inferred_form_is_withheld_as_change_form():
+    # when ONLY the password field could be inferred (no identity field), it's indistinguishable from a
+    # password-CHANGE form, so it's treated as one and withheld — the safe default (never auto-submit it).
+    assert is_password_change_form(Form(action="/login", method="post", fields=["password"]))

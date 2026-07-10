@@ -40,9 +40,12 @@ def test_browser_discovery_finds_spa_form(spa_url):
 
 
 def test_browser_discovery_finds_subroute_form(spa_url):
-    # the login <form> is painted on /login (NOT the entry page) — only multi-route rendering reaches it
+    # the login <form> is painted on /login (NOT the entry page) — only multi-route rendering reaches it,
+    # and its inputs are anonymous (type=email/password, no name/id) so the field names must be INFERRED
     profile = discover(spa_url, render=browser.render_routes)
-    assert any(f.action == "/session" and "password" in f.fields for f in profile.forms)
+    login = [f for f in profile.forms if f.action == "/session"]
+    assert login and set(login[0].fields) == {"email", "password"}
+    assert profile.capabilities["any_form_has_password"] is True
 
 
 def test_browser_discovery_finds_formless_inputs(spa_url):

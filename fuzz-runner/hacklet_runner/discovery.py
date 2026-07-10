@@ -24,14 +24,19 @@ _ACTION = re.compile(r'(?<![-\w])action=["\']([^"\']*)["\']', re.I)
 _METHOD = re.compile(r'(?<![-\w])method=["\']([^"\']*)["\']', re.I)
 _ENCTYPE = re.compile(r'(?<![-\w])enctype=["\']([^"\']*)["\']', re.I)
 _FIELD = re.compile(r'<(?:input|textarea|select)\b[^>]*(?<![-\w])name=["\']([^"\']+)["\']', re.I)
-_INPUT_TAG = re.compile(r"<input\b[^>]*>", re.I)
-_IS_FILE = re.compile(r'(?<![-\w])type=["\']?file\b', re.I)
 
-# Formless-input parsing (SPA controls submitted via fetch() with no <form> wrapper): scan single tags.
-_INPUTISH = re.compile(r"<(input|textarea|select)\b([^>]*)>", re.I)
+# Input parsing. We walk <label> and <input>/<textarea>/<select> in document order so each control can be
+# tied to its nearest preceding <label> — a name-less SPA input is often addressable only by its label.
+_LABEL_OR_INPUT = re.compile(r"<label\b[^>]*>(.*?)</label>|<(input|textarea|select)\b([^>]*?)>", re.I | re.S)
 _ATTR_NAME = re.compile(r'(?<![-\w])name=["\']([^"\']+)["\']', re.I)
 _ATTR_ID = re.compile(r'(?<![-\w])id=["\']([^"\']+)["\']', re.I)
 _ATTR_TYPE = re.compile(r'(?<![-\w])type=["\']?([a-zA-Z]+)', re.I)
+_ATTR_PLACEHOLDER = re.compile(r'(?<![-\w])placeholder=["\']([^"\']+)["\']', re.I)
+_ATTR_AUTOCOMPLETE = re.compile(r'(?<![-\w])autocomplete=["\']([^"\']+)["\']', re.I)
+_TAG = re.compile(r"<[^>]+>")            # strip any nested tags out of a <label>'s text before slugging
+_WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*")
+# <input type=...> values that already name the field's purpose, so a name-less one is still addressable
+_SEMANTIC_TYPES = frozenset({"email", "password", "tel", "url", "search", "number"})
 # input types that carry no injectable free text (a submit button, a toggle, a color swatch, ...)
 _NONINJECTABLE_INPUT = frozenset({"submit", "button", "reset", "image", "hidden",
                                   "checkbox", "radio", "range", "color"})
@@ -76,6 +81,82 @@ def _same_origin_path(href: str, base_url: str, page_path: str) -> str | None:
     return path
 
 
+def _slug(text: str | None) -> str | None:
+    """First word of human text (a <label>/placeholder) as a lowercase id: 'Email address' -> 'email'."""
+    if not text:
+        return None
+    m = _WORD.search(_TAG.sub(" ", text))
+    return m.group(0).lower() if m else None
+
+
+def _infer_name(attrs: str, label: str | None) -> str | None:
+    """Best-effort field name for a NAME-less input from its semantic signals — a React-controlled input
+    frequently ships no name and no id, only a type / autocomplete / <label> / placeholder. Ordered by
+    reliability: standardized autocomplete token, then a self-naming input type (email/password/...), then
+    the label, then the placeholder, and a structural id only as a last resort. None when nothing is
+    addressable (a bare `type=text` with no other hint — we can't guess a server field name for it)."""
+    ac = _ATTR_AUTOCOMPLETE.search(attrs)
+    if ac:
+        tok = ac.group(1).strip().lower()
+        if tok and tok not in ("on", "off"):
+            return "password" if "password" in tok else tok   # current-password / new-password -> password
+    tm = _ATTR_TYPE.search(attrs)
+    if tm and tm.group(1).lower() in _SEMANTIC_TYPES:
+        return tm.group(1).lower()                             # type=email/password/tel/... names itself
+    if _slug(label):
+        return _slug(label)
+    ph = _ATTR_PLACEHOLDER.search(attrs)
+    if ph and _slug(ph.group(1)):
+        return _slug(ph.group(1))
+    idm = _ATTR_ID.search(attrs)
+    return idm.group(1) if idm else None                      # a structural id (kept verbatim, not slugged)
+
+
+def _scan_form_inputs(html: str, drop_named_noninjectable: bool = False):
+    """(fields, file_fields, has_password) for the interactive controls in an HTML fragment, in document
+    order. A NAMED control keeps its name for any type (a real <form> needs its hidden/CSRF fields to
+    submit faithfully); a NAME-less control gets an inferred name (_infer_name) so React inputs with no
+    name/id are still addressable. File inputs also appear in `fields` (a superset — lets the text-input
+    capability see a pure-upload surface). drop_named_noninjectable drops loose submit/hidden/checkbox
+    noise for formless synthesis, where a lone non-text control isn't a real input surface."""
+    fields: list[str] = []
+    file_fields: list[str] = []
+    has_password = False
+    label: str | None = None
+    for label_text, tag, attrs in _LABEL_OR_INPUT.findall(html):
+        if not tag:                                   # a <label> — remember it for the NEXT input
+            label = label_text
+            continue
+        this_label, label = label, None               # each label pairs with the one following input
+        tm = _ATTR_TYPE.search(attrs)
+        itype = tm.group(1).lower() if tm else "text"
+        is_input = tag.lower() == "input"
+        is_file = is_input and itype == "file"
+        noninjectable = is_input and itype in _NONINJECTABLE_INPUT
+        nm = _ATTR_NAME.search(attrs)
+        if is_file:
+            idm = _ATTR_ID.search(attrs)
+            name = nm.group(1) if nm else (idm.group(1) if idm else "file")
+        elif nm:
+            if noninjectable and drop_named_noninjectable:
+                continue
+            name = nm.group(1)
+        elif noninjectable:
+            continue                                  # a name-less button/checkbox/hidden — nothing to inject
+        else:
+            name = _infer_name(attrs, this_label)
+            if name is None:
+                continue
+        if _TEMPLATE_ARTIFACT.search(name):
+            continue                                  # a `${x}`/`{{x}}` artifact leaked into the identifier
+        if is_file and name not in file_fields:
+            file_fields.append(name)
+        if name not in fields:
+            fields.append(name)
+            has_password = has_password or itype == "password"
+    return fields, file_fields, has_password
+
+
 def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
     forms = []
     for attrs, body in matches:
@@ -88,12 +169,11 @@ def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
             continue
         method = mm.group(1).lower() if mm else "get"
         em = _ENCTYPE.search(attrs)
-        file_fields = [nm.group(1) for tag in _INPUT_TAG.findall(body) if _IS_FILE.search(tag)
-                       for nm in [_FIELD.search(tag)] if nm]
+        fields, file_fields, _ = _scan_form_inputs(body)  # keeps hidden/CSRF fields for a faithful submit
         forms.append(Form(
             action=action,
             method=method if method in ("get", "post") else "get",
-            fields=_FIELD.findall(body),
+            fields=fields,
             enctype=em.group(1).lower() if em else "",
             file_fields=file_fields,
         ))
@@ -119,35 +199,16 @@ def _formless_form(html: str, page_path: str) -> Form | None:
     Best-effort by nature: the real submit endpoint lives in JS, so the action is the page itself —
     correct for same-path server actions / Next.js API routes / PHP self-post, and a harmless no-op
     elsewhere (a wrong target just returns the SPA shell, which yields no oracle differential, so this
-    can't manufacture a false positive). The identifier falls back to id= because SPA inputs are
-    frequently name-less (React-controlled). Returns None when the page has no such inputs."""
+    can't manufacture a false positive). Field names come from _scan_form_inputs/_infer_name, which
+    handle the name-less React inputs these apps use. Returns None when the page has no such inputs."""
     body = _FORM.sub(" ", html)   # drop real <form>s (handled by _parse_forms) -> only UNwrapped inputs
-    fields: list[str] = []
-    file_fields: list[str] = []
-    has_password = False
-    for tag, attrs in _INPUTISH.findall(body):
-        nm = _ATTR_NAME.search(attrs) or _ATTR_ID.search(attrs)
-        if not nm or _TEMPLATE_ARTIFACT.search(nm.group(1)):
-            continue  # nameless-and-idless, or a `${x}`/`{{x}}` template artifact leaked into the id/name
-        name = nm.group(1)
-        tm = _ATTR_TYPE.search(attrs)
-        itype = tm.group(1).lower() if tm else "text"
-        is_input = tag.lower() == "input"
-        if is_input and itype in _NONINJECTABLE_INPUT:
-            continue
-        if is_input and itype == "file":
-            if name not in file_fields:
-                file_fields.append(name)
-        elif name not in fields:
-            fields.append(name)
-            has_password = has_password or itype == "password"
-    names = fields + [f for f in file_fields if f not in fields]
-    if not names:
+    fields, file_fields, has_password = _scan_form_inputs(body, drop_named_noninjectable=True)
+    if not fields:
         return None
     return Form(
         action=page_path,                                        # best-effort: the page's own path
         method="post" if (file_fields or has_password) else "get",  # login/upload POST; search-ish GET
-        fields=names,
+        fields=fields,
         enctype="multipart/form-data" if file_fields else "",
         file_fields=file_fields,
     )

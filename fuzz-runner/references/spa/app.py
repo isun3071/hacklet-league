@@ -26,15 +26,15 @@ HOME = b"""<!doctype html><html><body>
 </script>
 </body></html>"""
 
-# (2) sub-route: JS-built <form action=/session> — NOT on the entry page, so a single-"/" render misses it
+# (2) sub-route: JS-built <form action=/session> — NOT on the entry page (a single-"/" render misses it),
+# with ANONYMOUS React-style inputs: no name, no id, only a type — discovery must INFER the field names
 LOGIN = b"""<!doctype html><html><body>
 <h1>login</h1><div id="app"></div>
 <script>
   var f = document.createElement('form');
   f.setAttribute('action', '/session'); f.setAttribute('method', 'post');
-  var u = document.createElement('input'); u.setAttribute('name', 'username'); f.appendChild(u);
-  var p = document.createElement('input');
-  p.setAttribute('name', 'password'); p.setAttribute('type', 'password'); f.appendChild(p);
+  var e = document.createElement('input'); e.setAttribute('type', 'email'); f.appendChild(e);
+  var p = document.createElement('input'); p.setAttribute('type', 'password'); f.appendChild(p);
   document.getElementById('app').appendChild(f);
 </script>
 </body></html>"""

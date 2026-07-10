@@ -182,3 +182,35 @@ def test_formless_skips_noninjectable_and_nameless():
     # submit/hidden/checkbox carry no injectable free text; a nameless+idless input is unaddressable
     assert _formless_form('<input type="submit" value="go"><input type="hidden" name="csrf" value="x">'
                           '<input type="checkbox" name="agree"><input type="text">', "/") is None
+
+
+# --- name inference for anonymous SPA inputs (no name/id — React-controlled) ---------------------
+from hacklet_runner.discovery import _infer_name, _scan_form_inputs  # noqa: E402
+
+
+def test_infer_name_from_semantic_type():
+    # phish-school's login: <input type=email>/<input type=password> with no name/id -> inferred
+    assert _infer_name(' type="email"', None) == "email"
+    assert _infer_name(' type="password"', None) == "password"
+    assert _infer_name(' type="text"', None) is None       # a bare text box gives no field-name hint
+
+
+def test_infer_name_prefers_autocomplete_then_label_then_placeholder():
+    assert _infer_name(' autocomplete="username"', None) == "username"
+    assert _infer_name(' autocomplete="current-password"', None) == "password"
+    assert _infer_name(' type="text"', "Full Name") == "full"          # <label> text -> first word
+    assert _infer_name(' type="text" placeholder="Search notes"', None) == "search"
+
+
+def test_scan_infers_anonymous_login_and_keeps_hidden_in_a_form():
+    # a real <form> keeps its CSRF/hidden field (needed to submit) AND infers the anonymous credential inputs
+    fields, files, has_pw = _scan_form_inputs(
+        '<input type="hidden" name="csrf"><label>Email</label><input type="email">'
+        '<input type="password"><button type="submit">Go</button>')
+    assert fields == ["csrf", "email", "password"] and has_pw and files == []
+
+
+def test_scan_associates_nearest_label():
+    fields, _, _ = _scan_form_inputs('<label>Username</label><input type="text">'
+                                     '<label>Bio</label><textarea></textarea>')
+    assert fields == ["username", "bio"]
