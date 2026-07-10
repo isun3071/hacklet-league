@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Cross-stack PARITY dashboard from deploy_and_grade records.
+
+The point: a low slop score is only meaningful if the fuzzer SAW the app's surface. Objectivity between
+apps requires stack-invariant visibility — otherwise a modern SPA scores low because we're blind, not
+because it's clean. This groups apps by LLM-identified stack and contrasts OBSERVED surface (what
+black-box discovery saw, discovery.surface_metrics) against EXPECTED surface (what the source implies,
+per the deploy LLM). A blind spot's signature is low observed-surface + few findings CLUSTERED on a stack
+(genuine cleanliness is stack-random; blindness clusters), and — sharper — a surface TYPE the source says
+exists on N apps of a stack that we observed on far fewer (five login apps, we should see five logins).
+
+    uv run python scripts/parity.py results.jsonl                 # the dashboard
+    uv run python scripts/parity.py results.jsonl --csv rows.csv  # per-app CSV (stack, surface, slop, ratio)
+    uv run python scripts/parity.py results.jsonl --by framework  # group by framework (default: routing)
+    uv run python scripts/parity.py results.jsonl --json          # machine-readable
+
+Every number traces to specific apps: --csv is the per-app ledger behind the grouped view.
+"""
+import argparse
+import csv
+import json
+import pathlib
+import statistics
+import sys
+from collections import defaultdict
+
+_HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
+from stats import load  # noqa: E402  (dedupe-by-repo loader, shared with stats.py)
+
+# categorical surfaces with an observed<->expected pair, so parity = "did we see what the source implies?"
+_TYPES = ("login", "upload", "api")
+
+
+def _row(rec: dict) -> dict:
+    """Flatten one record to a per-app parity row (stack + observed + expected + slop + ratio)."""
+    sp = rec.get("stack_profile") or {}
+    obs = rec.get("observed_surface") or {}
+    exp = rec.get("expected_surface") or {}
+    slop = rec.get("slop_score")
+    size = obs.get("surface_size")
+    return {
+        "repo": rec.get("repo"),
+        "deployed": bool(rec.get("deployed")),
+        "framework": sp.get("framework") or "?",
+        "routing": sp.get("routing") or "?",
+        "api_style": sp.get("api_style") or "?",
+        "stack": rec.get("stack") or "?",
+        "obs_routes": obs.get("routes"), "obs_forms": obs.get("forms"),
+        "obs_inputs": obs.get("inputs"), "obs_endpoints": obs.get("endpoints"),
+        "obs_surface_size": size,
+        "obs_login": obs.get("has_login"), "obs_upload": obs.get("has_upload"), "obs_api": obs.get("has_api"),
+        "exp_login": exp.get("login"), "exp_upload": exp.get("upload"),
+        "exp_search": exp.get("search"), "exp_api": exp.get("api"), "exp_views": exp.get("views"),
+        "slop_score": slop, "findings": len(rec.get("findings", [])),
+        # slop normalized by how much we SAW: high surface + low ratio = clean; low surface = suspect
+        "slop_per_surface": round(slop / size, 2) if (slop is not None and size) else None,
+    }
+
+
+def _avg(xs):
+    xs = [x for x in xs if x is not None]
+    return round(statistics.mean(xs), 1) if xs else None
+
+
+def group_parity(rows: list, key: str) -> dict:
+    """Per-stack aggregates + TYPE parity. Parity for a surface type = of the DEPLOYED apps whose source
+    says they HAVE it (expected), on how many did discovery actually OBSERVE it — i.e. the recall of that
+    surface type for this stack. Low + clustered = a blind spot."""
+    groups = defaultdict(list)
+    for r in rows:
+        groups[r[key]].append(r)
+    out = {}
+    for g, rs in groups.items():
+        dep = [r for r in rs if r["deployed"] and r["obs_surface_size"] is not None]
+        parity = {}
+        for t in _TYPES:
+            expected = [r for r in dep if r.get(f"exp_{t}")]                 # source says the surface exists
+            observed = [r for r in expected if r.get(f"obs_{t}")]            # ...and discovery saw it
+            parity[t] = (len(observed), len(expected))                       # (saw, should-have-seen)
+        out[g] = {
+            "n": len(rs), "deployed": sum(r["deployed"] for r in rs),
+            "surface_avg": _avg([r["obs_surface_size"] for r in dep]),
+            "findings_avg": _avg([r["findings"] for r in dep]),
+            "slop_avg": _avg([r["slop_score"] for r in dep]),
+            "slop_per_surface_avg": _avg([r["slop_per_surface"] for r in dep]),
+            "parity": parity,
+        }
+    return out
+
+
+def blind_spots(rows: list, key: str) -> list:
+    """Ranked (stack, type, missed, observed, expected) — missed = expected−observed = the number of apps
+    where the source says a surface exists but we didn't see it. This IS prevalence × brokenness (how many
+    apps of the stack have it × the fraction we miss), so the ranking is the fix-order."""
+    gp = group_parity(rows, key)
+    spots = []
+    for g, agg in gp.items():
+        for t, (obs, exp) in agg["parity"].items():
+            if exp and obs < exp:
+                spots.append({"stack": g, "type": t, "missed": exp - obs, "observed": obs, "expected": exp})
+    return sorted(spots, key=lambda s: (-s["missed"], -s["expected"]))
+
+
+_CSV_COLS = ["repo", "deployed", "framework", "routing", "api_style", "stack",
+             "obs_routes", "obs_forms", "obs_inputs", "obs_endpoints", "obs_surface_size",
+             "obs_login", "obs_upload", "obs_api", "exp_login", "exp_upload", "exp_search",
+             "exp_api", "exp_views", "slop_score", "findings", "slop_per_surface"]
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Cross-stack parity dashboard from deploy_and_grade records.")
+    ap.add_argument("results", help="the JSONL from deploy_and_grade --record")
+    ap.add_argument("--by", default="routing", choices=["routing", "framework", "api_style"],
+                    help="group key (default routing — the discovery-relevant axis)")
+    ap.add_argument("--csv", metavar="FILE", help="write the per-app rows to FILE (the ledger) and exit")
+    ap.add_argument("--json", action="store_true", help="emit machine-readable groups + blind spots")
+    args = ap.parse_args()
+
+    rows = [_row(r) for r in load(args.results)]
+    if not rows:
+        sys.exit("no records")
+
+    if args.csv:
+        with open(args.csv, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=_CSV_COLS, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+        print(f"wrote {len(rows)} rows -> {args.csv}")
+        return
+
+    gp = group_parity(rows, args.by)
+    spots = blind_spots(rows, args.by)
+
+    if args.json:
+        print(json.dumps({"group_by": args.by, "groups": gp, "blind_spots": spots}, indent=2))
+        return
+
+    print(f"\n═══ cross-stack parity — {len(rows)} apps, grouped by {args.by} ═══")
+
+    # stack DISTRIBUTION (which stacks dominate — the head to cover first)
+    print("\nSTACK DISTRIBUTION  (cover the head)")
+    for g, agg in sorted(gp.items(), key=lambda kv: -kv[1]["n"]):
+        print(f"  {g:16} {agg['n']:>3} apps  ({agg['deployed']} deployed)")
+
+    # per-stack observed surface + TYPE parity (saw / should-have-seen)
+    print(f"\nOBSERVED SURFACE & TYPE PARITY  (per {args.by}; parity = saw / source-says-exists)")
+    print(f"  {'stack':16} {'dep':>4} {'surf':>5} {'find':>5} {'slop':>5}   "
+          + "  ".join(f"{t:>9}" for t in _TYPES))
+    for g, agg in sorted(gp.items(), key=lambda kv: -kv[1]["n"]):
+        par = "  ".join(
+            (f"{o}/{e}".rjust(9) if e else "   —".rjust(9)) for o, e in
+            (agg["parity"][t] for t in _TYPES))
+        print(f"  {g:16} {agg['deployed']:>4} {str(agg['surface_avg']):>5} "
+              f"{str(agg['findings_avg']):>5} {str(agg['slop_avg']):>5}   {par}")
+
+    # blind-spot ranking (prevalence × brokenness = # apps where we missed a surface the source implies)
+    print("\nBLIND SPOTS  (fix order — apps where the source says a surface exists but we didn't see it)")
+    if not spots:
+        print("  (none — observed surface matches expected across every stack, or no expected labels)")
+    for s in spots[:12]:
+        print(f"  {s['stack']:16} {s['type']:8} missed {s['missed']}/{s['expected']} apps "
+              f"(saw {s['observed']})")
+    print(f"\n  → per-app ledger: scripts/parity.py {args.results} --csv rows.csv\n")
+
+
+if __name__ == "__main__":
+    main()
