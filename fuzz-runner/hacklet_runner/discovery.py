@@ -27,8 +27,14 @@ _FIELD = re.compile(r'<(?:input|textarea|select)\b[^>]*(?<![-\w])name=["\']([^"\
 _INPUT_TAG = re.compile(r"<input\b[^>]*>", re.I)
 _IS_FILE = re.compile(r'(?<![-\w])type=["\']?file\b', re.I)
 
+# routes NOT worth browser-rendering for forms — static assets / JSON blobs, never an HTML page with a form
+_NON_HTML_EXT = re.compile(
+    r"\.(?:js|mjs|cjs|css|map|json|xml|svg|png|jpe?g|gif|webp|ico|bmp|woff2?|ttf|otf|eot|pdf|"
+    r"zip|gz|mp4|webm|mp3|wav|wasm|txt|csv)$", re.I)
+
 MAX_PAGES = 25
 MAX_DEPTH = 2
+_BROWSER_ROUTE_CAP = 12  # max routes to browser-render for forms (one launch, but each goto has a cost)
 
 
 # A logout/sign-out link must never be crawled or probed: following it destroys the runner's own
@@ -86,6 +92,16 @@ def _parse_forms(matches, base_url: str, page_path: str) -> list[Form]:
     return forms
 
 
+def _renderable_route(path: str) -> bool:
+    """A route worth browser-rendering for forms: an HTML page, not a static asset or JSON/API blob."""
+    return not _NON_HTML_EXT.search(path.split("?")[0])
+
+
+def _form_key(form: Form) -> tuple:
+    """Dedup identity for a discovered form (across the static crawl and every rendered route)."""
+    return (form.action, form.method, tuple(form.fields))
+
+
 def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: int = MAX_DEPTH,
              headers=None) -> Profile:
     routes: dict[str, None] = {}      # insertion-ordered set
@@ -122,7 +138,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                 continue
             html = resp.text
             for form in _parse_forms(_FORM.findall(html), base_url, path):
-                key = (form.action, form.method, tuple(form.fields))
+                key = _form_key(form)
                 if key not in seen_forms:
                     seen_forms.add(key)
                     forms.append(form)
@@ -160,21 +176,39 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             routes.setdefault(ep.path, None)
 
     browser_ok = False
-    if render is not None:  # browser-rendered DOM: client-rendered forms/routes a static crawl misses
-        dom = render(base_url.rstrip("/") + "/", headers=headers)
-        if dom:
+    if render is not None:
+        # Browser-render the discovered HTML routes and harvest their client-rendered forms AND formless
+        # inputs. A SPA paints its login/upload/search controls on their OWN routes (often with no <form>
+        # at all), so the old single-"/" render only ever saw a form-less landing page — and every
+        # injection/upload/auth probe went N/A for want of a target. Two phases so nav routes that only
+        # appear AFTER "/" renders still get rendered: (1) render the entry page and fold its
+        # client-rendered links into the route set; (2) render the rest of the now-fuller HTML route set
+        # in one reused browser session (bounded — each goto costs). render(base_url, paths, headers) ->
+        # {path: DOM} is browser.render_routes; None/{} when no browser launched (browser probes read N/A).
+        rendered = render(base_url, [start_path], headers=headers) or {}
+        if rendered:
             browser_ok = True  # a real render returned HTML -> the browser actually launched/works
             any_response = True
-            for form in _parse_forms(_FORM.findall(dom), base_url, "/"):
-                key = (form.action, form.method, tuple(form.fields))
-                if key not in seen_forms:
-                    seen_forms.add(key)
-                    forms.append(form)
-                    routes.setdefault(form.action, None)
-            for ref in _SRC.findall(dom) + _LINK.findall(dom):
-                p = _same_origin_path(ref, base_url, "/")
-                if p:
-                    routes.setdefault(p, None)
+            for dom in list(rendered.values()):     # phase 1: entry-page links -> route set
+                for ref in _SRC.findall(dom) + _LINK.findall(dom):
+                    p = _same_origin_path(ref, base_url, start_path)
+                    if p:
+                        routes.setdefault(p, None)
+            extra = [r for r in routes if r != start_path and _renderable_route(r)]
+            extra = list(dict.fromkeys(extra))[:_BROWSER_ROUTE_CAP]
+            if extra:                               # phase 2: render the rest of the HTML surface
+                rendered.update(render(base_url, extra, headers=headers) or {})
+            for path, dom in rendered.items():
+                for form in _parse_forms(_FORM.findall(dom), base_url, path):
+                    key = _form_key(form)
+                    if key not in seen_forms:
+                        seen_forms.add(key)
+                        forms.append(form)
+                        routes.setdefault(form.action, None)
+                for ref in _SRC.findall(dom) + _LINK.findall(dom):
+                    p = _same_origin_path(ref, base_url, path)
+                    if p:
+                        routes.setdefault(p, None)
 
     # Withhold password-CHANGE forms from the whole surface (like logout links above): probes SUBMIT
     # discovered forms (and fold GET forms into query-param injection targets), so a `password_new`/

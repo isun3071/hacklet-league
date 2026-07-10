@@ -34,9 +34,15 @@ def test_static_discovery_misses_spa_form(spa_url):
 
 
 def test_browser_discovery_finds_spa_form(spa_url):
-    profile = discover(spa_url, render=browser.render_html)
+    profile = discover(spa_url, render=browser.render_routes)
     assert profile.capabilities["any_form_has_password"] is True
     assert any(f.action == "/register" and "password" in f.fields for f in profile.forms)
+
+
+def test_browser_discovery_finds_subroute_form(spa_url):
+    # the login <form> is painted on /login (NOT the entry page) — only multi-route rendering reaches it
+    profile = discover(spa_url, render=browser.render_routes)
+    assert any(f.action == "/session" and "password" in f.fields for f in profile.forms)
 
 
 @pytest.fixture
@@ -75,7 +81,7 @@ _BROWSER_PROBES = ("sec-domxss-001", "perf-cwv-001", "qa-console-001", "qa-a11y-
 
 def _browser_run(app: str):
     catalog = [p for p in load_catalog(CATALOG) if p.id in _BROWSER_PROBES]
-    return run(SubprocessDeployer(str(REFS / app / "app.py")), catalog, render=browser.render_html)
+    return run(SubprocessDeployer(str(REFS / app / "app.py")), catalog, render=browser.render_routes)
 
 
 def test_browser_pipeline_fires_on_vulnerable():

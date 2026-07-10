@@ -139,3 +139,13 @@ def test_path_bearing_target_crawls_the_entry_page_and_binds_to_origin():
         assert any(f.action == "/deep" and f.fields == ["q"] for f in prof.forms)
     finally:
         srv.shutdown()
+
+
+# --- which routes get browser-rendered for forms (pure filter, no browser) ----------------------
+from hacklet_runner.discovery import _renderable_route  # noqa: E402
+
+
+def test_renderable_route_filters_static_assets():
+    assert _renderable_route("/login") and _renderable_route("/api/broadcast")
+    assert not _renderable_route("/assets/index-abc.js")
+    assert not _renderable_route("/logo.png") and not _renderable_route("/data.json")

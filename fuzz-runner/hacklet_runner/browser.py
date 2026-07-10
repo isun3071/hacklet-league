@@ -62,28 +62,42 @@ def _apply_auth(page, url: str, headers) -> None:
             page.context.add_cookies(jar)
 
 
-def render_html(url: str, headers=None, timeout: float = 15.0) -> str | None:
-    """Load url in a headless browser and return the rendered DOM. None if no browser is available
-    or rendering fails (the caller falls back to the static crawl)."""
+def render_routes(base_url: str, paths, headers=None, timeout: float = 12.0,
+                  total_timeout: float = 60.0) -> dict[str, str]:
+    """Render each same-origin path in ONE reused browser session and return {path: rendered_DOM}.
+    Paths that fail to load are omitted; {} if no browser is available. A single launch is amortized
+    across all routes — a launch-per-route helper would relaunch (and re-warm) the browser each time.
+    Bounded by total_timeout so a slow-loris route can't stall the whole crawl (like dom_xss_executes).
+    Used by discovery to harvest the client-rendered forms/inputs a SPA paints on routes OTHER than "/"
+    (login, upload, search) — the interactive surface a single "/" render misses. Pass ["/"] for just
+    the entry page."""
+    out: dict[str, str] = {}
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return None
+        return out
     try:
-        with sync_playwright() as p:
-            browser = _launch(p)
-            if browser is None:
-                return None
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return out
             try:
-                page = browser.new_page()
-                _apply_auth(page, url, headers)
-                page.goto(url, timeout=timeout * 1000, wait_until="load")
-                page.wait_for_timeout(300)  # let client JS settle
-                return page.content()
+                page = b.new_page()
+                _apply_auth(page, base_url, headers)  # cookies/headers persist for the origin across gotos
+                deadline = time.monotonic() + total_timeout
+                for path in paths:
+                    if time.monotonic() > deadline:
+                        break
+                    url = base_url.rstrip("/") + path
+                    with contextlib.suppress(Exception):
+                        page.goto(url, timeout=timeout * 1000, wait_until="load")
+                        page.wait_for_timeout(300)  # let client JS paint the route's forms/inputs
+                        out[path] = page.content()
             finally:
-                browser.close()
+                b.close()
     except Exception:
-        return None
+        return out
+    return out
 
 
 def first_contentful_paint(url: str, headers=None, timeout: float = 12.0) -> float | None:

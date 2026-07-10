@@ -310,7 +310,7 @@ def execute(plan: dict, repo: pathlib.Path, verbose: bool = False, build_timeout
 # ---- 4. grade + main ------------------------------------------------------------------------------
 
 def grade(url: str, use_browser: bool):
-    render = browser.render_html if use_browser else None
+    render = browser.render_routes if use_browser else None
     report = run(RemoteDeployer(url, health_timeout=20), load_catalog(str(_ROOT / "catalog")), render=render)
     return report
 

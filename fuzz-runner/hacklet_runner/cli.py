@@ -244,7 +244,7 @@ def main() -> None:
     args = ap.parse_args()
 
     catalog = load_catalog(args.catalog)
-    render = browser.render_html if args.browser else None
+    render = browser.render_routes if args.browser else None
     source = args.app or args.target or args.submission
     auth_headers = {}
     for h in args.header:
