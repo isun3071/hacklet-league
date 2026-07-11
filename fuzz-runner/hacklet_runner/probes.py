@@ -2117,7 +2117,8 @@ def crash_resistance(ctx, probe) -> bool | None:
                     try:
                         st = _xss_send(c, method, action, data).status_code
                         if st >= 500:
-                            ctx.evidence.update(crashed=True, via="malformed-field", target=action, status=st)
+                            ctx.evidence.update(crashed=True, via="malformed-field", target=action,
+                                                field=field, payload=str(val)[:60], status=st)
                             return True                    # malformed input -> unhandled 5xx
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -2138,7 +2139,8 @@ def crash_resistance(ctx, probe) -> bool | None:
                 try:
                     st = c.post(path, content=body, headers={"Content-Type": "application/json"}).status_code
                     if st >= 500:
-                        ctx.evidence.update(crashed=True, via="malformed-json", target=path, status=st)
+                        ctx.evidence.update(crashed=True, via="malformed-json", target=path,
+                                            payload=body[:60].decode("utf-8", "replace"), status=st)
                         return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue

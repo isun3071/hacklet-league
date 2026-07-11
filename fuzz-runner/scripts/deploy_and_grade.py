@@ -49,6 +49,18 @@ from hacklet_runner.pipeline import run  # noqa: E402
 def _axis_str(axis: dict) -> str:
     return " · ".join(f"{b} {round(axis[b])}" for b in ("security", "qa", "performance") if b in axis)
 
+
+# input/payload evidence keys — what MADE a probe fire (the malformed body, injection string, field). Config
+# checks (headers/seo) have none, so they get no trigger line; only payload-bearing findings show one.
+_TRIGGER_KEYS = ("payload", "value", "technique", "where", "param", "field", "filename")
+
+
+def _trigger_str(ev: dict) -> str:
+    parts = [f"{k}={ev[k]}" for k in _TRIGGER_KEYS if ev.get(k) not in (None, "", [], {})]
+    if parts and ev.get("target"):
+        parts.insert(0, f"@{ev['target']}")
+    return "  ".join(str(p) for p in parts)[:96]
+
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Cheap + WELL-CALIBRATED: this task hinges on the LLM admitting "not a web app" / not inventing features.
 # Qwen3.7 Plus ($0.32/$1.28, 1M context) is a strong anti-hallucinator — the 3.7 generation halved
@@ -589,6 +601,9 @@ def main():
             print(f"      {cat:22} {round(subs[key]):>3}")
             for o in sorted(cat_probes[key], key=lambda o: -o.penalty):
                 print(f"        {o.probe_id:20} {o.penalty:>3}  {o.reason[:56]}")
+                trig = _trigger_str(o.evidence)          # show WHAT triggered it (payload/injection/field)
+                if trig:
+                    print(f"        {'':22}↳ {trig}")
     except CloneError as e:   # clone failed/timed out BEFORE the deploy loop — record it, don't crash
         result["deploy_error"] = str(e)
         if "TIMEOUT" in str(e):

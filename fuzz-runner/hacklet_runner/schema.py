@@ -50,6 +50,7 @@ class Endpoint:
     raw_path: str = ""                                      # original template, e.g. /users/v1/{username}
     baseline_status: int | None = None                     # status of a well-formed baseline request;
     #                                    >=500 => env-var-dead (dummy key), so it's reached-but-not-healthy
+    kind: str = ""                                          # feature kind if seeded (auth/upload/search/...)
 
 
 @dataclass

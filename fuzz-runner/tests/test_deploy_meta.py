@@ -6,7 +6,15 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
-from deploy_and_grade import CloneError, _record_plan_meta, clone  # noqa: E402
+from deploy_and_grade import CloneError, _record_plan_meta, _trigger_str, clone  # noqa: E402
+
+
+def test_trigger_str_surfaces_the_payload_but_not_config_checks():
+    # a payload-bearing finding shows WHAT triggered it; a config check (headers) has none -> no line
+    assert _trigger_str({"via": "malformed-json", "target": "/api/chat", "payload": "{not valid json"}) \
+        == "@/api/chat  payload={not valid json"
+    assert "technique=error" in _trigger_str({"technique": "error", "where": "query", "param": "q"})
+    assert _trigger_str({"status": 200, "elapsed_ms": 17}) == ""      # header/perf check -> no trigger line
 
 
 def test_clone_raises_cloneerror_instead_of_crashing():

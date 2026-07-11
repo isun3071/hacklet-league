@@ -56,6 +56,10 @@ _VENDOR_PATH = re.compile(
 MAX_PAGES = 25
 MAX_DEPTH = 2
 _BASELINE_CAP = 60   # cap the per-endpoint health baseline requests (a huge mined API shouldn't 10x the grade)
+# login / upload surfaces on a JSON API are ENDPOINTS, not <form>s — so has_login/has_upload (form-based)
+# would falsely read blind on an api-only app whose login/upload endpoint we DID discover. Recognize them.
+_LOGIN_EP = re.compile(r"/(?:login|log-?in|signin|sign-?in|auth|authenticate|session|token|oauth)(?:[/.\-]|$)", re.I)
+_UPLOAD_EP = re.compile(r"/(?:upload|files?|media|attachments?|import|ingest|documents?)(?:[/.\-]|$)", re.I)
 _BROWSER_ROUTE_CAP = 12  # max routes to browser-render for forms (one launch, but each goto has a cost)
 
 
@@ -241,7 +245,7 @@ def _endpoints_from_features(features) -> list:
         concrete = re.sub(r"\{[^}]+\}", "1", raw)          # {id} -> 1 for fan-out fetches; injection uses raw
         qp = ["q", "search", "query"] if f.get("kind") == "search" else []
         out.append(Endpoint(path=concrete, method=method, query_params=qp,
-                            path_params=path_params, raw_path=raw))
+                            path_params=path_params, raw_path=raw, kind=f.get("kind") or ""))
     return out
 
 
@@ -415,6 +419,12 @@ def surface_metrics(profile: Profile) -> dict:
     # it as unobserved so 'reached-but-half-dead' (sapling: ~95 reached, many 500) isn't scored well-covered.
     eps = profile.endpoints
     healthy_eps = [e for e in eps if (e.baseline_status or 0) < 500]
+    # login/upload can be an API ENDPOINT (feature kind auth/upload, or a login/upload-named path), not
+    # just an HTML form — count those too so an api-only app's login/upload isn't a false blind spot.
+    has_login = login_form(forms) is not None or any(
+        e.kind == "auth" or _LOGIN_EP.search(e.raw_path or e.path or "") for e in eps)
+    has_upload = any(f.file_fields for f in forms) or any(
+        e.kind == "upload" or _UPLOAD_EP.search(e.raw_path or e.path or "") for e in eps)
     return {
         "routes": len(app_routes),
         "routes_all": len(profile.routes),           # incl. vendor assets, for reference
@@ -423,8 +433,8 @@ def surface_metrics(profile: Profile) -> dict:
         "endpoints": len(healthy_eps),               # healthy = responds to a baseline without a 5xx
         "endpoints_reached": len(eps),               # incl. env-var-dead (reached but not testable)
         "endpoints_dead": len(eps) - len(healthy_eps),
-        "has_login": login_form(forms) is not None,
-        "has_upload": any(f.file_fields for f in forms),
+        "has_login": has_login,                       # HTML login form OR an API login endpoint
+        "has_upload": has_upload,                     # multipart form OR an API upload endpoint
         "has_api": bool(healthy_eps),
         "browser_rendered": bool(caps.get("browser")),
         "accepts_text_input": bool(caps.get("any_endpoint_accepts_text_input")),

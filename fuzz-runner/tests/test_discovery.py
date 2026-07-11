@@ -250,6 +250,20 @@ def test_endpoints_from_features_seeds_api_surface():
     assert next(e for e in eps if e.raw_path == "/api/s/").query_params == ["q", "search", "query"]
 
 
+def test_surface_metrics_recognizes_api_login_upload_endpoints():
+    from hacklet_runner.schema import Endpoint
+    # an api-only app's login/upload are ENDPOINTS (feature kind or a login/upload-named path), not forms —
+    # has_login/has_upload must see them, else parity falsely reports a blind spot (sapling)
+    eps = [Endpoint(path="/api/login", raw_path="/api/login", method="post", kind="auth"),
+           Endpoint(path="/api/documents", raw_path="/api/documents", method="post", kind="upload")]
+    s = surface_metrics(Profile(base_url="http://t", routes=["/"], forms=[], capabilities={}, endpoints=eps))
+    assert s["has_login"] is True and s["has_upload"] is True
+    # and path-based, for a crawled/mined endpoint with no feature kind
+    e = [Endpoint(path="/api/v2/signin", raw_path="/api/v2/signin", method="post")]
+    assert surface_metrics(Profile(base_url="http://t", routes=["/"], forms=[], capabilities={},
+                                   endpoints=e))["has_login"] is True
+
+
 def test_surface_metrics_counts_only_healthy_endpoints():
     from hacklet_runner.schema import Endpoint
     eps = [Endpoint(path="/api/a", raw_path="/api/a", baseline_status=200),   # healthy
