@@ -72,6 +72,10 @@ DEFAULT_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.7-plus")
 NET = "hl-deploy-net"
 APP = "hl-deploy-app"
 DB = "hl-db"
+# after each app, keep at most this much build cache (LRU): enough to hold the shared pip/npm wheels that
+# later apps in the batch reuse, capped so it can't grow unbounded. Docker 29's flag for the old
+# --keep-storage. Override for a bigger/smaller disk budget.
+_BUILD_CACHE_CAP = os.environ.get("HL_BUILD_CACHE_CAP", "20GB")
 DB_CREDS = {"user": "hacklet", "password": "hacklet", "db": "hacklet"}
 
 
@@ -133,14 +137,59 @@ def _build_streamed(dockerfile, ctx, verbose=False, timeout=1200):
     return proc.returncode, "".join(lines)[-3000:]
 
 
+# pip/npm downloads are the slow step of a build, and on a low-bandwidth box a heavy-deps app can blow the
+# build timeout on downloads ALONE — then each retry re-downloads from scratch, so a marginally-too-heavy
+# app stays too heavy forever. A BuildKit cache mount banks those downloads OUTSIDE the image layer, in the
+# daemon's build cache, so they persist across the 3 attempts — and even across a timeout-KILLed build: the
+# cache ref survives cancellation, and pip re-fetches any half-written wheel via its own hash check. Per-app
+# _teardown disposes it. BuildKit is the default builder here (Docker 23+), so the mount flag needs no
+# `# syntax=` directive. --no-cache-dir is stripped because it defeats the very cache we add (and, unlike a
+# plain cacheless install, the mount keeps the wheels out of the image layer, so image size is unaffected).
+_PIP_INSTALL = re.compile(r"\bpip[0-9.]*\s+install\b")
+_NPM_INSTALL = re.compile(r"\bnpm\s+(?:install|ci|i)\b|\byarn\b|\bpnpm\b")
+_NO_CACHE_DIR = re.compile(r"\s--no-cache-dir\b")
+
+
+def _inject_build_cache(dockerfile: str) -> str:
+    """Add a persistent pip/npm download cache mount to each RUN that installs deps, so retries (and, once
+    teardown keeps a capped cache, the next app) reuse what a prior — possibly timed-out — build already
+    pulled. Formatting-preserving: only the `RUN` token of a matching instruction is rewritten; its
+    backslash-continued lines are left as-is (the mount applies to the whole instruction regardless)."""
+    lines = dockerfile.splitlines()
+    out = list(lines)
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^(\s*)RUN(\s+)(.*)$", lines[i])
+        if not m:
+            i += 1
+            continue
+        j = i                                      # extend over backslash-continued lines -> one logical RUN
+        while lines[j].rstrip().endswith("\\") and j + 1 < len(lines):
+            j += 1
+        body = "\n".join(lines[i:j + 1])
+        mounts = []
+        if _PIP_INSTALL.search(body):
+            mounts.append("--mount=type=cache,target=/root/.cache/pip")
+        if _NPM_INSTALL.search(body):
+            mounts.append("--mount=type=cache,target=/root/.npm")
+        if mounts and "--mount=" not in lines[i]:   # don't double-inject if the LLM already added one
+            out[i] = f"{m.group(1)}RUN {' '.join(mounts)} {m.group(3)}"
+        for k in range(i, j + 1):                   # --no-cache-dir defeats the cache we just added -> drop
+            out[k] = _NO_CACHE_DIR.sub("", out[k])
+        i = j + 1
+    return "\n".join(out)
+
+
 def _teardown():
     _docker("rm", "-f", "-v", APP, DB)   # -v reaps the sidecar's anonymous data volume (else it orphans)
     _docker("network", "rm", NET)
     _docker("rmi", "-f", APP)   # drop this repo's app image; base images stay cached (speeds later builds)
-    # reclaim THIS repo's build cache (downloaded npm/pip/go/apt layers). Different repos share no RUN
-    # layers, so it's dead weight once torn down; base *images* live in `docker images`, not here, so
-    # later builds still skip the base-image pull. Without this the cache grows unbounded across a batch.
-    _docker("builder", "prune", "-f")
+    # Reclaim build cache but KEEP a size-capped slice: the pip/npm cache mounts (heavy ML wheels,
+    # node_modules) download once and are reused by later apps in the batch — on a low-bandwidth box that
+    # cross-app reuse is the whole point. --reserved-space keeps up to _BUILD_CACHE_CAP of the most-recent
+    # cache and LRU-evicts the rest, so it can't grow unbounded; base *images* live in `docker images`,
+    # untouched, so later builds still skip the base-image pull.
+    _docker("builder", "prune", "-f", "--reserved-space", _BUILD_CACHE_CAP)
 
 
 # ---- 1. clone + gather deploy context -------------------------------------------------------------
@@ -216,6 +265,10 @@ Constraints and environment you are targeting:
 - Prefer generating a fresh, correct Dockerfile over a broken existing one. Pin dependency versions that
   are known to be mutually compatible (e.g. Flask 2.0.x needs Werkzeug 2.0.x). Install deps, copy the
   app code (many repos' Dockerfiles forget to COPY the code), set the workdir, expose the port.
+- Installs are cached across retries by a BuildKit mount that is injected for you, so DO NOT pass pip's
+  --no-cache-dir (it defeats the cache). Just write normal `RUN pip install -r requirements.txt` /
+  `RUN npm ci` lines. If a build times out on heavy deps, on retry TRIM the dependency set (drop
+  ML/GPU/build-only packages the web surface doesn't need) rather than re-pinning the same heavy wheels.
 
 FIRST, decide whether this repo is even a RUNNABLE WEB SERVICE a black-box HTTP tester can grade. Many
 hackathon repos are NOT: native mobile apps (iOS/Swift/SwiftUI, Android/Kotlin, React Native, Flutter),
@@ -343,7 +396,7 @@ def execute(plan: dict, repo: pathlib.Path, verbose: bool = False, build_timeout
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content)
     dockerfile = ctx / "Dockerfile.hacklet"
-    dockerfile.write_text(plan["dockerfile"])
+    dockerfile.write_text(_inject_build_cache(plan["dockerfile"]))
 
     print("  docker build (streaming — base-image pull + npm/pip install is the slow part):")
     rc, tail = _build_streamed(dockerfile, ctx, verbose=verbose, timeout=build_timeout)
