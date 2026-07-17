@@ -1845,18 +1845,40 @@ def slow_core_web_vitals(ctx, probe) -> bool:
     return any(bad.values())
 
 
+_CONSOLE_INTACT_SCALE = 0.4   # an uncaught error that DIDN'T visibly break the render is a real defect but not
+                              # a functional break -> scaled below the ceiling (the flat 22 over-fired on these)
+_CONSOLE_MIN_CONTENT = 50     # visible body text below this (+ an error) reads as a near-empty/degraded render
+
+
+def _console_broken_render(res: dict) -> bool:
+    """Did the uncaught error visibly BREAK the render? True on a framework crash overlay/message or a
+    near-empty body. A FULL white-screen is already DNF'd upstream (functional=False), so the live zone here
+    is PARTIAL breakage — the app rendered but shows a crash / lost a region."""
+    if res.get("error_overlay"):
+        return True
+    cl = res.get("content_len")
+    return cl is not None and cl < _CONSOLE_MIN_CONTENT
+
+
 def console_errors_present(ctx, probe) -> bool:
-    """Browser oracle: the page throws an uncaught JavaScript error FROM ITS OWN CODE on load — broken
-    regardless of intent. A third-party widget/analytics script throwing (cross-origin, browser-sanitized
-    to "Script error.") is common on working apps and does NOT count — only first-party errors are the
-    team's durability failure. Browser-gated."""
+    """Browser oracle: the page throws an uncaught JavaScript error FROM ITS OWN CODE on load. A third-party
+    widget/analytics script throwing (cross-origin, browser-sanitized to "Script error.") is common on
+    working apps and does NOT count — only first-party errors are the team's durability failure. The penalty
+    is SCALED by render impact (see _console_broken_render): full when the error visibly broke the page,
+    reduced when the app rendered fine despite it (a real but non-fatal defect). Browser-gated."""
     url = ctx.base_url.rstrip("/") + probe.probe.get("target", "/")
     res = browser.console_errors(url, headers=ctx.headers)
     if res is None:
         return False   # no browser / render failed -> can't test (browser-gated)
     ctx.evidence.update(js_errors=res["total"], first_party=res["first_party"],
                         third_party=res["third_party"], engine="pageerror")
-    return res["first_party"] > 0
+    if res["first_party"] <= 0:
+        return False
+    broken = _console_broken_render(res)
+    ctx.evidence.update(content_len=res.get("content_len"), error_overlay=bool(res.get("error_overlay")),
+                        render_broken=broken,
+                        penalty_override=probe.penalty if broken else max(1, round(probe.penalty * _CONSOLE_INTACT_SCALE)))
+    return True
 
 
 _A11Y_TIER = {"critical": 30, "serious": 18, "moderate": 10, "minor": 4}
