@@ -50,6 +50,9 @@ _VENDOR_FIELDS = ("cf-turnstile-response", "g-recaptcha-response", "h-captcha-re
 # the audit never again counts a concurrency-sensitive fire as verified-clean. (sqli-004's TIME technique is now
 # dose-response-hardened and load-robust, but its error technique and crash can still ride a load-induced 500.)
 _SIGNAL_SENSITIVE = {"perf-cwv-001", "perf-cwv-002", "perf-loadtime-001", "perf-ttfb-001",
+                     "perf-load-001",   # a 12-connection concurrent BURST -> under a --concurrency batch the
+                                        # grader's own ~96 simultaneous conns can DROP (counted as failure);
+                                        # only trustworthy graded in ISOLATION. Was missing -> false "verified".
                      "qa-crash-010", "sec-sqli-004"}
 
 

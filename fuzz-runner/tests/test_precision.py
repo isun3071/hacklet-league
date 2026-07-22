@@ -113,6 +113,14 @@ def test_variant_group_counts_once_in_the_damped_attribution():
     assert a["unaudited"]["qa-a11y-002"][1] == 0                       # collapsed into its group's max
 
 
+def test_perf_load_is_unconfirmed_not_verified():
+    # a 12-connection concurrent burst run under a --concurrency batch is grader-load-confoundable ->
+    # UNCONFIRMED (re-fire in isolation), never silently counted clean.
+    a = analyze([_rec("gh/app", 10, [_f("perf-load-001", 10, "performance")], page_state="working")])
+    assert len(a["unconfirmed"]) == 1 and a["vouched"] == 0
+    assert not a["flagged"] and not a["unaudited"]
+
+
 def test_audited_predicate_and_wilson_keeps_an_honest_upper_bound():
     assert _audited("sec-sqli-004") and _audited("perf-cwv-001") and _audited("sec-secret-006")
     assert not (_audited("perf-requests-001") or _audited("qa-a11y-001") or _audited("sec-headers-002"))
