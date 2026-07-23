@@ -105,6 +105,18 @@ This collapses the earlier provable/failure-only scoring split. A clean result i
 
 Both score identically (penalty if slop detected, else 0). The distinction only tells the runner *how* to look.
 
+### League-issued credential exposure (controlled-context, exact-match)
+
+When the league issues a per-submission app-tier proxy key (format_spec §5.8), the central runner is **handed the exact issued key** for the app under test — part of the grading context the league supplies per submission (alongside the controlled deploy). This enables a probe class the arbitrary-URL dogfood path cannot have, and it is the **highest-confidence finding in the catalog**:
+
+- **Oracle.** Scan the served client bundle / HTML / static assets **and** the browser-originated request traffic (the client-side fetch/XHR surface) for the **exact issued key string**. Fires on an exact match reachable client-side — the player inlined the key into the bundle, or called the proxy directly from the browser (`dangerouslyAllowBrowser`). Correct wiring (key held server-side, browser → the app's own route → proxy) never exposes the key to the client, so it reads **clean**.
+- **A third evidence model beyond `provable` / `oracle`: `known-credential`.** This is not a heuristic secret-*shaped*-string match (entropy, key-prefix patterns — the FP-prone universal-corpus case). It is an exact match against a value the league itself minted, so it collapses all three black-box under-determination axes at once: **scope** (provably the player's key — the league issued it and knows whose it is), **reproducibility** (a fixed string, not a transient signal), and **causality** (provably the league's credential, reachable client-side, not a coincidental confound). Zero false positives by construction.
+- **Severity: catastrophic.** A live credential granting model inference at league cost; anchored at the top of the penalty scale with the secrets/crypto class (§Calibration — secrets/crypto ~21% of real slop). The magnitude is what makes format_spec §5.8's self-regulation work: it must exceed the communication-ceiling gain a botched AI-wrapper would otherwise buy.
+- **Scope: controlled-context only.** This probe requires the league's key issuance + the grader being handed the key; it is **on only for league submissions**, off on the arbitrary-URL dogfood path (there is no issued key to match). It sits in the **security** bundle (sensitive-path / secrets exposure) but is gated on the presence of an issued key in the grading context, N/A otherwise — the same applicability discipline as every other probe.
+- **Relation to the heuristic secrets probes.** The universal catalog keeps its secret-shaped-string probes for the Tier B/C and dogfood cases (real player-supplied keys, no issuance to match against). The exact-match probe *supersedes* them whenever an issued key is present: same finding class, but provable instead of heuristic.
+
+Downstream, format_spec §5.8's "new surface" roadmap (prompt injection, inference-route cost-DoS, proxy-route SSRF) lands as ordinary security/performance probes once AI-wrapper apps exist at Tier A; only the issued-key exposure probe needs the controlled context described here.
+
 ### Detecting slop (the oracle)
 
 Never a single payload against a single response — a matched set that fires only when the slop is real. SQLi:
