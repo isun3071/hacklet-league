@@ -286,6 +286,8 @@ def _build_cmd(j, args, ckpt):
         cmd += ["--controlled-deploy"]
     if getattr(args, "login", None):
         cmd += ["--login", args.login]
+    for pat in (getattr(args, "probe", None) or ()):   # subset the catalog per target (recall runs)
+        cmd += ["--probe", pat]
     if args.llm_reasoning:
         cmd += ["--llm-reasoning"]
     for h in (args.headers or []):
@@ -403,6 +405,11 @@ def main():
     ap.add_argument("--max-pages", type=int, default=25, dest="max_pages",
                     help="safety cap on gallery pages per hackathon (pages auto-fetched to fill --limit)")
     ap.add_argument("--limit", type=int, default=25, help="max repos to grade")
+    ap.add_argument("--probe", metavar="PATTERN", action="append", default=[],
+                    help="forward to deploy_and_grade: grade with ONLY these probes (id glob, "
+                         "bundle:security, category:xss). A recall run over labeled targets costs a "
+                         "fraction of the traffic a full battery does, which is what keeps a shared "
+                         "host's WAF out of the picture. Rows are marked probe_filter (subset score).")
     ap.add_argument("--delay", type=float, default=0.0, metavar="SECONDS",
                     help="minimum gap between job STARTS, across all workers — a politeness throttle for a "
                          "run where every target shares ONE host (a benchmark like GapBench, a platform, one "
