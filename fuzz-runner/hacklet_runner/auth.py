@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import re
 import secrets
+import urllib.parse
 from dataclasses import dataclass, field
 
 import httpx
@@ -404,7 +405,7 @@ def _register_json(base_url: str, suffix: str, profile=None) -> Account | None:
 
 
 def parse_set_cookies(resp: httpx.Response) -> list[dict]:
-    """Each Set-Cookie header -> {name, httponly, secure, samesite}. Flags are read from the raw
+    """Each Set-Cookie header -> {name, value, httponly, secure, samesite}. Flags are read from the raw
     header because cookie jars drop them. samesite is True only for Lax/Strict: SameSite=None is the
     explicit cross-site OPT-OUT (no CSRF defense), so it must read as undefended."""
     out = []
@@ -422,6 +423,8 @@ def parse_set_cookies(resp: httpx.Response) -> list[dict]:
             attrs[k.strip().lower()] = v.strip().lower()
         out.append({
             "name": name,
+            "value": first.split("=", 1)[1].strip(),   # needed to tell the real session token from a
+            #     session-NAMED cookie holding a plaintext identifier (see _token_shaped)
             "httponly": "httponly" in attrs,
             "secure": "secure" in attrs,
             "samesite": attrs.get("samesite") in ("lax", "strict"),
@@ -452,10 +455,27 @@ def _all_set_cookies(resp: httpx.Response) -> list[dict]:
     return out
 
 
+def _token_shaped(value: str) -> bool:
+    """The cookie VALUE looks like a session token — a JWT, or a long opaque id — rather than a plaintext
+    identifier. Apps commonly set several session-NAMED cookies (`app_session=user@example.com` for the UI
+    alongside the real `session=eyJhbGci…`); judging the wrong one reports that cookie's flags as if they
+    were the session's, so a correctly-hardened token reads as unprotected (and vice versa)."""
+    v = urllib.parse.unquote(value or "").strip()
+    if v.startswith("eyJ") and v.count(".") >= 2:
+        return True                       # JWT
+    if not v or "@" in v or " " in v:
+        return False                      # an email / human-readable value is not the session token
+    return len(v) >= 16                   # long opaque id
+
+
 def session_cookie(resp: httpx.Response) -> dict | None:
-    # last match across the chain = the cookie's final state (a later Set-Cookie overrides earlier).
+    """THE session cookie: prefer a token-shaped value (the real session), else fall back to the name
+    heuristic alone. Last match wins within each group — a later Set-Cookie overrides an earlier one."""
     matches = [c for c in _all_set_cookies(resp) if _is_session_cookie(c["name"])]
-    return matches[-1] if matches else None
+    if not matches:
+        return None
+    tokens = [c for c in matches if _token_shaped(c.get("value", ""))]
+    return (tokens or matches)[-1]
 
 
 def _has_session(acct: Account | None) -> bool:

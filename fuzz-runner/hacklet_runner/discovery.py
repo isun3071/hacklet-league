@@ -121,6 +121,27 @@ def _base_prefix(base_url: str) -> str:
 _PROJECT_PAGE_HOST = re.compile(r"\.github\.io$|\.gitlab\.io$", re.I)
 
 
+# Managed-backend data-plane reads in the app's OWN observed traffic: Supabase PostgREST (/rest/v1/<table>)
+# and Firestore (…/documents/<collection>). The table name is the one thing bundle-mining loses to a
+# minifier or a dynamically-built query — but the runtime request always carries it.
+_OBSERVED_BAAS_TABLE = re.compile(
+    r"//[^/]*\.supabase\.co/rest/v\d+/([A-Za-z_][A-Za-z0-9_]*)|"
+    r"//firestore\.googleapis\.com/[^?]*?/documents/([A-Za-z_][A-Za-z0-9_-]*)", re.I)
+
+
+def _observed_backend_tables(observed) -> list[str]:
+    """Managed-backend tables/collections the app ITSELF read at runtime — OBSERVED, never guessed, so this
+    can't hallucinate a table (a wrong name just 404s at the provider anyway). Feeds the RLS probes the names
+    a minified/dynamic query hides from the bundle scan."""
+    out: dict[str, None] = {}
+    for item in observed or ():
+        url = item[1] if isinstance(item, (tuple, list)) and len(item) > 1 else ""
+        m = _OBSERVED_BAAS_TABLE.search(url or "")
+        if m:
+            out.setdefault(m.group(1) or m.group(2), None)
+    return list(out)[:16]
+
+
 def _entry_scope(start_path: str, host: str = "") -> str:
     """The target's own sub-path scope from the --target entry path ('/site/app' -> '/site/app'), or '' for
     no confinement (today's behaviour). Confine when the path names an APP rather than a route:
@@ -726,6 +747,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             routes.setdefault(ep.path, None)
 
     browser_ok = False
+    backend_tables: list = []  # managed-backend tables the app's own runtime traffic read (RLS probe input)
     host_tiers: dict = {}     # off-score: where the app's runtime traffic goes (same-origin / BaaS / vendor /
     if render is not None:    # other off-origin) — populated from the observed net once the browser render runs
         # Browser-render the discovered HTML routes and harvest their client-rendered forms AND formless
@@ -793,6 +815,9 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
                 if p and p.split("?")[0].endswith(".js"):        # so the bundle probes (depscan / secret-scan /
                     routes.setdefault(p, None)                   # source-map) actually read the lazy chunk
 
+            # the app's OWN managed-backend reads name the real tables — bundle-mining loses them to a
+            # minifier or a dynamically-built query, so hand them to the RLS probes (sec-backend-001/002).
+            backend_tables = _observed_backend_tables(observed_net)
             host_tiers = _classify_hosts(observed_net, base_url)  # off-score: WHERE the traffic goes — same-origin
                                                                   # (probe-able) / managed BaaS (config-test lane) /
                                                                   # vendor (never the app's) / other off-origin (the
@@ -903,7 +928,8 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
         except (httpx.HTTPError, httpx.InvalidURL):
             pass
     return Profile(base_url=base_url, landing_path=landing_path, routes=list(routes), forms=forms,
-                   capabilities=capabilities, endpoints=endpoints, host_tiers=host_tiers)
+                   capabilities=capabilities, endpoints=endpoints, host_tiers=host_tiers,
+                   backend_tables=backend_tables)
 
 
 def surface_metrics(profile: Profile) -> dict:

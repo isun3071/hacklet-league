@@ -2114,13 +2114,22 @@ def _postgrest_tables(resp) -> list[str]:
     return []
 
 
-def _supabase_tables(blob: str) -> list[str]:
-    """Candidate tables to probe: names the app's OWN code queries — supabase-js `.from('t')` and hardcoded
-    `/rest/v1/t` paths (string literals that survive minification) — first (the real signal), then a common
-    fallback. Bundle-driven because the anon key can no longer enumerate the PostgREST OpenAPI root."""
-    mined = list(dict.fromkeys([m.group(1) for m in _SUPABASE_FROM.finditer(blob)]
+def _supabase_tables(blob: str, observed: list[str] | None = None) -> list[str]:
+    """Candidate tables to probe, strongest signal first: tables the app was OBSERVED reading at runtime
+    (profile.backend_tables — survives minification and dynamically-built queries, which is exactly what a
+    bundle scan loses), then names mined from its code (supabase-js `.from('t')`, hardcoded `/rest/v1/t`
+    literals), then a common fallback. Bundle+observation-driven because the anon key can no longer
+    enumerate the PostgREST OpenAPI root — and enumeration by guesswork was refuted."""
+    mined = list(dict.fromkeys(list(observed or [])
+                               + [m.group(1) for m in _SUPABASE_FROM.finditer(blob)]
                                + [m.group(1) for m in _SUPABASE_REST.finditer(blob)]))
     return (mined + [t for t in _SUPABASE_COMMON if t not in mined])[:16]
+
+
+def _observed_tables(ctx) -> list[str]:
+    """Managed-backend tables the app itself read at runtime (discovery records them from observed traffic);
+    empty without a browser render, in which case the probes fall back to bundle mining alone."""
+    return list(getattr(getattr(ctx, "profile", None), "backend_tables", None) or [])
 
 
 def _sensitive_leak(table: str, columns: list[str]) -> bool:
@@ -2187,10 +2196,12 @@ def _firebase_readable(client, json_url: str):
     return None
 
 
-def _firestore_collections(blob: str) -> list[str]:
-    """Collections the app's OWN code queries (Firestore `collection(db, 'name')` calls), then a small
-    common-name fallback — the set to test for public readability. App-referenced names first (real signal)."""
-    found = list(dict.fromkeys(m.group(1) for m in _FIRESTORE_COLL.finditer(blob)))
+def _firestore_collections(blob: str, observed: list[str] | None = None) -> list[str]:
+    """Collections to test for public readability, strongest signal first: OBSERVED at runtime (survives
+    minification/dynamic queries), then the app's own code (`collection(db, 'name')`), then a small
+    common-name fallback."""
+    found = list(dict.fromkeys(list(observed or [])
+                               + [m.group(1) for m in _FIRESTORE_COLL.finditer(blob)]))
     return (found + [c for c in _COMMON_COLLECTIONS if c not in found])[:14]
 
 
@@ -2235,7 +2246,7 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
     with httpx.Client(timeout=8.0, follow_redirects=True, verify=False) as ext:   # external provider hosts
         if sm:
             base = "https://" + sm.group(1) + ".supabase.co"
-            hit = _supabase_readable(ext, base, keys, _supabase_tables(blob))
+            hit = _supabase_readable(ext, base, keys, _supabase_tables(blob, _observed_tables(ctx)))
             if isinstance(hit, dict):
                 ctx.evidence.update(backend="supabase", host=base, table=hit["table"],
                                     rows_readable=hit["rows"], columns=hit["columns"], repro=hit["repro"])
@@ -2253,7 +2264,7 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
         if fs_used:
             proj, key = proj_m.group(1), key_m.group(0)
             hit = _firestore_readable(ext, "https://firestore.googleapis.com", proj, key,
-                                      _firestore_collections(blob))
+                                      _firestore_collections(blob, _observed_tables(ctx)))
             if isinstance(hit, dict):
                 ctx.evidence.update(backend="firestore", project=proj, collection=hit["collection"],
                                     documents_readable=hit["documents"], fields=hit["fields"], repro=hit["repro"])
@@ -2377,7 +2388,8 @@ def authenticated_backend_readable(ctx, probe) -> bool | None:
             token = _firebase_anon_token(ext, "https://identitytoolkit.googleapis.com", key_m.group(0))
             if token:
                 hit = _firestore_authed_only(ext, "https://firestore.googleapis.com", proj_m.group(1),
-                                             key_m.group(0), token, _firestore_collections(blob))
+                                             key_m.group(0), token,
+                                             _firestore_collections(blob, _observed_tables(ctx)))
                 if isinstance(hit, dict):
                     ctx.evidence.update(backend="firestore", tier="authenticated", project=proj_m.group(1),
                                         collection=hit["collection"], documents_readable=hit["documents"],
@@ -2391,7 +2403,8 @@ def authenticated_backend_readable(ctx, probe) -> bool | None:
             if anon_key:
                 jwt = _supabase_signup(ext, base, anon_key)
                 if jwt:
-                    hit = _supabase_authed_only(ext, base, anon_key, jwt, _supabase_tables(blob))
+                    hit = _supabase_authed_only(ext, base, anon_key, jwt,
+                                                _supabase_tables(blob, _observed_tables(ctx)))
                     if isinstance(hit, dict):
                         ctx.evidence.update(backend="supabase", tier="authenticated", host=base,
                                             table=hit["table"], rows_readable=hit["rows"],
@@ -2400,6 +2413,24 @@ def authenticated_backend_readable(ctx, probe) -> bool | None:
                     reached = reached or hit != "unreachable"
     ctx.evidence.update(checked=True, reachable=reached, authenticated_bypass=False)
     return False if reached else None
+
+
+def _https_browser_enforced(ctx) -> bool:
+    """HTTPS is ALREADY enforced by the browser for this host, so a cookie missing `Secure` cannot transit in
+    cleartext — the request is upgraded before it leaves. True for a preloaded-apex platform subdomain, or
+    when the app itself sends HSTS with includeSubDomains AND preload (i.e. it claims preload-list
+    membership; a bare max-age is trust-on-first-use, so we do NOT suppress on that). Mirrors the
+    sec-headers-003 carve-out: without it we forgive a missing HSTS header on *.vercel.app yet still charge
+    for the Secure flag that same enforcement makes redundant. Suppression is upside-only."""
+    host = urllib.parse.urlparse(getattr(ctx, "base_url", "") or "").netloc.lower().split(":")[0]
+    if host.endswith(_HSTS_PRELOADED_SUFFIXES):
+        return True
+    with contextlib.suppress(Exception):
+        hsts = ctx.client.get("/").headers.get("strict-transport-security", "").lower().replace(" ", "")
+        m = re.search(r"max-age=(\d+)", hsts)
+        if m and int(m.group(1)) > 0 and "includesubdomains" in hsts and "preload" in hsts:
+            return True
+    return False
 
 
 def session_cookie_missing_flag(ctx, probe) -> bool | None:
@@ -2415,7 +2446,13 @@ def session_cookie_missing_flag(ctx, probe) -> bool | None:
         cookie = auth.session_cookie(account.register_response)
         if cookie is None:
             return None  # registration yielded no recognizable session cookie -> couldn't test
-        ctx.evidence.update(flag=flag, present=cookie[flag])
+        # record WHICH cookie was judged: several can match the session-name heuristic, so an unnamed
+        # verdict is unfalsifiable ("no HttpOnly" on an app whose real token HAS it reads as a bug).
+        ctx.evidence.update(flag=flag, present=cookie[flag], cookie=cookie["name"])
+        if flag == "secure" and not cookie["secure"] and _https_browser_enforced(ctx):
+            ctx.evidence["suppressed"] = ("HTTPS is browser-enforced for this host (HSTS preload / "
+                                          "preloaded-apex subdomain) -> the cookie cannot transit cleartext")
+            return False
         return not cookie[flag]
     finally:
         account.client.close()
