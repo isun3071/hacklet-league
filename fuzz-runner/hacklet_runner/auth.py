@@ -432,7 +432,16 @@ def parse_set_cookies(resp: httpx.Response) -> list[dict]:
     return out
 
 
-_SESSION_HINTS = ("session", "sessid")
+# Substring hints, matched case-insensitively. `token`/`jwt` are here because the modern JS convention is a
+# camelCase name with no separator — authToken, accessToken, idToken, sessionToken — which an exact-name set
+# and a `session`-only substring both miss. That miss is expensive: no session detected means the self-as-
+# oracle holds no identity, so every authed probe (IDOR x5, session x4, CSRF, upload x2) reads N/A, and the
+# session-hygiene probes never judge the real token. Measured on the OopsSec anchor, whose cookie is authToken.
+_SESSION_HINTS = ("session", "sessid", "token", "jwt")
+# ... but a token-NAMED cookie is not always the session. A CSRF/anti-forgery token is deliberately
+# JS-readable (judging it would report a false hygiene failure), a refresh token is not the access session,
+# and an email/verification token is not a login. Exclusions win over hints.
+_NOT_SESSION = ("csrf", "xsrf", "antiforgery", "anti-forgery", "verification", "verify", "refresh")
 
 
 def _is_session_cookie(name: str) -> bool:
@@ -440,7 +449,7 @@ def _is_session_cookie(name: str) -> bool:
     next-auth.session-token, ...), not just the exact known names. CSRF tokens are intentionally
     JS-readable, so they are never treated as the session cookie."""
     low = name.lower()
-    if "csrf" in low or "xsrf" in low:
+    if any(h in low for h in _NOT_SESSION):
         return False
     return low in SESSION_COOKIE_NAMES or any(h in low for h in _SESSION_HINTS)
 

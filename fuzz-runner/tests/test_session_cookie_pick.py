@@ -54,6 +54,23 @@ def test_token_shape_rejects_identifiers_and_accepts_opaque_ids():
     assert auth._token_shaped("abc") is False and auth._token_shaped("") is False
 
 
+def test_camelcase_token_cookies_are_recognized_as_sessions():
+    # the modern JS convention is a camelCase name with no separator, which an exact-name set plus a
+    # `session`-only substring both miss. Measured cost of the miss on the OopsSec anchor (cookie: authToken):
+    # no session detected -> the self-as-oracle holds no identity -> IDOR x5, session x4, CSRF, upload x2 all
+    # read N/A, and the session-hygiene probes never judge the real token.
+    for name in ("authToken", "accessToken", "idToken", "sessionToken", "auth_token", "jwt", "session", "sid"):
+        assert auth._is_session_cookie(name) is True, name
+
+
+def test_token_named_cookies_that_are_not_the_session_stay_excluded():
+    # a CSRF/anti-forgery token is deliberately JS-readable, so judging it would report a false hygiene
+    # failure; a refresh token is not the access session; a verification token is not a login
+    for name in ("csrfToken", "XSRF-TOKEN", "__Host-csrf", "antiforgeryToken", "anti-forgery-token",
+                 "refreshToken", "emailVerificationToken", "verifyToken"):
+        assert auth._is_session_cookie(name) is False, name
+
+
 def test_parse_set_cookies_now_carries_the_value():
     got = auth.parse_set_cookies(_resp("sid=xyz123; HttpOnly"))[0]
     assert got["name"] == "sid" and got["value"] == "xyz123" and got["httponly"] is True
