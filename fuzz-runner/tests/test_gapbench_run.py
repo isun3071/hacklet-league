@@ -115,3 +115,54 @@ def test_child_cmd_targets_the_scenario_and_tags_it_for_the_scorer():
     meta = json.loads(cmd[cmd.index("--meta") + 1])
     assert meta["project"] == "anchor-gapbench-supabase-clone"   # the anchor tag exempts the shared host
     assert cmd[cmd.index("--probe") + 1] == "sec-backend-001"
+
+
+def test_wait_until_clear_waits_out_the_window_then_proceeds():
+    # the challenge clears on a rolling ~5-10 minute window, so waiting is the correct move: a scenario run
+    # while blocked is a LOST measurement, and 92 of them is a lost night
+    from gapbench_run import wait_until_clear
+    calls, slept = {"n": 0}, []
+
+    def blocked():
+        calls["n"] += 1
+        return calls["n"] <= 3          # blocked for three checks, then clear
+
+    import gapbench_run
+    real_sleep, gapbench_run.time.sleep = gapbench_run.time.sleep, lambda s: slept.append(s)
+    try:
+        assert wait_until_clear(60, 1800, log=lambda *_a: None, blocked=blocked) is True
+        assert slept == [60, 60, 60]     # waited exactly as long as it was blocked, no longer
+    finally:
+        gapbench_run.time.sleep = real_sleep
+
+
+def test_wait_until_clear_gives_up_rather_than_hanging_forever():
+    from gapbench_run import wait_until_clear
+    import gapbench_run
+    real_sleep, gapbench_run.time.sleep = gapbench_run.time.sleep, lambda s: None
+    try:
+        # a block that outlasts the budget must STOP the run, not spin: the caller's resume makes stopping free
+        assert wait_until_clear(60, 180, log=lambda *_a: None, blocked=lambda: True) is False
+    finally:
+        gapbench_run.time.sleep = real_sleep
+
+
+def test_is_blocked_treats_a_challenge_a_rate_limit_and_a_transport_error_alike():
+    import gapbench_run
+    import httpx as _httpx
+
+    class _R:
+        def __init__(self, code):
+            self.status_code = code
+
+    real_get = gapbench_run.httpx.get
+    try:
+        for code, expected in ((403, True), (429, True), (200, False), (404, False)):
+            gapbench_run.httpx.get = lambda *a, code=code, **k: _R(code)
+            assert gapbench_run.is_blocked() is expected, code
+        def boom(*a, **k):
+            raise _httpx.ConnectError("refused")
+        gapbench_run.httpx.get = boom
+        assert gapbench_run.is_blocked() is True     # what a block looks like mid-tighten
+    finally:
+        gapbench_run.httpx.get = real_get

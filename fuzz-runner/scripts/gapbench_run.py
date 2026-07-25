@@ -25,6 +25,8 @@ import subprocess
 import sys
 import time
 
+import httpx
+
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_HERE.parent))
@@ -55,6 +57,33 @@ def _est_requests(sel: list) -> int:
 _VENV_PY = _HERE.parent / ".venv" / "bin" / "python"
 PY = [str(_VENV_PY)] if _VENV_PY.exists() else [sys.executable]
 _MANIFEST = _HERE.parent / "validation" / "vuln-corpus" / "gapbench-manifest.json"
+# The bot challenge clears on a ROLLING window of about 5-10 minutes, not a long ban. So the run should wait
+# it out rather than plough on: a blocked scenario recorded as dead is a lost measurement, and 92 of them is a
+# lost night. One request tells us the state, versus ~68 wasted discovering it the hard way.
+_HEALTH_URL = "https://gapbench.vibe-eval.com/site/ref0/"
+
+
+def is_blocked(url: str = _HEALTH_URL, timeout: float = 10.0) -> bool:
+    """One request: is the host refusing us right now? 403 is the JS bot challenge (our client can never solve
+    it), 429 an explicit rate limit, and a transport error is what a block looks like mid-tighten — all mean
+    'do not spend a scenario yet'."""
+    try:
+        return httpx.get(url, timeout=timeout, follow_redirects=True).status_code in (403, 429)
+    except httpx.HTTPError:
+        return True
+
+
+def wait_until_clear(check_every: float, max_wait: float, log=print, blocked=is_blocked) -> bool:
+    """Block until the host answers again, or give up after max_wait. False -> stop the run; the caller's
+    resume skips whatever already graded, so stopping costs nothing but time."""
+    waited = 0.0
+    while blocked():
+        if waited >= max_wait:
+            return False
+        log(f"    blocked — waiting {check_every:.0f}s (waited {waited / 60:.0f}m of {max_wait / 60:.0f}m)")
+        time.sleep(check_every)
+        waited += check_every
+    return True
 
 
 def probes_for_cwes(cwes, cwe2probe) -> list:
@@ -140,6 +169,12 @@ def main() -> None:
     ap.add_argument("--grade-timeout", type=int, default=300,
                     help="per-scenario grading cap in SECONDS (int: deploy_and_grade rejects a float)")
     ap.add_argument("--limit", type=int, default=0, help="stop after N scenarios (0 = all)")
+    ap.add_argument("--recheck", type=float, default=60.0, metavar="SECONDS",
+                    help="while blocked, re-test the host this often (one request per check)")
+    ap.add_argument("--max-wait", type=float, default=1800.0, dest="max_wait", metavar="SECONDS",
+                    help="give up if the block outlasts this (default 30m); rerunning resumes")
+    ap.add_argument("--max-retries", type=int, default=2, dest="max_retries",
+                    help="requeue a scenario the block killed, up to N times")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and traffic estimate, send nothing")
     args = ap.parse_args()
 
@@ -184,7 +219,16 @@ def main() -> None:
         print("\n  (dry run — nothing sent)\n")
         return
 
-    for i, (sid, sel) in enumerate(jobs, 1):
+    queue = list(jobs)
+    attempts: dict = {}
+    i = 0
+    while queue:
+        sid, sel = queue.pop(0)
+        i += 1
+        if not wait_until_clear(args.recheck, args.max_wait):
+            print(f"\n  still blocked after {args.max_wait / 60:.0f}m — stopping. Rerun to resume "
+                  f"(graded scenarios are skipped).\n")
+            return
         cmd = child_cmd(sid, sel, args.results, args.grade_timeout, needs_browser, needs_auth)
         caps = ("B" if "--no-browser" not in cmd else "-") + ("A" if "--browser-auth" in cmd else "-")
         t0 = time.monotonic()
@@ -215,10 +259,16 @@ def main() -> None:
             return
         state = ("slop %s" % rec["slop_score"]) if rec and rec.get("slop_score") is not None else (
             str((rec or {}).get("deploy_error") or "no record")[:34])
-        print(f"  [{i}/{len(jobs)}] {sid:<28} {len(sel) or 'FULL':>4}p {caps}  {state:<34} "
-              f"·{time.monotonic()-t0:5.0f}s",
-              flush=True)
-        if i < len(jobs):
+        print(f"  [{i}/{len(jobs) + len(queue)}] {sid:<28} {len(sel) or 'FULL':>4}p {caps}  {state:<34} "
+              f"·{time.monotonic()-t0:5.0f}s", flush=True)
+        # a scenario killed BY THE BLOCK is a lost measurement, not a result: put it back and let the
+        # pre-flight gate above wait the window out before it runs again.
+        if rec is not None and rec.get("dead_url") and "403" in str(rec.get("deploy_error") or ""):
+            attempts[sid] = attempts.get(sid, 0) + 1
+            if attempts[sid] <= args.max_retries:
+                queue.append((sid, sel))
+                print(f"    -> blocked; requeued (attempt {attempts[sid]} of {args.max_retries})")
+        if queue:
             time.sleep(args.delay)
     print(f"\n  done. score it:  uv run python scripts/gapbench_score.py {args.results}\n")
 
