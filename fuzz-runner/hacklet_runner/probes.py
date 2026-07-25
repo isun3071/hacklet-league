@@ -1448,6 +1448,97 @@ def _bola_pairs(endpoints):
     return pairs
 
 
+# A collection we will POST to must not be an action endpoint dressed as one. Writes here are bounded and
+# the targets are under test, but inferring a create on /logout or /checkout is never worth it.
+_NO_WRITE = re.compile(r"logout|sign[_-]?out|delete|remove|pay\b|payment|checkout|refund|charge|subscribe|"
+                       r"cancel|webhook|/auth/|token|session|admin", re.I)
+_CONV_PAIR_CAP = 4          # collections to probe for a conventional pair (each costs one GET + one POST)
+_CONV_SKIP_FIELDS = ("id", "createdat", "created_at", "updatedat", "updated_at", "_id", "uuid", "slug")
+# An id-looking path segment, so /api/products/<cuid>/reviews and /api/products/<other>/reviews collapse to
+# ONE shape. Without this a crawl that saw six products spends the whole cap re-testing one collection.
+_ID_SEGMENT = re.compile(r"^(?:\d+|[0-9a-f]{8,}|[a-z0-9]{16,}|[0-9a-fA-F-]{32,})$", re.I)
+
+
+def _path_shape(path: str) -> str:
+    return "/".join("{}" if _ID_SEGMENT.match(seg) else seg for seg in path.split("/"))
+
+
+def _conventional_pairs(ctx, cap: int = _CONV_PAIR_CAP):
+    """REST-convention create+read pairs the crawl never OBSERVED, so the authorization probes can run at all.
+
+    _bola_pairs needs BOTH halves already in the profile: a POST-with-body on the collection AND a templated
+    `GET /coll/{id}`. A client-rendered app only issues those from a logged-in page the crawl may never reach,
+    so the pair goes undiscovered and IDOR/integrity/race read N/A — measured as the single largest dark
+    region of the catalog (all five sec-idor probes NEVER APPLIED across 1110 corpus apps, and on the OopsSec
+    anchor whose `POST /api/wishlists` + `GET /api/wishlists/{id}` are right there and reachable).
+
+    So infer the pair from the convention, but ONLY on evidence: GET the discovered collection, require a JSON
+    ARRAY OF OBJECTS CARRYING AN ID (that is what makes it a resource collection rather than an action or a
+    scalar), and take the create body's field names from those objects' OWN keys — the shape the app itself
+    returns, not a guess.
+
+    Then VERIFY the read template against an id that already exists in that collection, and emit nothing if it
+    does not resolve. Without that check the inference MANUFACTURES false positives: measured on OopsSec, whose
+    reviews collection has no read-by-id, the round-trip probe created a review (201), failed to read it back
+    at the invented path (404), and reported a 34-penalty data-integrity finding that was purely our own bad
+    guess. An unverifiable read means the app has no read-by-id, which is not a defect."""
+    out = []
+    seen = set()
+    with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
+        for path in _collection_paths(ctx.profile.endpoints):
+            if len(out) >= cap:
+                break
+            coll = path.rstrip("/")
+            shape = _path_shape(coll)
+            if not coll or shape in seen or _NO_WRITE.search(coll):
+                continue
+            seen.add(shape)   # by SHAPE, so sibling collections under different resource ids count once
+            try:
+                r = c.get(coll)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if r.status_code != 200 or "json" not in r.headers.get("content-type", "").lower():
+                continue
+            try:
+                data = r.json()
+            except ValueError:
+                continue
+            items = data if isinstance(data, list) else next(
+                (v for v in data.values() if isinstance(v, list)) if isinstance(data, dict) else iter(()), None)
+            rows = [x for x in (items or []) if isinstance(x, dict)]
+            if not rows or not any(k.lower() == "id" for k in rows[0]):
+                continue          # not a resource collection (no per-object id -> nothing to read back by id)
+            fields = [k for k in rows[0] if k.lower() not in _CONV_SKIP_FIELDS
+                      and not isinstance(rows[0][k], (dict, list))]
+            if not fields:
+                continue
+            # PROVE the read template exists, using an id the collection itself just handed us. A collection
+            # with no read-by-id (very common) would otherwise make every round-trip look broken.
+            existing = next((v for k, v in rows[0].items() if k.lower() == "id"), None)
+            if existing is None:
+                continue
+            try:
+                probe_read = c.get(f"{coll}/{existing}")
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if probe_read.status_code >= 400:
+                continue          # no read-by-id endpoint -> nothing to round-trip against, and NOT a defect
+            create = Endpoint(path=coll, method="post", body_fields=fields, raw_path=coll, origin="convention")
+            read = Endpoint(path=coll + "/1", method="get", path_params=["id"],
+                            raw_path=coll + "/{id}", origin="convention")
+            out.append((create, read, "id", None))
+    return out
+
+
+def _create_read_pairs(ctx):
+    """Every create+read pair to test: the ones discovery OBSERVED first (their body/param names are real),
+    then conventional ones inferred from a collection's own shape (see _conventional_pairs)."""
+    pairs = _bola_pairs(ctx.profile.endpoints)
+    have = {(c.raw_path or c.path).rstrip("/") for c, _r, _p, _i in pairs}
+    return pairs + [t for t in _conventional_pairs(ctx)
+                    if (t[0].raw_path or t[0].path).rstrip("/") not in have]
+
+
 def _created_id(resp):
     """The id of a just-created object: a Location header tail, or an id-like field in the JSON body."""
     loc = resp.headers.get("location")
@@ -1506,7 +1597,7 @@ def api_bola(ctx, probe) -> bool | None:
     can read that object and sees A's canary, object-level authorization is broken. Only pairs whose
     create body has a sensitive field are tested (precision — a shared collection isn't BOLA). N/A when
     there's no such pair or two accounts can't be established."""
-    pairs = [(c, r, p, idf) for (c, r, p, idf) in _bola_pairs(ctx.profile.endpoints)
+    pairs = [(c, r, p, idf) for (c, r, p, idf) in _create_read_pairs(ctx)
              if any(_SENSITIVE_FIELD.search(f) for f in c.body_fields)]
     if not pairs:
         ctx.evidence["na_reason"] = "no create+read API pair with a private field to cross-check"
@@ -1758,7 +1849,7 @@ def data_integrity_roundtrip(ctx, probe) -> bool | None:
     (404 / 410 / 5xx) -> silent data loss / non-durable writes (the 'it said it saved, but it's gone'
     failure). Uses the same create+read pairing as BOLA. N/A when there's no create+read pair or no
     create succeeds (couldn't establish the round-trip -> not a clean pass, a missed test)."""
-    pairs = _bola_pairs(ctx.profile.endpoints)
+    pairs = _create_read_pairs(ctx)
     if not pairs:
         ctx.evidence["na_reason"] = "no create+read endpoint pair to round-trip (SPA writes go off-origin)"
         return None
