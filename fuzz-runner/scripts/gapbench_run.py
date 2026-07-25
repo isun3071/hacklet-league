@@ -110,6 +110,26 @@ def already_done(results_path) -> set:
     return done
 
 
+def child_cmd(sid, sel, results, grade_timeout, needs_browser, needs_auth) -> list:
+    """The deploy_and_grade invocation for one scenario, including the two capability decisions.
+
+    LEAST PRIVILEGE for the expensive capabilities, not just the probe list: a render costs every chunk the
+    page loads, a self-registration costs a browser launch plus the signup round trip, and most selections
+    need neither. A control (empty selection) keeps both, since it runs the full battery and a false positive
+    can come from any probe. grade_timeout is stringified as an INT because deploy_and_grade declares
+    type=int and rejects "300.0" with an argparse error the parent would otherwise swallow."""
+    cmd = PY + [str(_HERE / "deploy_and_grade.py"), f"https://gapbench.vibe-eval.com/site/{sid}/",
+                "--url", "--record", str(results), "--grade-timeout", str(int(grade_timeout)),
+                "--meta", json.dumps({"project": f"anchor-gapbench-{sid}", "hackathon": "gapbench"})]
+    for pid in sel:
+        cmd += ["--probe", pid]
+    if not ((not sel) or set(sel) & needs_browser):
+        cmd += ["--no-browser"]
+    if (not sel) or set(sel) & needs_auth:
+        cmd += ["--browser-auth"]
+    return cmd
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Grade GapBench with per-scenario probe selection.")
     ap.add_argument("--results", default="gapbench-recall2.jsonl")
@@ -117,7 +137,8 @@ def main() -> None:
     ap.add_argument("--catalog", default=str(_HERE.parent / "catalog"))
     ap.add_argument("--delay", type=float, default=60.0, metavar="SECONDS",
                     help="gap between scenarios (default 60; raise it for an unattended overnight run)")
-    ap.add_argument("--grade-timeout", type=float, default=300.0)
+    ap.add_argument("--grade-timeout", type=int, default=300,
+                    help="per-scenario grading cap in SECONDS (int: deploy_and_grade rejects a float)")
     ap.add_argument("--limit", type=int, default=0, help="stop after N scenarios (0 = all)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and traffic estimate, send nothing")
     args = ap.parse_args()
@@ -164,25 +185,12 @@ def main() -> None:
         return
 
     for i, (sid, sel) in enumerate(jobs, 1):
-        url = f"https://gapbench.vibe-eval.com/site/{sid}/"
-        cmd = PY + [str(_HERE / "deploy_and_grade.py"), url, "--url", "--record", args.results,
-                    "--grade-timeout", str(args.grade_timeout),
-                    "--meta", json.dumps({"project": f"anchor-gapbench-{sid}", "hackathon": "gapbench"})]
-        for pid in sel:
-            cmd += ["--probe", pid]
-        # LEAST PRIVILEGE for the two most expensive capabilities, not just for the probe list. A render costs
-        # every chunk the page loads; a self-registration costs a browser launch plus the signup round trip.
-        # A control (empty selection) keeps both, since it runs the full battery.
-        use_browser = (not sel) or bool(set(sel) & needs_browser)
-        use_auth = (not sel) or bool(set(sel) & needs_auth)
-        if not use_browser:
-            cmd += ["--no-browser"]
-        if use_auth:
-            cmd += ["--browser-auth"]
-        caps = ("B" if use_browser else "-") + ("A" if use_auth else "-")
+        cmd = child_cmd(sid, sel, args.results, args.grade_timeout, needs_browser, needs_auth)
+        caps = ("B" if "--no-browser" not in cmd else "-") + ("A" if "--browser-auth" in cmd else "-")
         t0 = time.monotonic()
+        proc = None
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=args.grade_timeout + 120)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=args.grade_timeout + 120)
         except subprocess.TimeoutExpired:
             print(f"  [{i}/{len(jobs)}] {sid:<28} TIMEOUT")
             continue
@@ -196,6 +204,15 @@ def main() -> None:
                     r = json.loads(line)
                     if r.get("project") == f"anchor-gapbench-{sid}":
                         rec = r
+        if rec is None and proc is not None and proc.returncode != 0:
+            # the child never wrote a row AND exited nonzero -> surface its own words, then stop. An
+            # unattended run that keeps going on a broken command line just wastes the whole night.
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+            print(f"  [{i}/{len(jobs)}] {sid:<28} CHILD FAILED (exit {proc.returncode}): "
+                  f"{tail[-1][:120] if tail else '(no output)'}")
+            print("\n  aborting: every scenario would fail the same way. Fix the command and rerun "
+                  "(graded scenarios are skipped).\n")
+            return
         state = ("slop %s" % rec["slop_score"]) if rec and rec.get("slop_score") is not None else (
             str((rec or {}).get("deploy_error") or "no record")[:34])
         print(f"  [{i}/{len(jobs)}] {sid:<28} {len(sel) or 'FULL':>4}p {caps}  {state:<34} "

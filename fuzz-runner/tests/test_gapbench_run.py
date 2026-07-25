@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
 from gapbench_run import (_REQ_FULL_BATTERY, _est_requests, already_done, build_index,  # noqa: E402
-                          probes_for_cwes)
+                          child_cmd, probes_for_cwes)
 
 _CATALOG = pathlib.Path(__file__).resolve().parent.parent / "catalog"
 
@@ -84,3 +84,34 @@ def test_a_graded_row_that_later_went_dead_is_not_counted_done(tmp_path):
     f = tmp_path / "r.jsonl"
     f.write_text(json.dumps({"project": "anchor-gapbench-x", "slop_score": 10, "dead_url": True}) + "\n")
     assert already_done(f) == set()
+
+
+def test_child_cmd_stringifies_the_timeout_as_an_int():
+    # deploy_and_grade declares --grade-timeout type=int, so "300.0" is a hard argparse error. That killed
+    # every child instantly, and because the parent captured output it reported "no record" with no reason —
+    # an unattended run would have burned the whole night on it.
+    cmd = child_cmd("sqli-raw", ["sec-sqli-001"], "r.jsonl", 300.0, set(), set())
+    assert "--grade-timeout" in cmd and cmd[cmd.index("--grade-timeout") + 1] == "300"
+    assert "300.0" not in cmd
+
+
+def test_child_cmd_asks_only_for_the_capabilities_the_selection_needs():
+    nb, na = {"sec-domxss-001"}, {"sec-idor-002"}
+    cheap = child_cmd("x", ["sec-exposure-001"], "r.jsonl", 300, nb, na)
+    assert "--no-browser" in cheap and "--browser-auth" not in cheap
+    rendered = child_cmd("x", ["sec-domxss-001"], "r.jsonl", 300, nb, na)
+    assert "--no-browser" not in rendered and "--browser-auth" not in rendered
+    authed = child_cmd("x", ["sec-idor-002"], "r.jsonl", 300, nb, na)
+    assert "--browser-auth" in authed and "--no-browser" in authed
+    # a control runs the full battery, so it keeps BOTH: an FP can come from any probe, render-dependent ones
+    # included, and that is the entire purpose of a clean control
+    control = child_cmd("ref0", [], "r.jsonl", 300, nb, na)
+    assert "--no-browser" not in control and "--browser-auth" in control
+
+
+def test_child_cmd_targets_the_scenario_and_tags_it_for_the_scorer():
+    cmd = child_cmd("supabase-clone", ["sec-backend-001"], "r.jsonl", 300, set(), set())
+    assert "https://gapbench.vibe-eval.com/site/supabase-clone/" in cmd
+    meta = json.loads(cmd[cmd.index("--meta") + 1])
+    assert meta["project"] == "anchor-gapbench-supabase-clone"   # the anchor tag exempts the shared host
+    assert cmd[cmd.index("--probe") + 1] == "sec-backend-001"
