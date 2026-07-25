@@ -58,7 +58,11 @@ _CWE_BY_CATEGORY = {
     "session":           {"CWE-287", "CWE-294", "CWE-384", "CWE-539", "CWE-614", "CWE-1004"},
     "session-management": {"CWE-287", "CWE-384", "CWE-539"},
     "rate-limiting":     {"CWE-307", "CWE-799"},
-    "security-headers":  {"CWE-319", "CWE-693", "CWE-1021"},
+    # NB no CWE-319 here, deliberately. A missing HSTS header is cleartext-adjacent, but these probes fire on
+    # ~90% of all apps, so crediting CWE-319 would auto-HIT every scenario declaring it (exposed database port,
+    # open redis, TLS downgrade) on a finding unrelated to the actual defect. Measured: naked-postgres scored a
+    # false HIT off sec-headers-001. A category that fires near-universally must not credit anything.
+    "security-headers":  {"CWE-693", "CWE-1021"},
     "mixed-content":     {"CWE-319"},
     "debug-mode":        {"CWE-215", "CWE-489"},
     "error-hygiene":     {"CWE-209", "CWE-210"},

@@ -96,3 +96,15 @@ def test_probe_override_beats_category():
     # sec-authbypass-001 is category access-control, but its override names the auth-bypass CWEs precisely
     assert _finding_cwes(_f("sec-authbypass-001", "access-control")) == {"CWE-288", "CWE-306", "CWE-863"}
     assert "CWE-639" in _finding_cwes(_f("sec-idor-002", "access-control"))
+
+
+def test_a_near_universal_category_never_credits_a_scenario():
+    # security-headers fires on ~90% of apps, so crediting CWE-319 would auto-HIT every scenario declaring it
+    # (exposed db port, open redis, TLS downgrade) on a finding unrelated to the defect. Measured: it gave
+    # naked-postgres a false HIT off sec-headers-001. Recall inflation is worse than a low number.
+    from gapbench_score import _CWE_BY_CATEGORY, _finding_cwes
+    assert "CWE-319" not in _CWE_BY_CATEGORY["security-headers"]
+    assert "CWE-319" not in _finding_cwes({"probe_id": "sec-headers-001", "category": "security-headers"})
+    # it still credits what it genuinely detects: clickjacking defence and header hardening
+    assert {"CWE-1021", "CWE-693"} <= _finding_cwes({"probe_id": "sec-headers-004",
+                                                    "category": "security-headers"})

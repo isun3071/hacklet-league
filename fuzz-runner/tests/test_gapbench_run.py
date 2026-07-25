@@ -166,3 +166,49 @@ def test_is_blocked_treats_a_challenge_a_rate_limit_and_a_transport_error_alike(
         assert gapbench_run.is_blocked() is True     # what a block looks like mid-tighten
     finally:
         gapbench_run.httpx.get = real_get
+
+
+def test_verdict_separates_a_real_miss_from_an_untested_scenario():
+    # THE distinction that makes a recall number readable. A subset grade's slop is meaningless, so the line
+    # has to say whether the DECLARED class was caught -- and a miss only counts if the probes actually ran.
+    from gapbench_run import verdict
+    scen = {"id": "sqli-raw", "cwes": ["CWE-89"]}
+    hit = {"slop_score": 40, "coverage": {"applied": ["sec-sqli-004"]},
+           "findings": [{"probe_id": "sec-sqli-004", "category": "sql-injection"}]}
+    assert verdict(hit, scen, ["sec-sqli-004"])[0] == "HIT"
+    ran_clean = {"slop_score": 0, "coverage": {"applied": ["sec-sqli-004"]}, "findings": []}
+    assert verdict(ran_clean, scen, ["sec-sqli-004"])[0] == "miss"        # detector ran, found nothing
+    nothing_applied = {"slop_score": 0, "coverage": {"applied": []}, "findings": []}
+    assert verdict(nothing_applied, scen, ["sec-sqli-004"])[0] == "untested"   # reach problem, not recall
+    assert verdict({"slop_score": None, "dead_url": True}, scen, ["x"])[0] == "dead"
+    assert verdict(None, scen, ["x"])[0] == "dead"
+
+
+def test_verdict_does_not_credit_a_wrong_class_fire():
+    # firing SOMETHING is not catching the declared bug; an XSS hit on a traversal scenario is not recall
+    from gapbench_run import verdict
+    scen = {"id": "download-traversal", "cwes": ["CWE-22"]}
+    rec = {"slop_score": 35, "coverage": {"applied": ["sec-xss-001"]},
+           "findings": [{"probe_id": "sec-xss-001", "category": "xss"}]}
+    v, applied, fired = verdict(rec, scen, ["sec-xss-001"])
+    assert v == "miss" and applied == 1 and fired == ["sec-xss-001"]
+
+
+def test_a_control_gets_inverted_vocabulary_not_hit_miss():
+    # a control has nothing to catch: a fire is a FALSE POSITIVE and silence is the pass. Labelling that
+    # "miss" would read as failure when it is exactly the result we want, and it is how a precision signal
+    # gets mistaken for a recall one.
+    from gapbench_run import verdict
+    ctrl = {"id": "ref0", "vulnerability": "None (true-negative control)", "cwes": []}
+    quiet = {"slop_score": 25, "coverage": {"applied": ["sec-lfi-001", "sec-sqli-004"]}, "findings": []}
+    assert verdict(quiet, ctrl, [])[0] == "clean"
+    # hygiene on a control is not an FP: the benchmark's own edge omits those headers on every scenario
+    hygiene = {"slop_score": 25, "coverage": {"applied": ["sec-headers-001"]},
+               "findings": [{"probe_id": "sec-headers-001", "category": "security-headers"},
+                            {"probe_id": "qa-a11y-001", "category": "accessibility"}]}
+    assert verdict(hygiene, ctrl, [])[0] == "clean"
+    # a vulnerability CLAIM on a clean site is the precision failure we are hunting
+    bad = {"slop_score": 65, "coverage": {"applied": ["sec-lfi-001"]},
+           "findings": [{"probe_id": "sec-lfi-001", "category": "path-traversal"}]}
+    v, _n, fired = verdict(bad, ctrl, [])
+    assert v == "FP(1)" and fired == ["sec-lfi-001"]

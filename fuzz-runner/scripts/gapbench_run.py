@@ -30,7 +30,8 @@ import httpx
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_HERE.parent))
-from gapbench_score import _CWE_BY_CATEGORY, _PROBE_OVERRIDES  # noqa: E402
+from gapbench_score import (_CWE_BY_CATEGORY, _FP_EXEMPT_CATEGORIES, _finding_cwes,  # noqa: E402
+                            _PROBE_OVERRIDES)
 
 from hacklet_runner.catalog import load_catalog  # noqa: E402
 
@@ -115,6 +116,37 @@ def build_index(catalog_dir):
         if "has_auth_entrypoint" in requires or p.id.startswith(_ALSO_NEEDS_AUTH) or p.id in _ALSO_NEEDS_AUTH:
             needs_auth.add(p.id)
     return idx, needs_browser, needs_auth
+
+
+def verdict(rec, scenario, selected) -> tuple:
+    """(verdict, applied, fired) for one graded scenario, using the scorer's own CWE matching so the live line
+    and the final report can never disagree.
+
+    A subset grade's SLOP is meaningless (it is a fraction of a battery), so the number to watch is whether the
+    DECLARED class was caught. And a miss only means something if the probes ran: 0 applied is UNTESTED, which
+    is a different problem from a detector that ran and found nothing. Conflating them is how a recall number
+    becomes uninterpretable in both directions."""
+    if rec is None or rec.get("slop_score") is None:
+        return "dead", 0, []
+    expected = set(scenario.get("cwes") or [])
+    findings_all = rec.get("findings") or []
+    if str(scenario.get("vulnerability", "")).startswith("None"):
+        # A CONTROL inverts the vocabulary: there is nothing to catch, so a fire is a FALSE POSITIVE and
+        # silence is the pass. Calling that a "miss" would read as failure when it is the result we want.
+        # Hygiene is exempt for the same reason the scorer exempts it: a missing header is a verifiable fact
+        # about the response, and the benchmark's own edge omits them on every scenario, controls included.
+        fps = sorted({f["probe_id"] for f in findings_all
+                      if _finding_cwes(f) and f.get("category") not in _FP_EXEMPT_CATEGORIES})
+        n_applied = len((rec.get("coverage") or {}).get("applied") or [])
+        return (f"FP({len(fps)})" if fps else "clean"), n_applied, fps
+    applied = {p for p in (rec.get("coverage") or {}).get("applied") or [] if not selected or p in set(selected)}
+    findings = rec.get("findings") or []
+    fired = sorted({f["probe_id"] for f in findings})
+    if any(_finding_cwes(f) & expected for f in findings):
+        return "HIT", len(applied), fired
+    if not applied:
+        return "untested", 0, fired          # nothing engaged: not a recall failure, a reach failure
+    return "miss", len(applied), fired
 
 
 def already_done(results_path) -> set:
@@ -219,6 +251,8 @@ def main() -> None:
         print("\n  (dry run — nothing sent)\n")
         return
 
+    by_id = {s['id']: s for s in scenarios}
+    tally: dict = {}
     queue = list(jobs)
     attempts: dict = {}
     i = 0
@@ -248,6 +282,7 @@ def main() -> None:
                     r = json.loads(line)
                     if r.get("project") == f"anchor-gapbench-{sid}":
                         rec = r
+        scen = by_id.get(sid, {})
         if rec is None and proc is not None and proc.returncode != 0:
             # the child never wrote a row AND exited nonzero -> surface its own words, then stop. An
             # unattended run that keeps going on a broken command line just wastes the whole night.
@@ -257,10 +292,18 @@ def main() -> None:
             print("\n  aborting: every scenario would fail the same way. Fix the command and rerun "
                   "(graded scenarios are skipped).\n")
             return
-        state = ("slop %s" % rec["slop_score"]) if rec and rec.get("slop_score") is not None else (
-            str((rec or {}).get("deploy_error") or "no record")[:34])
-        print(f"  [{i}/{len(jobs) + len(queue)}] {sid:<28} {len(sel) or 'FULL':>4}p {caps}  {state:<34} "
-              f"·{time.monotonic()-t0:5.0f}s", flush=True)
+        v, n_applied, fired = verdict(rec, scen, sel)
+        tally[v] = tally.get(v, 0) + 1
+        if v == "dead":
+            state = str((rec or {}).get("deploy_error") or "no record")[:30]
+        else:
+            shown = ",".join(fired[:2]) + (f" +{len(fired) - 2}" if len(fired) > 2 else "")
+            state = f"applied {n_applied}/{len(sel) or 'all':<3} {shown or '—'}"[:44]
+        # denominator = the ORIGINAL job count plus however many the block forced back on; using
+        # len(queue) made it count DOWN as work completed, which reads like the total is shrinking.
+        print(f"  [{i:>3}/{len(jobs) + sum(attempts.values())}] {sid:<26} "
+              f"{str(scen.get('vulnerability', ''))[:22]:<22} {v:<8} {state:<46} ·{time.monotonic()-t0:4.0f}s",
+              flush=True)
         # a scenario killed BY THE BLOCK is a lost measurement, not a result: put it back and let the
         # pre-flight gate above wait the window out before it runs again.
         if rec is not None and rec.get("dead_url") and "403" in str(rec.get("deploy_error") or ""):
@@ -270,7 +313,11 @@ def main() -> None:
                 print(f"    -> blocked; requeued (attempt {attempts[sid]} of {args.max_retries})")
         if queue:
             time.sleep(args.delay)
-    print(f"\n  done. score it:  uv run python scripts/gapbench_score.py {args.results}\n")
+    print(f"\n  {sum(tally.values())} run: "
+          + ", ".join(f"{n} {k}" for k, n in sorted(tally.items(), key=lambda kv: -kv[1]))
+          + f"\n  HIT = the declared class was caught · miss = probes ran, nothing matched · "
+            f"untested = nothing applied (a reach problem, not a recall one)")
+    print(f"  score it:  uv run python scripts/gapbench_score.py {args.results}\n")
 
 
 if __name__ == "__main__":
