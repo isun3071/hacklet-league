@@ -66,6 +66,8 @@ def _results_index(results_path):
             continue
         with contextlib.suppress(json.JSONDecodeError):
             r = json.loads(line)
+            if not isinstance(r, dict):
+                continue   # a valid JSON scalar is not a record; .get would raise and abort the whole batch
             t = r.get("repo")
             if t is None:
                 continue
