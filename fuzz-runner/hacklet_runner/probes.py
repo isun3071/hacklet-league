@@ -49,7 +49,7 @@ def _catch_all_sig(ctx):
     client = getattr(ctx, "client", None)
     if client is not None:
         try:
-            r = client.get(_CATCHALL_PROBE)
+            r = client.get(_at(ctx, _CATCHALL_PROBE))
             if r.status_code == 200 and "html" in r.headers.get("content-type", "").lower():
                 sig = _body_sig(r.text)
         except (httpx.HTTPError, httpx.InvalidURL):
@@ -2001,6 +2001,20 @@ def _landing(ctx) -> str:
     return getattr(getattr(ctx, "profile", None), "landing_path", "/") or "/"
 
 
+def _at(ctx, path: str) -> str:
+    """`path` resolved under the APP's root. For a sub-path deployment the app's root is its landing path, so
+    anything we fetch by construction (a well-known file, the catch-all fingerprint probe, a stack sniff) lives
+    UNDER it; resolving against the origin probes the HOST instead and reports clean on the app. No-op when the
+    app is root-served, which is the whole normal corpus."""
+    landing = _landing(ctx).rstrip("/")
+    if not landing:
+        return path
+    if path in ("/", ""):
+        return landing      # address the entry page EXACTLY as _expand does, so the two never disagree
+        #     about which URL "the homepage" is (the catch-all fingerprint compares against it)
+    return landing + (path if path.startswith("/") else "/" + path)
+
+
 def _home_path(ctx, probe) -> str:
     """Resolve a homepage probe's target to a PATH: the 'target: /' homepage sentinel maps to the discovered
     landing page (_landing); an explicitly declared reference path (a perf/vulnerable reference route) is used
@@ -2056,7 +2070,8 @@ def debug_mode_enabled(ctx, probe) -> bool | None:
     # resource. A normal app 404s or returns HTML here; only a live debugger answers with javascript --
     # gating on the javascript content-type avoids false-firing on a 404 page that reflects the query.
     try:
-        r = ctx.client.get("/", params={"__debugger__": "yes", "cmd": "resource", "f": "debugger.js"})
+        r = ctx.client.get(_at(ctx, "/"),
+                           params={"__debugger__": "yes", "cmd": "resource", "f": "debugger.js"})
         inspected = True
         if (r.status_code == 200 and "javascript" in r.headers.get("content-type", "").lower()
                 and "werkzeug" in r.text.lower()):
@@ -2710,7 +2725,7 @@ def _nextjs_signal(ctx) -> bool:
     """A Next.js fingerprint — x-middleware-subrequest is Next-specific, so gate the probe to Next apps
     (elsewhere it is an ignored header and a fire would be meaningless)."""
     with contextlib.suppress(Exception):
-        r = ctx.client.get("/")
+        r = ctx.client.get(_at(ctx, "/"))
         if "next" in r.headers.get("x-powered-by", "").lower():
             return True
         if "/_next/" in (r.text[:200000] or ""):
