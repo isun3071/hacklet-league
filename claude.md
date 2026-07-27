@@ -279,6 +279,14 @@ Read the appropriate document for the concern you're addressing. This document i
 
 ## Style Guide
 
+### Scope
+
+This guide governs prose written for readers outside the project. Applications, pitches, outreach, landing and marketing copy, anything on the public site.
+
+It does not govern technical writing inside this repo. Code comments, specs, roadmaps, the CHANGELOG and the documents listed above keep their existing conventions, which include em dashes and established domain terms such as deduction-only, intent-independent, best-of-N and the tier operations vocabulary. Those terms are load bearing and renaming them would cost more than the consistency is worth. Where this guide and a surrounding file disagree, the file wins.
+
+The reason for the split is that the two audiences want different things. An outside reader is deciding whether to trust the work, so inflation reads as a warning sign. A reader inside the repo already trusts it and wants precision, so a fixed vocabulary earns its keep.
+
 ### Register
 
 Peer, not student. Direct, specific, and confident without inflation. Professional but human. I would rather sound like a sharp practitioner talking to another practitioner than like a candidate performing enthusiasm.
