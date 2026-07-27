@@ -275,3 +275,39 @@ This document is project conventions only. It does not:
 - Cover deployment procedures (those are in DEPLOYMENT.md when written)
 
 Read the appropriate document for the concern you're addressing. This document is the entry point that points to the others.
+
+
+## Style Guide
+
+### Register
+
+Peer, not student. Direct, specific, and confident without inflation. Professional but human. I would rather sound like a sharp practitioner talking to another practitioner than like a candidate performing enthusiasm.
+
+### Hard bans (never use these)
+
+Em dashes. Use a comma, a period, or restructure.
+Semicolons in prose.
+Hyphenated compounds unless the hyphen is established (co-organized and proper nouns are fine; full-stack, dual-axis, red-team, prompt-injection are not, write them open).
+The words: genuinely, honestly, operational, structural, framing, delve, leverage (as a verb), spearheaded, passionate, results-driven, synergy, seamless.
+Exclamation points, unless clearly intentional.
+Filler openers: "I am writing to apply for," "As a highly motivated," "I am excited to."
+
+### Preferences
+
+Full sentences with real subjects. No dropped fragments as bullets when a sentence reads better.
+Specificity over polish. Concrete true numbers and named tools beat smooth abstraction. "Scraped 70K records" not "worked with large datasets." "Guided 150+ students" not "supported learners."
+Plain strong verbs: built, shipped, designed, ran, found, fixed, presented. Not: utilized, spearheaded, drove, championed.
+Vary sentence length naturally. Do not produce three tricolons in a row or a wall of identical rhythm; that uniform cadence is itself an AI tell.
+
+
+### AI slop patterns to avoid
+
+Generic value claims with no evidence ("proven track record of delivering results").
+Buzzword stacking ("dynamic, results-driven professional with a passion for innovation").
+Over-hedged or over-smooth prose that could describe anyone.
+Repeated sentence openers and mechanical parallelism.
+
+
+### Honesty
+
+Specificity is the differentiation, not decoration. Every concrete detail must be true and traceable. Never invent a metric, a skill, a title, or an outcome to make a sentence stronger. A true smaller claim always beats an impressive false one.
