@@ -128,13 +128,13 @@ The tier choice isn't about prestige — it's about operational match between ch
 
 ### Token Budget's Two Functions
 
-Token budgets serve two distinct functions, and both activate only at Tier A:
+Token budgets serve two functions, and the order matters — the first is what the budget is *for*, the second is a signal it may also produce:
 
-**Function 1 — League cost control**: when the league hosts the AI substrate (Tier A and Tier B), every player prompt costs the league real money. Token budgets bound that cost so a runaway player can't burn through chapter monthly budget in a single round. This is operational risk management protecting the league's financial sustainability.
+**Function 1 (primary) — League cost control**: when the league hosts the AI substrate (Tier A and Tier B), every player prompt costs the league real money. The budget is a **ceiling that stops a runaway loop** from burning a chapter's monthly budget in a single round. This is operational risk management protecting the league's financial sustainability, and it is the function the cap is actually sized for.
 
-**Function 2 — Credentialing the resourcefulness skill**: once enforced, token budgets test a professional skill — working effectively under resource constraints. Real engineers operate under budget caps (compute costs, API quotas). Players who produce defended apps within constrained AI usage demonstrate something employers care about, and per the 2026 tokenmaxxing crisis data this skill is increasingly market-relevant.
+**Function 2 (secondary) — An efficiency signal**: where the budget is enforced and measured, usage is a real observation about how economically a player worked, and that observation is worth reporting. It is deliberately *not* framed as a credentialed resourcefulness skill. Crediting that would require a cap tight enough to bind on a normal round and force genuine triage, and the one measurement the league has (format_spec.md §5.5) suggests the documented cap is nowhere near that tight. Until on-substrate data says otherwise, treat token usage as a signal, not a scored constraint.
 
-Function 2 *requires* Function 1 to be enforced — you can't credential a skill you can't measure. But Function 1 doesn't require Tier A; it requires *the league hosting the AI* in the first place. At Tier B, Function 1 operates with honor-system enforcement (the league hosts AI, but budgets are policy-enforced rather than firewall-enforced); Most Efficient award operates with reduced credentialing weight. At Tier C with BYOD substrate, neither function applies because the league isn't paying for AI and can't enforce the budget anyway. This is why token budgets drop entirely at Tier C rather than operating as honor system theater.
+Function 2 *requires* Function 1 to be enforced — you can't report a number you can't measure. But Function 1 doesn't require Tier A; it requires *the league hosting the AI* in the first place. At Tier B, Function 1 operates with honor-system enforcement (the league hosts AI, but budgets are policy-enforced rather than firewall-enforced); Most Efficient award operates with reduced credentialing weight. At Tier C with BYOD substrate, neither function applies because the league isn't paying for AI and can't enforce the budget anyway. This is why token budgets drop entirely at Tier C rather than operating as honor system theater.
 
 ### Three-Tier Verification Architecture
 
