@@ -5,6 +5,18 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## Substrate rules: buzzer enforcement, budget reframe, and the wrapper carve-out (July 2026, Stage 4 design)
+
+Three changes to the substrate rules, formalized while scoping Stage 4.
+
+**The AI-wrapper category is deliberately NOT prohibited — do not reintroduce a ban.** This is the entry to read before "tightening" anything here later. The Tier A restriction on external credentials was never a written rule; it is structural, a consequence of the firewall and RMM leaving nothing external to reach. It is now stated explicitly in format_spec §5.7 as applying to **player-supplied credentials only**. No anti-wrapper rationale is attached to it, and none should be added. The reasoning: wrappers are the dominant shape of contemporary software, and a league premised on AI as the substrate cannot coherently firewall out the most common thing built on it. The resolution was to supply the credential rather than relax the environment — league-issued proxy keys (§5.8), where the league keeps the key, the model pin, the budget, and the audit trail. If a future edit re-broadens this to "no credentials at Tier A," it has silently re-banned the wrapper category and undone §5.8.
+
+**Buzzer enforcement is one gate with two conditions, and the rollback rule is gone.** Substrate access ends when the budget is exhausted *or* the round ends, enforced identically — the same shape a commercial provider uses to cut an account off at a usage limit. Concretely: **403, not 429** (429 signals retry-later and agentic clients have backoff wired to it, so an agent would retry in a loop while the player watches a spinner; 403 is terminal and surfaces immediately), a **player-facing** response body because it reaches the player through their own client, and **in-flight requests cut rather than allowed to finish** (a request issued at 23:59 would otherwise return usable code after the buzzer). This **replaces** the previous "AI responses are truncated; partial code changes roll back to pre-prompt state" language — there is nothing to roll back in a chat window, because nothing was applied. Human edits at freeze remain a separate, tier-dependent rule (inspector-enforced at Tier A, honor system at Tier B). Cascaded through format_spec §3.1 + §5.5, TIER_A §7, ARCHITECTURE, BUILD_ROADMAP Stage 4, and the two IDEAS agent-freeze entries that defined themselves by reference to the deleted rule.
+
+**The token budget is cost control first, an efficiency signal second.** It is a ceiling that stops runaway loops, not a number calibrated to bind on a normal round and force triage. Earlier drafts credentialed "resourcefulness" as a scored skill; that claim is withdrawn until there is data supporting it. Recorded alongside it in §5.5: one live 24-minute Underspecified round consumed roughly **7.2M tokens** against the documented 100,000 cap, with ~85k resident in context at any moment — the gap being cumulative agentic re-sending versus instantaneous context, which also makes the 25k per-prompt cap non-functional for agentic use. **No value was changed.** The measurement is n=1 and was taken off-substrate on DeepSeek V4-Pro rather than season-one V4-Flash, so it bounds how far the documented figures sit from observed behavior without justifying a replacement number.
+
+---
+
 ## Scoring: deduction-only "Slop Score" (June 2026, Stage 5 design)
 
 The resilience score was reworked and renamed in two composed changes, formalized during Stage 5 (fuzz runner) design. Best Overall is still the rank-sum composite with Communication — only the resilience component's shape and name changed.
