@@ -2,9 +2,18 @@
 
 *Operational template for HackLet Tier C events. For tier philosophy and verification, see LEAGUE_OPERATIONS.md §4. For format mechanics and scoring, see format_spec.md. For Tier A and Tier B operational profiles, see TIER_A_OPERATIONS.md and TIER_B_OPERATIONS.md.*
 
+> **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
+> (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
+> **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
+> additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
+> against other documents. The full audit — including every known cross-document
+> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+
 ---
 
 ## 1. Tier C Identity
+
+> **Status: DESIGNED** — no Tier C event has run. This is the tier the platform is being built toward first (BUILD_ROADMAP Stage-Tier mapping).
 
 Tier C is HackLet's **training tier** and the **Minimum Viable Round (MVR)** floor of the league. It is the smallest operational configuration that genuinely delivers HackLet competitive infrastructure: substrate equality within tier constraints, deterministic fuzz catalog evaluation, PITCH.md communication artifact, multi-axis scoring. Below Tier C is not HackLet at all; at Tier C, the format runs at its accessibility floor with bounded credentialing claims.
 
@@ -13,6 +22,8 @@ Tier C is also the **truest expression of the format's "we don't legislate AI us
 The freedom-integrity tradeoff (LEAGUE_OPERATIONS.md §4) sits at the freedom-maximizing end at Tier C. Players who want freedom-style competition use Tier C. Players who want credentialing-grade equality use Tier A.
 
 ## 2. Three Operational Profiles
+
+> **Status: DESIGNED** — of the three, only the MVR has a shipped timing profile. Tier C Extended's stated '~135-180 minutes' disagrees with the shipped `tier_c_extended` profile, which ends at T+107 (DOC_STATE C-12).
 
 Tier C operates under three distinct profiles serving different chapter goals. All three share core HackLet DNA — BYOD substrate, deterministic fuzz catalog, time compression, AI-native design — and differ only in cohort scale, judging method, and ceremony, never in format fundamentals.
 
@@ -26,6 +37,8 @@ Chapters choose the profile that matches their community capacity, and many run 
 
 ## 3. Substrate
 
+> **Status: DESIGNED** — BYOD needs no league infrastructure, so this is the section closest to being operable today.
+
 **BYOD substrate**. Players bring their own laptops. The league does not host AI substrate at Tier C. Players use whatever AI tooling they prefer (chat clients, IDE agents, mix and match). Web search and multiple AIs are allowed because BYOD makes restriction theater. No enforced token budgets because the league is not paying for inference and cannot enforce the budget.
 
 **Substrate equality at Tier C** is not a substantive claim. Players with $200/mo premium AI subscriptions have systematic substrate advantages over players with free-tier-only AI access. The credential at Tier C does not claim substrate equality; it claims demonstrated capability under self-selected substrate. Honest credential scoping.
@@ -34,7 +47,14 @@ Chapters choose the profile that matches their community capacity, and many run 
 
 ## 4. Round Timing — MVR Profile (60 Minutes)
 
+> **Status: BUILT (the clock)** — `backend/rounds/services.py:27-34` matches this profile exactly. Phase *contents* are DESIGNED. Timestamps are ILLUSTRATIVE (see below).
+
 The MVR round profile fits a one-hour club meeting:
+
+> **ILLUSTRATIVE** — a suggested itinerary, not a normative schedule. Durations are the design
+> commitment; timestamps are a worked example. Enforced rules key off round *state*
+> (format_spec.md §3). This profile is the tightest in the format, so it absorbs delay worst —
+> a club meeting that starts ten minutes late ends ten minutes late.
 
 ```
 T+0:00  → T+5:00   (5 min)  — Opening / round introduction
@@ -70,7 +90,13 @@ Multi-round MVR-day events remain within Tier C credentialing scope. Champions o
 
 ## 5. Round Timing — MVR at Large-Cohort Scale
 
+> **Status: DESIGNED** — no corresponding `timing_profile` value exists; this profile cannot currently be scheduled.
+
 The MVR is not a separate "large" profile — it is the same PITCH.md + LLM-judged mechanism run for a bigger single-round cohort (30-100+ players). The timing extends modestly to absorb larger-venue logistics and a bigger judging pool:
+
+> **ILLUSTRATIVE** — a suggested itinerary, not a normative schedule. No corresponding entry
+> exists in the shipped `timing_profile` enum, so this profile cannot currently be scheduled
+> on the platform.
 
 ```
 T+0:00  → T+10:00 (10 min) — Opening / round introduction (larger venue logistics)
@@ -88,6 +114,8 @@ The 10-min LLM judging window at this scale accommodates larger-cohort comparati
 
 ## 6. Submission Mechanism
 
+> **Status: MIXED** — portal zip upload is BUILT (`backend/rounds/views.py:212-253`). The **3-minute grace period is not implemented**: the server rejects everything past the freeze instant with no tier branch (`:228-229`), which is stricter than this section and both player-facing surfaces promise (DOC_STATE C-20 — platform session).
+
 **Portal upload with grace period**. At Tier C, the league does not have league-controlled workstations to SCP submissions from. Players upload submissions through the league portal (hackletleague.com) from their BYOD laptops:
 
 - At T+29 (end of build phase), the portal upload window opens
@@ -100,11 +128,13 @@ The 10-min LLM judging window at this scale accommodates larger-cohort comparati
 - README.md (player-authored project documentation)
 - Dockerfile or similar deployment configuration for niche languages
 
-**Niche language handling**: players using languages outside the league-supported runtime pool (see format_spec.md §5.4) must provide a Dockerfile or README with run instructions. Submissions that don't deploy successfully receive automatic zero on fuzz tests. The deployment contract responsibility shifts to the player at Tier C because the league can't pre-configure their BYOD environment.
+**Niche language handling**: players using languages outside the league-supported runtime pool (see format_spec.md §5.4) must provide a Dockerfile or README with run instructions. Submissions that don't deploy successfully are marked **DNF** and rank below every submission that runs. *(This previously read "receive automatic zero on fuzz tests" — pre-sign-flip language. Under deduction-only slop, zero is the **best** possible score, so "automatic zero" would reward failing to deploy. Per format_spec.md §4.2 and §5.6, a DNF is never a clean zero.)* The deployment contract responsibility shifts to the player at Tier C because the league can't pre-configure their BYOD environment.
 
 **Server-side deployment and fuzzing**: identical to Tier A/B pipeline. Submitted code deploys to ephemeral container with assigned port. Fuzz catalog (both public and hidden pools) executes against the deployed submission. Results flow into scoring pipeline (see §9).
 
 ## 7. PITCH.md — Written Communication Artifact
+
+> **Status: DESIGNED** — `Submission` has no PITCH.md field; the artifact has no home in the schema.
 
 PITCH.md is the canonical communication artifact at Tier C. It substitutes for the live pitch + cross-examination dimension of Tier A scoring. Players write PITCH.md during the pitch-writing + fuzzing window (T+29 → T+47).
 
@@ -152,6 +182,8 @@ AI assistance doesn't automatically produce strong PITCH.md. Players must direct
 
 ## 8. LLM Judging Architecture
 
+> **Status: DESIGNED** — no judging pipeline exists. Note the 40/30/30 aggregation below is a **third** Communication-axis decomposition, alongside format_spec §4.1's 30/20/20/30 and the shipped six-facet mean (DOC_STATE C-01).
+
 The MVR profile evaluates submissions through **LLM-judged written evaluation** rather than human-judged live performance. The architecture uses OpenRouter Fusion (or equivalent multi-model deliberation pipeline) to evaluate PITCH.md + README + fuzz results across multiple dimensions in parallel.
 
 ### Pipeline Architecture
@@ -180,7 +212,7 @@ All three calls **start dry** (no carried context from prior calls). This guaran
 
 ### Parallel Execution Window
 
-The 5-min judging window (10-min at large-cohort MVR) accommodates parallel execution. Fusion call latency is ~15-45 seconds for typical 4-model pools per OpenRouter docs; multiple calls executing concurrently complete in roughly the same wall-clock time as a single call (slowest call determines total elapsed). At 30 submissions × 3 parallel Fusion calls = 90 concurrent API requests — well within OpenRouter throughput.
+The 5-min judging window (10-min at large-cohort MVR) accommodates parallel execution. Fusion call latency is ~15-45 seconds for typical 4-model pools per OpenRouter docs; multiple calls executing concurrently complete in roughly the same wall-clock time as a single call (slowest call determines total elapsed). At 30 submissions × 3 parallel Fusion calls = 90 concurrent API requests — well within OpenRouter throughput. *(**ASSUMED** — the latency range cites "OpenRouter docs" with no version or retrieval date, and "well within throughput" is an inference, not a measured rate limit. No LLM-judging run has been executed. The 5- and 10-minute windows are sized on these unverified numbers.)*
 
 ### Communication Score Aggregation
 
@@ -207,9 +239,11 @@ Sysprompt evolution discipline includes versioning, public publication of major 
 
 ### Operational Cost
 
-LLM judging is real recurring cost. At large-cohort MVR (30 submissions × 3 Fusion calls × ~10K tokens average), each round costs roughly $5-15 depending on model selection (Budget vs Quality Fusion presets). For chapters running monthly large-cohort MVR events, annual league-supplied LLM cost runs $60-180 per chapter. Sustainable but worth budgeting for. League covers this cost because large-cohort MVR events validate the format and build the chapter ecosystem; the cost is investment in league maturation.
+LLM judging is real recurring cost. At large-cohort MVR (30 submissions × 3 Fusion calls × ~10K tokens average), each round costs roughly $5-15 depending on model selection (Budget vs Quality Fusion presets). For chapters running monthly large-cohort MVR events, annual league-supplied LLM cost runs $60-180 per chapter. *(**ASSUMED** — a model-priced estimate built on the ~10K-token-average assumption, which is itself unmeasured. No judging run has been executed and no per-round cost has been observed. Treat as an order-of-magnitude sanity check, not a budget line.)* Sustainable but worth budgeting for. League covers this cost because large-cohort MVR events validate the format and build the chapter ecosystem; the cost is investment in league maturation.
 
 ## 9. Scoring and Categorical Awards
+
+> **Status: DESIGNED** — correctly defers to format_spec §4 rather than restating it. The cleanest scoring section in the tier docs.
 
 The full award set and scoring math are defined once in **format_spec.md §4**; this section only notes which awards Tier C offers and how the Communication Score is produced per profile.
 
@@ -223,6 +257,8 @@ Tier C offers the **per-round award set** (format_spec §4):
 
 ## 10. Audience and Broadcast
 
+> **Status: DESIGNED**.
+
 **No broadcast at Tier C**. BYOD substrate precludes screen sharing for privacy reasons (personal devices contain personal context — notifications, browser history, signed-in services, work content — that cannot be broadcast without violating player and third-party privacy). Broadcast production is **Tier A only** (see TIER_A_OPERATIONS.md).
 
 **In-person audience optional at Tier C**. Chapters may invite audience when local capacity supports it (university clubs with engaged communities, chapter members not competing this round, friends and family of competitors). Audience is welcome but not required.
@@ -233,6 +269,8 @@ The format's audience-design philosophy (per format_spec.md §10) applies where 
 
 ## 11. MLH Palatability Framing
 
+> **Status: DESIGNED** — Year 2-3 strategy.
+
 large-cohort MVR events are structurally compatible with the MLH (Major League Hacking) operational template — hackathon-style scale, BYOD substrate, accessibility-focused community building. large-cohort MVR can be framed for CS student communities as "compressed AI hackathon with adversarial scoring" or "micro-hackathon with fuzz-catalog credentialing."
 
 The MLH brand carries substantial recognition in CS student communities. After demonstrated operational maturity (probably Year 2-3 of league operations), MLH partnership for large-cohort MVR events becomes viable strategy: MLH sanctioning legitimizes large-cohort MVR events to the broader CS student community; HackLet provides the format innovation that distinguishes the events from traditional hackathons.
@@ -242,6 +280,8 @@ The MLH brand carries substantial recognition in CS student communities. After d
 Pursuing MLH partnership is Year 2-3 strategic territory. Current focus (Year 0-1) is demonstrating MVR viability at the BU chapter through repeated operations.
 
 ## 12. Credentialing Claims
+
+> **Status: DESIGNED**.
 
 Tier C credentials carry **bounded but real** market signal:
 
@@ -265,6 +305,8 @@ Honest credential calibration matters. Tier C doesn't oversell what it credentia
 
 ## 13. The MVR as League R&D Infrastructure
 
+> **Status: DESIGNED** — the data-generation argument depends on events having run. None have.
+
 Tier C MVR events are substantively the league's research and development infrastructure. Each event generates operational data that informs league-level artifact evolution:
 
 - **Submitted code patterns** reveal common engineering choices, defensive patterns, slop signatures — feeds fuzz catalog evolution
@@ -278,6 +320,8 @@ After 30+ MVR events across a chapter's first year of operations, the league has
 The MVR's bounded credentialing claims free the league to use Tier C operations as R&D environment. Mature credentialing-grade claims at Tier A justify substantial infrastructure investment **because** Tier C operations have de-risked the format. Building Tier A first without MVR validation would be premature optimization; building MVR first validates the format before Tier A investment commits.
 
 ## 14. Strategic Sequencing
+
+> **Status: DESIGNED** — planning.
 
 Tier C operations are the league's near-term focus (Year 0-2) before Tier A infrastructure investment is justified:
 

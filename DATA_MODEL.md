@@ -2,6 +2,13 @@
 
 *The database schema for hackletleague.com. Entities, fields, relationships, and constraints. Read this before writing models, migrations, or queries.*
 
+> **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
+> (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
+> **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
+> additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
+> against other documents. The full audit — including every known cross-document
+> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+
 ---
 
 ## Overview
@@ -11,6 +18,8 @@ The data model centers on a federated platform with chapters as first-class enti
 All foreign keys cascade carefully — chapter deletion does not cascade to user accounts. Score history is preserved even when underlying entities change. Audit trails are append-only and never deleted.
 
 ## Entity Overview
+
+> **Status: MIXED** — **9 of the 16 entities below exist.** BUILT: User, Chapter, ChapterStaff, Event, EventParticipant, Round, Submission, Score, Ranking. NOT BUILT: VerificationApplication, FuzzTest, FuzzResult, PlayerFuzzInvocation, AuditLog, AudienceVote, WorkstationSession. Only WorkstationSession is marked as deferred in its own section.
 
 - **User** — Global account on the platform
 - **Chapter** — Local operational unit of the league
@@ -33,6 +42,8 @@ All foreign keys cascade carefully — chapter deletion does not cascade to user
 
 ### User
 
+> **Status: BUILT** — `backend/users/models.py:42`.
+
 The global account for all platform users.
 
 ```
@@ -52,6 +63,8 @@ verification_token  : varchar, nullable
 The `is_superadmin` flag is the platform-level role for the league operator team. Regular roles are stored per chapter via ChapterStaff.
 
 ### Chapter
+
+> **Status: BUILT** — `backend/chapters/models.py:8`.
 
 The local operational unit. First-class entity even at single-chapter MVP.
 
@@ -78,6 +91,8 @@ Chapters at tier C are unverified by default. Tier B chapters require basic appr
 
 ### ChapterStaff
 
+> **Status: BUILT** — `backend/chapters/models.py:62`.
+
 A chapter's organizing team and judge corps — the people who plan, run, and judge its events, modeled on hackathon organizers under an MLH-style umbrella. **A chapter is a host/organizer, not a membership society; players are NOT staff** — players relate to *events* via `EventParticipant`, never to chapters. (Replaces the earlier `ChapterMembership` entity, which conflated organizers, judges, and players.)
 
 ```
@@ -96,6 +111,8 @@ unique constraint: (user_id, chapter_id)
 A person can hold several roles (e.g. organizer + judge). `judge` here is the chapter's **standing judge corps** (judges who travel/recur); a one-off judge for a single event instead applies via `EventParticipant` (role=judge) and is never ChapterStaff. "Chapter admin" (BUILD_ROADMAP's term) = staff with `owner` or `organizer` role. Owner is unique per chapter (enforced by application logic).
 
 ### VerificationApplication
+
+> **Status: DESIGNED** — Stage 9. Chapter approval is currently manual through Django admin.
 
 Records of chapter applications for tier upgrades.
 
@@ -117,6 +134,8 @@ Applications track the full lifecycle from submission through decision. Approved
 ## Event Entities
 
 ### Event
+
+> **Status: BUILT** — `backend/events/models.py:8`. One divergence: the `format` enum ships `(vibe, unslop)` only, so the third format axis cannot be recorded (DOC_STATE C-14).
 
 A bounded competitive gathering operated by a chapter.
 
@@ -148,6 +167,8 @@ Events inherit credentialing weight from their chapter's tier (tier A chapter ev
 
 ### Round
 
+> **Status: BUILT** — `backend/rounds/models.py:8`; the `timing_profile` enum matches the shipped profiles exactly. The `status` enum here omits `pitching`, `deliberation` and `cancelled`, which the code has (`:24-34`).
+
 The atomic competitive unit within an event. Multi-round events have multiple Round records.
 
 ```
@@ -173,6 +194,8 @@ The three operational profiles share the same opening → build → freeze head 
 
 ### Submission
 
+> **Status: BUILT** — `backend/rounds/models.py:75`. Accurate, including the never-extracted-until-Stage-5 note. `token_budget_used` and `fuzz_budget_used` exist but are never written by any code path.
+
 A player's work product in a round.
 
 ```
@@ -196,6 +219,8 @@ One submission per player per round. **Submissions are uploaded directly to the 
 
 ### WorkstationSession
 
+> **Status: DESIGNED** — Stage 7, and correctly self-labelled as such. The model tense in this section is the one the rest of the document should follow.
+
 Per-round, per-workstation account lifecycle record — auditable evidence of substrate integrity for credentialing (which player occupied which workstation under which ephemeral account, and that it was torn down). Per-round reset is account-only (`userdel -r`); full image restoration is exceptional and recorded here. Not implemented until workstation hardening (Stage 7); modeled now so the audit trail is designed in.
 
 ```
@@ -216,6 +241,8 @@ A set `tamper_flag` forces image restoration before the workstation is reused. L
 ## Fuzz Catalog Entities
 
 ### FuzzTest
+
+> **Status: SUPERSEDED** — `points_defended` (positive) / `points_broken` (negative) / `points_gracefully_handled` is the **pre-slop award-points model**. format_spec §4.2 is deduction-only: a passing probe contributes exactly zero and there is no positive award. Not fixed here — handed to the platform session (DOC_STATE C-02).
 
 The catalog of automated tests. Grows to hundreds of entries over seasons.
 
@@ -244,6 +271,8 @@ Tests are split into two bundles (security and QA) reflecting their different co
 
 ### FuzzResult
 
+> **Status: SUPERSEDED** — same: `points_contributed` 'can be positive, zero, or negative', and the four-value `outcome` enum encodes the retired model. Handed to the platform session (DOC_STATE C-02).
+
 The outcome of one fuzz test against one submission. Records only **authoritative results** from central fuzz infrastructure at code freeze. Local fuzz runner results during build are informational only and not stored in this table.
 
 ```
@@ -262,6 +291,8 @@ unique constraint: (submission_id, fuzz_test_id)
 Results capture both the automated outcome and any tester judge overrides. Points contributed reflects the final value after override consideration. All results are from central infrastructure execution; local-runner intelligence-gathering during build is not persisted.
 
 ### PlayerFuzzInvocation
+
+> **Status: DESIGNED, and SUPERSEDED in its scoring fields** — `score_delta` is signed, inheriting the retired model. Handed over with the two above.
 
 Records each player-triggered fuzz invocation during build phase. Used for broadcast leaderboard, audience-visible score accumulation, and budget tracking. Does not contribute to authoritative scoring (that's FuzzResult).
 
@@ -282,6 +313,8 @@ This table is the data source for broadcast overlays and live leaderboards durin
 ## Scoring Entities
 
 ### EventParticipant
+
+> **Status: BUILT with a known gap** — `backend/events/models.py:88`. The `judge_specialization` enum here lists four values; the code ships three (no `stakeholder`). The scoring-math warning below it is accurate and remains the single most honest passage in the doc set.
 
 Everyone associated with an event as a person — **players, judges, and non-competing audience** — regardless of how they joined (invited, applied/RSVP'd, or drawn from the chapter judge corps). This single entity also replaces the old `JudgeAssignment` (a judge is just a participant with `role=judge`). It is the join point for access modes and all person-roles at an event.
 
@@ -318,6 +351,8 @@ The `status` lifecycle covers both access modes and both join paths:
 
 ### Score
 
+> **Status: BUILT** — `backend/rounds/models.py:129`; the `score_type` enum matches the code exactly.
+
 Judge-issued scores for submissions.
 
 ```
@@ -335,6 +370,8 @@ unique constraint: (submission_id, judge_participant_id, score_type)
 Multiple score types per judge per submission. Scoring math aggregates these into composite scores per submission.
 
 ### Ranking
+
+> **Status: BUILT** — `backend/rankings/models.py:7`; enums match, and the Stage 3 computation note accurately describes shipped behaviour.
 
 Aggregated performance per user per scope per period.
 
@@ -362,6 +399,8 @@ Rankings are computed periodically (probably after each event completes). Global
 
 ### AuditLog
 
+> **Status: DESIGNED** — nothing writes an audit trail today. ARCHITECTURE's security section claims this exists.
+
 Append-only record of significant operations.
 
 ```
@@ -379,6 +418,8 @@ user_agent          : text, nullable
 Audit logs are *never modified or deleted*. Database triggers or application discipline enforces append-only. Used for compliance, dispute resolution, and credentialing integrity.
 
 ### AudienceVote
+
+> **Status: DESIGNED** — deferred with People's Hacklet.
 
 People's Hacklet votes from spectators.
 
@@ -415,6 +456,8 @@ AudienceVote references Round and Submission
 ```
 
 ## Indexes
+
+> **Status: MIXED** — the model-level constraints are BUILT; several indexes listed reference tables that do not exist.
 
 Beyond standard primary key and foreign key indexes:
 

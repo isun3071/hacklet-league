@@ -2,9 +2,18 @@
 
 *Executive summary of the official rules. The complete rulebook addresses every edge case in detail; this document establishes the format's identity, mechanics, and core operating principles.*
 
+> **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
+> (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
+> **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
+> additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
+> against other documents. The full audit — including every known cross-document
+> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+
 ---
 
 ## 1. What HackLet League Is
+
+> **Status: DESIGNED** — the format's identity. The 3-format matrix is aspirational: `Event.format` ships only `vibe` and `unslop`, so **Underspecified cannot currently be recorded** (see DOC_STATE C-14).
 
 **In one sentence: hackathon, but minutes instead of hours, with a cheering audience.**
 
@@ -31,6 +40,8 @@ HackLet League is built for engineers who want to develop and demonstrate the cl
 
 ## 2. Core Definitions
 
+> **Status: DESIGNED** — Round, Event and Submission exist as platform entities; Substrate does not.
+
 **Player**: An individual competitor registered in the appropriate tier.
 
 **Round**: A complete competitive cycle — opening, build phase, evaluation, communication (written PITCH.md or live pitch + cross-examination), judging/deliberation, and award reveal, plus a zamboni reset where controlled workstations are used. The atomic unit of competition. The phase *sequence* is tier-agnostic (§3.1); phase *timing* varies by tier and profile — the full Tier A round runs ~135 min, the Tier C MVR ~60 min (see TIER_A_OPERATIONS.md and TIER_C_OPERATIONS.md).
@@ -47,7 +58,22 @@ HackLet League is built for engineers who want to develop and demonstrate the cl
 
 A round is the atomic unit of hacklet competition. The round phase sequence is tier-agnostic — every tier operates the same underlying phases — but specific timing within each phase varies by tier per the operational template. See TIER_A_OPERATIONS.md, TIER_B_OPERATIONS.md, and TIER_C_OPERATIONS.md for tier-specific timing profiles.
 
+> **ILLUSTRATIVE — every timing profile in these documents is a suggested itinerary, not a
+> normative schedule.** Published timestamps (T+0, T+29, T+135, and the rest) establish
+> *sequence and proportion*, not wall-clock law. Real events start late, overrun, and absorb
+> delay. Phase *durations* are the design commitment; the absolute times are a worked example
+> at a hypothetical on-time start.
+>
+> The operational consequence: **every enforced rule keys off round state, never off a
+> timestamp.** The proxy gate asks whether the round is still in its build phase, not whether
+> the clock reads T+29. The same holds for submission capture, the read-only flip, and budget
+> enforcement. A round that opens nine minutes late must behave identically to one that opens
+> on time. Wherever this document or an operations document says a rule takes effect "at
+> T+29:00," read it as "at build end."
+
 ### 3.1 Round Phase Sequence
+
+> **Status: MIXED** — the phase *clock* is BUILT (`backend/rounds/services.py:14-47`). SCP capture, the ephemeral container, the local fuzz runner and the proxy cutoff are all DESIGNED.
 
 Every HackLet round operates the following phase sequence:
 
@@ -57,7 +83,7 @@ Every HackLet round operates the following phase sequence:
 
 **Evaluation Phase**: at freeze, submissions move to scoring infrastructure. Submission mechanism varies by tier — SCP from controlled workstations at Tier A/B, portal upload with grace period at Tier C (see tier docs for specifics). League infrastructure receives each submission, deploys in an ephemeral container, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; any local fuzz invocations during build were intelligence-gathering only. Post-competition, submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
 
-**Pitch Preparation Phase**: code files become read-only at freeze. Players retain access to submitted code, README, and (per tier specifics) AI assistance for pitch preparation. Players digest what they built, plan their articulation, anticipate cross-examination questions. Players also author **PITCH.md** documenting defensive choices, design rationale, and strategic decisions — this artifact is the canonical written communication artifact in the Tier C MVR (LLM-judged) and serves as pitch prep material at Tier A/B and Tier C Extended (where live pitch is the primary credentialing dimension). See PITCH.md template per TIER_C_OPERATIONS.md §7.
+**Pitch Preparation Phase**: code files become read-only at freeze. Players retain access to submitted code, README, and (per tier specifics) AI assistance for pitch preparation. *(AI assistance here is **contested** — the §5.5 gate cuts substrate access at build end, which is before this phase. See the OPEN note in §5.5.)* Players digest what they built, plan their articulation, anticipate cross-examination questions. Players also author **PITCH.md** documenting defensive choices, design rationale, and strategic decisions — this artifact is the canonical written communication artifact in the Tier C MVR (LLM-judged) and serves as pitch prep material at Tier A/B and Tier C Extended (where live pitch is the primary credentialing dimension). See PITCH.md template per TIER_C_OPERATIONS.md §7.
 
 **Pitch and Cross-Examination Phase**: human judges evaluate live performance at Tier A, Tier B, and Tier C Extended. Each player presents in sequence:
 - Pitch — what they built, key choices, distinctiveness
@@ -76,6 +102,8 @@ In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-j
 
 ### 3.2 Round Sizing
 
+> **Status: DESIGNED** — no player cap is enforced anywhere; `Round.player_count` is a free integer. Sources disagree on whether the cap is a format or a broadcast constraint (DOC_STATE C-08).
+
 Standard round size is **8 players** across all tiers. This is the format's foundational unit — the size most operational templates are designed around, the size that fits broadcast overlays at Tier A, the size that balances judge cognitive load with competitive variety.
 
 **6-12 players** is the acceptable operational range; **12 is the structural maximum** because pitch + cross-examination timing breaks beyond 12 players (28 min for 8 players at 3.5 min each scales to 42 min for 12 players, pushing the format clock substantially).
@@ -86,6 +114,8 @@ The 8-player limit at Tier A specifically is tied to broadcast and audience purp
 
 ### 3.3 Broadcast Considerations
 
+> **Status: DESIGNED** — no broadcast infrastructure exists (Stage 6).
+
 Broadcast production is **Tier A only**. The broadcast infrastructure requires controlled workstations that can be screen-shared without compromising player privacy — a constraint that BYOD substrates (Tier C) preclude entirely and that Tier B's optional workstation hosting doesn't necessarily provide. See TIER_A_OPERATIONS.md §6 for broadcast architecture details (workstation screen capture, per-player stats overlays, live player-fuzz leaderboard, suspense gap dynamics, commentary infrastructure).
 
 At Tier B and Tier C, the format runs without broadcast production. In-person audience is optional. Asynchronous content (written results, post-event recaps, social media coverage) remains viable at all tiers for remote audience interest without requiring live broadcast.
@@ -93,6 +123,8 @@ At Tier B and Tier C, the format runs without broadcast production. In-person au
 ## 4. Scoring
 
 ### 4.1 Component Structure
+
+> **Status: DESIGNED** — **the shipped code implements a different decomposition.** `backend/rounds/scoring.py:24-33` averages six judge-entered facets into two axes and never reads `judge_specialization`; the 30/20/20/30 role weighting is unimplemented. A third decomposition (40/30/30) lives in TIER_C §8. See DOC_STATE C-01 and the DATA_MODEL EventParticipant flag.
 
 A player's performance is measured on **two independent axes**:
 
@@ -108,6 +140,8 @@ The two axes are **never summed into one number** — they differ in direction (
 The old model split communication into separate Pitch Quality and Cross-Examination Performance components; under the four-rubric model each judge scores across *both* pitch and cross-ex on their own rubric, so pitch-vs-cross-ex is at most an internal sub-structure of a rubric — the axis-level weighting is by judge role (30/20/20/30). Rubric internals are written separately.
 
 ### 4.2 Slop Scoring Philosophy
+
+> **Status: DESIGNED** — no fuzz runner is integrated with the platform. Note the DATA_MODEL FuzzTest/FuzzResult schema still carries the *pre-deduction* award-points model (DOC_STATE C-02, handed to the platform session).
 
 Slop scoring is **deduction-only**. Each probe has one job: detect whether a specific kind of slop is present. A probe that detects slop adds its penalty to the slop score; a probe that detects nothing — whether because the submission defended correctly or because the targeted surface does not exist — adds **zero**. There is no positive reward for passing. Resilience is table stakes, not bonus territory: you are not credited for *not* having SQL injection, you are penalized for having it.
 
@@ -161,7 +195,7 @@ This metadata accompanies the slop score in event results, persistent rankings, 
 
 These properties no legitimate application intent violates. They are testable universally without intent considerations.
 
-The 5-second timeout threshold is deliberately set above tight production targets (real-world abandonment begins around 3 seconds) to remain reasonable for 24-minute builds that cannot fully optimize for performance.
+The 5-second timeout threshold is deliberately set above tight production targets (real-world abandonment begins around 3 seconds) to remain reasonable for 24-minute builds that cannot fully optimize for performance. *(**ASSUMED** — the 3-second abandonment figure is industry folk knowledge with no source cited here, and the 5-second threshold is reasoned from it rather than calibrated against submissions. The gate values below inherit this.)*
 
 Speed is also measured as **boolean abandonment-threshold gates** in the performance bundle, distinct from optimization targets: TTFB ≥ 3s, FCP ≥ 5s, and INP ≥ 5s each add the speed category's slop penalty, with no marginal credit for being faster (a player clears the gate, then spends remaining time elsewhere). These are gates, not slopes — they catch only the egregiously broken, so they do not "penalize all submissions uniformly." TTFB is server-side and applies to any HTTP response; FCP and INP are browser-measured and apply only to apps that serve a rendered HTML document (a pure API scores them N/A). Optimization-target scoring of Core Web Vitals (for example crediting LCP < 2.5s on a slope) remains excluded: it measures performance tuning rather than engineering correctness. See FUZZ_RUNNER_SPEC.md for the gate mechanics.
 
@@ -174,6 +208,8 @@ The division is architectural, not merely sequencing. The fuzz catalog is the **
 The README remains load-bearing for cross-examination and pitch context. Players describe their app's intent for judge interpretation during clickaround, but the automated test catalog does not depend on intent classifications for its initial implementation.
 
 ### 4.3 Best Overall (Composite Ranking)
+
+> **Status: BUILT** — `backend/rounds/scoring.py:95-112` implements the rank-sum and all four tiebreakers in this order. It currently ranks a judge-entered engineering stand-in rather than a machine slop score.
 
 The Best Overall winner is determined through rank-based composition with progressive tiebreaking:
 
@@ -190,6 +226,8 @@ Standard competition ranking (1224 method) is used for component ranking, with t
 This produces the right kind of Best Overall winner: the most balanced player among those with the strongest combined performance, rather than the player who dominated a single component. The progressive tiebreaker hierarchy resolves nearly all real-world ties before co-Champion is declared, while leaving co-Champion as the honest outcome when players are genuinely indistinguishable.
 
 ### 4.4 Categorical Awards
+
+> **Status: MIXED** — Most Resilient, Best Communicator and Best Overall are BUILT (`backend/rounds/scoring.py:132-137`). People's Hacklet is DESIGNED and deferred. Most Efficient is retired here but listed as live in TIER_A §8 and TIER_B §8 (DOC_STATE C-06).
 
 Per-round categorical awards are kept deliberately small to preserve credentialing signal at 8-player round size. Per-round awards alongside Best Overall (§4.3):
 
@@ -211,6 +249,8 @@ The design principle is anti-award-sprawl: too many per-round categoricals at 8-
 
 ### 4.5 Tradeoffs and the Absence of a Permanent Meta
 
+> **Status: DESIGNED** — design rationale, no implementation surface.
+
 A competition is healthy only when no single strategy dominates regardless of context — a "solved" game collapses skill expression into rote execution of the one optimal play. HackLet's scoring is built to prevent that. The axes genuinely **conflict under the clock**: time pushes toward shipping fast, the fuzz catalog punishes shipping slop, and communication/judge scoring rewards ambition the fuzzer would penalize. No strategy maximizes all of them at once, so the optimal play is situational — it shifts by format, by prompt, and by the player's own strengths. Tradeoffs under pressure, not a dominant meta, are what the design selects for.
 
 This matters more here than in an ordinary game, because it is **instrumental to the credential**. If a permanent meta existed, the format would measure who best learned the meta — rote preparation — rather than who has the disposition: situational judgment. The game-design property and the credentialing goal are the same requirement: situational skill must beat memorized strategy.
@@ -222,6 +262,8 @@ The design must also guard against a degenerate strategy *within* a variant. In 
 ## 5. Substrate
 
 ### 5.1 Workstation
+
+> **Status: DESIGNED** — no workstation infrastructure exists (Stage 7).
 
 All players in an event work on identically-configured workstations supplied by the league or the hosting chapter. Workstations run a standardized Linux distribution as a normal desktop environment — players have access to an IDE, browser, terminal, file manager, and standard development tools, used the way an engineer would use any workstation. The substrate's anti-cheating boundary is enforced at the network layer rather than through application lockdown.
 
@@ -245,6 +287,8 @@ On the 24-minute clock. The build duration is a deliberate steal from "the 24-ho
 
 ### 5.2 Network Configuration
 
+> **Status: DESIGNED**.
+
 Workstations are firewall-restricted to a minimal allowlist:
 
 - The league competition website (single endpoint)
@@ -255,6 +299,8 @@ The league competition website internally routes to the sanctioned AI substrate,
 Chapters may optionally deploy dedicated network appliances or VLANs for additional isolation. The league provides reference configurations.
 
 ### 5.3 AI Substrate
+
+> **Status: DESIGNED** — there is no proxy. No `backend/ai_proxy/` app, no OpenRouter integration, no `/api/v1/chat/completions`. Stage 4 is active and unstarted.
 
 Each season specifies a single AI model that serves as the substrate for all events that season. The model is announced at least 30 days before the season begins. Players have access to practice with the announced model in advance.
 
@@ -279,6 +325,8 @@ The proxy exposes an **OpenAI-compatible chat completions endpoint** (`/api/v1/c
 Mid-tier model choice is deliberate. Frontier models would mask the verification skill that distinguishes thoughtful AI direction from lazy AI direction. Mid-tier models hallucinate at rates that exercise verification skill meaningfully. Players who instinctively prompt for resilience and verify model output succeed; players who do not, fail.
 
 ## 5.4 Substrate Languages and Package Mirror
+
+> **Status: DESIGNED** — and **contested**: IDEAS_FOR_LATER.md's Season 1 selection puts Java, C# and PHP in Tier 1 and *excludes* Rust and Ruby, which are Tier 2 here (DOC_STATE C-09). No mirror exists.
 
 The substrate supports a tiered set of languages calibrated to the
 target population — junior software engineers. The Union-Of-Resumes
@@ -310,8 +358,14 @@ and score accordingly.
 
 Each player receives per round:
 
-- **100,000 tokens** total (input + output + chain-of-thought)
-- **50 fuzz budget points** for player-triggered self-testing during build
+- **100,000 tokens** total (input + output + chain-of-thought) — **ASSUMED**; no derivation is
+  recorded anywhere in this repository, and the figure has never been measured against a real
+  round on the season substrate
+- **50 fuzz budget points** for player-triggered self-testing during build — **ASSUMED**; same,
+  and additionally untestable until a fuzz-trigger path exists
+
+*(The per-timer ladder in IDEAS_FOR_LATER.md — 50k/100k/150k/200k/300-500k — is a linear
+extrapolation from the 100k assumption and inherits its status.)*
 
 **What the token budget is for.** The budget is **cost control first and an efficiency signal second**. It is a ceiling that stops a runaway loop from burning a chapter's month in one round, not a number calibrated to bind on a normal round and force triage. Earlier drafts leaned on the second function — resource calibration as a credentialed skill — as though the cap were tight enough to make every prompt a real allocation decision. It is not, and the format should not claim it is.
 
@@ -319,12 +373,28 @@ Each player receives per round:
 
 **This does not yet justify a new number.** There is exactly one measurement, n=1, and it was taken off-substrate on DeepSeek V4-Pro rather than the season-one V4-Flash. It is recorded here as a bound on how far the documented figures are from observed behavior, not as a basis for setting a replacement cap. The numbers above stand until there is enough on-substrate data to move them.
 
-**Substrate access ends at a single server-side gate with two conditions: the budget is exhausted, or the round has ended.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
+**Run identification (outstanding).** The figures above are **MEASURED**, but the producing run is not identified — no date, no event, no operator, no log reference, and the platform stores nothing that would let it be reconstructed (`Submission.token_budget_used` exists but is never written). Until the run is named, this paragraph is a recollection with a number in it. Name the run or downgrade the figures.
+
+**Two boundaries, two names.** These are distinct instants and the documents must not use one word for both. **Build end** is when build time is up — the freeze boundary, where the proxy cuts off, the submission is captured, and code files go read-only. **Round end** is when the round is over — awards complete, zamboni finished. On the illustrative Tier A itinerary these fall at T+29 and T+135 respectively, roughly a hundred minutes apart. "The round has ended" never means build end.
+
+**Substrate access ends at a single server-side gate with two conditions: the budget is exhausted, or build time is up.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
 
 - The proxy refuses the request with **403, not 429**. A 429 signals retry-later, and agentic clients have backoff wired to it, so an agent would sit in a retry loop while the player watches a spinner. 403 is terminal and surfaces immediately.
-- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or the round is over.
+- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or build time is up. It must not say the round is over, which is a different and much later instant.
 - **In-flight requests are cut, not allowed to finish.** A request issued at 23:59 would otherwise return usable code after the buzzer, so open connections are terminated rather than merely refusing new ones.
 - The player may continue working in the IDE without AI assistance.
+
+> **OPEN — does the gate admit a pitch-preparation carve-out?** Naming the boundary precisely
+> (above) resolves the vocabulary but exposes a policy question the buzzer-enforcement decision
+> did not settle. This clause cuts substrate access at **build end**. Six passages elsewhere
+> grant chat-window AI during the pitch-preparation window, which runs *after* build end
+> (§3.1 Pitch Preparation; TIER_A §3 and §4; ARCHITECTURE's chat flow, state machine, and
+> submission flow). Those passages carry an independent design rationale — players who
+> tokenmaxxed during build get no prep assistance, framed as a strategic tradeoff and an
+> instance of the no-coddling principle — so they are not merely stale wording that can be
+> deleted. Either the gate has a third clause (inference for prep, no file writes), or the
+> tradeoff is retired. **Not decided here.** Every affected passage is marked and points back
+> to this note.
 
 Human edits at freeze are a separate rule and remain tier-dependent: inspector-enforced at Tier A, honor system at Tier B (see the tier operations documents).
 
@@ -333,6 +403,8 @@ Edited or regenerated prompts do not refund tokens. Each prompt submission costs
 Fuzz budget enforces strategic allocation of self-testing. Categories have varying costs reflecting test complexity. Players may invoke any subset of fuzz tests against their own work within budget, gathering intelligence about defensive coverage before the judge fuzz set runs at code freeze.
 
 ### 5.6 Submission Requirements
+
+> **Status: MIXED** — the server-authoritative freeze is BUILT (`backend/rounds/views.py:228-229`). The deploy/README contract and every failure mode below it are DESIGNED.
 
 A valid submission must:
 
@@ -351,6 +423,8 @@ The README may be written by the AI. Players who use the AI to draft documentati
 
 ### 5.7 Application Self-Containment
 
+> **Status: DESIGNED** — and contradicted by the shipped player-facing scoring page, which offers a league-provided database at `$DATABASE_URL` (DOC_STATE C-10; that page belongs to the platform session).
+
 Submissions must run as **self-contained applications**. The fuzz runner provides no external service credentials, API keys, or third-party network egress. Code that requires secrets to function fails at runtime, and the runner scores the resulting failures as slop — it does not detect or reject such code; the consequence is natural at the fuzz layer.
 
 **Permitted persistence:**
@@ -368,11 +442,13 @@ Submissions must run as **self-contained applications**. The fuzz runner provide
 
 The 24-minute format makes serious external integration impractical even with AI assistance; the constraint reflects format reality, not arbitrary limitation. Players keep full freedom to write integration code, but the runner does not provide the environment for it to function, so such code fails its relevant probes. The policy relaxes as the league builds integration-testing infrastructure at higher tiers (Phase 3 — see IDEAS_FOR_LATER.md). **The one carve-out from the "third-party API keys unsupported" line above is runtime model inference, provided through the league's own proxy under §5.8 — precisely because the league controls that key rather than the player supplying an external one.**
 
-**What is restricted, and what is not.** At Tier A the restriction on external credentials was never a written rule; it is **structural**, a consequence of the workstation firewall and RMM (§5.1, §5.2) leaving nothing external to reach. That structural restriction applies to **player-supplied credentials only**. It is not, and must not become, a prohibition on the AI-wrapper *category* of application. Wrappers are the dominant shape of contemporary software — Y Combinator's Fall 2025 batch was ~92% AI-incorporating, up from ~88% the batch before — and a league whose entire premise is that AI is the substrate cannot coherently firewall out the most common thing built on it. The resolution is not to relax the environment but to supply the credential: league-issued proxy keys (§5.8) give the app a sanctioned inference endpoint while the league keeps control of the key, the model, the budget, and the audit trail. Player-supplied keys stay unreachable; league-issued keys are available on request.
+**What is restricted, and what is not.** At Tier A the restriction on external credentials was never a written rule; it is **structural**, a consequence of the workstation firewall and RMM (§5.1, §5.2) leaving nothing external to reach. That structural restriction applies to **player-supplied credentials only**. It is not, and must not become, a prohibition on the AI-wrapper *category* of application. Wrappers are the dominant shape of contemporary software — Y Combinator's Fall 2025 batch was ~92% AI-incorporating, up from ~88% the batch before (**uncited**; verify before public use) — and a league whose entire premise is that AI is the substrate cannot coherently firewall out the most common thing built on it. The resolution is not to relax the environment but to supply the credential: league-issued proxy keys (§5.8) give the app a sanctioned inference endpoint while the league keeps control of the key, the model, the budget, and the audit trail. Player-supplied keys stay unreachable; league-issued keys are available on request.
 
 ### 5.8 App-Tier Substrate Access (League-Issued Proxy Keys)
 
-**The problem.** At Tier A the workstation is firewall-restricted to a single endpoint (§5), so a player's *app* has no reachable inference endpoint at runtime. That firewalls out the single largest category of contemporary app — the AI wrapper (empirically ~78% of AI startups shipped in 2024 are API wrappers; AI is >80% of the current YC intake) — in a league whose whole premise (§10) is that AI is the substrate. §5.8 fixes this by exposing the league proxy (§5.3) to the player's app, not only to their coding interfaces, gated by a **league-issued key**.
+> **Status: DESIGNED** — depends on a proxy that does not exist. Its 'settled decisions' cover grading but not the judge clickaround window; carried to the decisions list.
+
+**The problem.** At Tier A the workstation is firewall-restricted to a single endpoint (§5), so a player's *app* has no reachable inference endpoint at runtime. That firewalls out the single largest category of contemporary app — the AI wrapper (~78% of AI startups shipped in 2024 reported as API wrappers; AI is >80% of the current YC intake — **both figures uncited**, no source named in-document, unlike the §11 industry figures which carry named reports and dates) — in a league whose whole premise (§10) is that AI is the substrate. §5.8 fixes this by exposing the league proxy (§5.3) to the player's app, not only to their coding interfaces, gated by a **league-issued key**.
 
 **Why the proxy, not a local model.** The proxy already exists, the season model is already pinned (§5.3), and clients already cannot select it or bypass logging. Extending the *same* proxy to the app tier preserves substrate equality for free and adds no hardware dependency. A local model (Ollama on the box) would move inference speed onto the workstation and reintroduce the parity problem the pinned-proxy design already dissolves.
 
@@ -403,6 +479,17 @@ So neither play dominates: take the key for a better pitch, a worse clock, and a
 
 HackLet League operates across three tiers calibrated to expected expertise:
 
+> **Status: SUPERSEDED in its scoring language.** The three subsections below describe
+> per-tier scoring asymmetry in the vocabulary of the retired award-points model —
+> "positive-only scoring," "moderate asymmetric penalty," "full symmetric scoring." Under
+> deduction-only slop (§4.2) there is no positive scoring to be *positive-only* about and no
+> symmetric/asymmetric axis to vary: every probe either fires (penalty) or does not (zero),
+> identically at every tier. What survives is the intended mechanic — **catalog scope widens
+> with tier** — which is unaffected by the rename. Rewriting these three subsections in
+> deduction-only terms is a real edit with a real decision inside it (does a collegiate player
+> face a narrower catalog, or the same catalog with some penalties waived?) and is **not made
+> here**.
+
 ### 6.1 Collegiate Tier
 
 For currently-enrolled undergraduate students. Standard fuzz set covers categories appropriate to undergraduate CS education (SQL injection, basic XSS, input validation, CRUD lifecycle, fundamental authentication). Advanced categories appear as opt-in bonus opportunities with positive-only scoring — collegiate players are not penalized for attempting categories beyond their expected baseline knowledge.
@@ -422,6 +509,8 @@ Players may compete in tiers above their expected eligibility (a collegiate play
 ## 7. Season Structure
 
 ### 7.1 Events
+
+> **Status: MIXED** — Event and Round entities are BUILT. The 1-event-1-format rule is not enforced in code, and the round-size targets are DESIGNED.
 
 Events occur throughout the season at multiple scales:
 
@@ -462,6 +551,8 @@ League growth happens through event frequency and geographic spread rather than 
 
 ### 7.2 Rankings
 
+> **Status: MIXED** — persistent/all-time rankings are BUILT (`backend/rankings/services.py:103-123`), chapter and global scope only. Season rankings are DESIGNED; no season entity exists.
+
 Two parallel ranking systems operate:
 
 - **Season Rankings**: Current-season performance, used for qualification flow into higher-tier events and for crowning season champions
@@ -471,9 +562,13 @@ Both rankings are publicly visible. Players accumulate rank points through event
 
 ### 7.3 Qualification Flow
 
+> **Status: DESIGNED**.
+
 Top performers at chapter events qualify for regional events. Top performers at regional events qualify for the season championship. Specific qualification thresholds are published per season and per region.
 
 ## 8. Conduct
+
+> **Status: DESIGNED** — no enforcement surface on the platform.
 
 Players must respect other competitors, judges, league staff, and the integrity of the substrate. Specifically:
 
@@ -487,6 +582,8 @@ Players must respect other competitors, judges, league staff, and the integrity 
 Violations are addressed through the penalty structure detailed in the full rulebook, ranging from warnings through point deductions through round forfeit through event ban through season ban through permanent league ban, calibrated to severity.
 
 ## 9. Format Evolution
+
+> **Status: DESIGNED** — policy.
 
 The league reserves the right to evolve the format between seasons, including:
 
@@ -503,6 +600,8 @@ The format's core mechanics — 24-minute build, single-player solo competition,
 
 ## 10. What the Format Measures
 
+> **Status: DESIGNED** — positioning.
+
 The format rests on two principles:
 
 1. **Substrate equality** — every player has the same tools, model, and resources.
@@ -510,14 +609,14 @@ The format rests on two principles:
 
 The format does not legislate *how* a player uses AI. Chat, agentic integration, command-line, tool chains — any interface is fine, provided every call flows through the league's API and stays within budget (§5.3). It cares only that the substrate is equal and that submissions are measured by objective adversarial testing. Resilience is what the fuzz catalog measures; communication (pitch and cross-examination) is scored separately and combined for Best Overall (§4). Slop loses to fuzz regardless of who or what produced it.
 
-The chat-window interface matches the economically-dominant AI-coding practice among the format's target population. Third-party agentic IDE tooling (Cursor, Claude Code, Cline) requires either paid subscriptions or student-verification with friction that filters most undergraduate users; the chat-window workflow remains the only fully-free option for most CS students, which is why the chat window is the foundational substrate interface and the in-IDE agent interface ships later (Stage 12). When the agent interface lands, both interfaces are available to every Tier A/B player simultaneously with a unified token budget, so the format remains accessible to chat-first players while accommodating agent-fluent players without forcing either group into the other's mode.
+The chat-window interface matches the economically-dominant AI-coding practice among the format's target population. Third-party agentic IDE tooling (Cursor, Claude Code, Cline) requires either paid subscriptions or student-verification with friction that filters most undergraduate users; the chat-window workflow remains the only fully-free option for most CS students, which is why the chat window is the foundational substrate interface and the in-IDE agent interface ships later (Stage 12). *(The supporting "~70-85% of CS undergrads primarily use chat" figure in IDEAS_FOR_LATER.md is **ASSUMED** — no survey or source is named. The pricing claims beneath it are checkable; the usage share is not.)* When the agent interface lands, both interfaces are available to every Tier A/B player simultaneously with a unified token budget, so the format remains accessible to chat-first players while accommodating agent-fluent players without forcing either group into the other's mode.
 
 In practice, succeeding under those principles exercises a specific cluster of AI-complementary capabilities:
 
 - **Engineering judgment**: knowing what needs defensive attention without being told
 - **AI direction**: effectively prompting an AI substrate to produce robust work
 - **Verification reflex**: catching AI errors, hallucinations, and weaknesses before they ship
-- **Resource calibration**: allocating limited tokens and fuzz budget strategically
+- **Resource calibration**: allocating limited tokens and fuzz budget strategically. *(Listed as an exercised capability, not a credentialed one — §5.5 withdraws the claim that the budget is tight enough to force genuine triage, pending on-substrate data.)*
 - **Technical communication**: explaining decisions clearly under time pressure
 - **Defense under questioning**: responding substantively to judge cross-examination
 
@@ -534,6 +633,8 @@ The format does not measure:
 The published methodology is comprehensive about what the format claims to measure and explicit about what it does not.
 
 ## 11. The League's Position
+
+> **Status: DESIGNED**, with **cited external figures**. The Harness / HBR / MIT NANDA statistics are sourced and dated and carry a fact-check caveat in IDEAS_FOR_LATER.md; they are not league measurements and are left as-is.
 
 HackLet League exists to provide structured competitive infrastructure for a community that already cares about AI-assisted technical building. The format treats players as engineering adults responsible for their own decisions. It evaluates submissions through narrow precise measurement rather than broad subjective assessment. It publishes its methodology in full, including its limitations.
 

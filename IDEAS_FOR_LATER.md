@@ -1,5 +1,12 @@
 # Ideas for Later
 
+> **Status: DESIGNED throughout, by construction** — this is the parking lot, and entries carry
+> their own deferral markers, which is the right convention. Two caveats from the 2026-07-28
+> audit: the Season 1 substrate selection under "Substrate & Catalog" **contradicts format_spec
+> §5.4** on Java, C#, PHP, Rust and Ruby (DOC_STATE C-09), and the nontech-judge entry records a
+> decision that is now *locked and landed*, so it is no longer waiting its turn. External market
+> figures here are cited and dated; the "~70-85% of CS undergrads" share is not.
+
 *The parking lot for good ideas that are out of scope for the current stage. Per [BUILD_ROADMAP.md](BUILD_ROADMAP.md) Rule 2: when the urge to build something outside current-stage scope appears, add it here instead of building it. This file is where good ideas wait their turn.*
 
 For each entry: **what** the idea is, **why** it's deferred, **context** to preserve.

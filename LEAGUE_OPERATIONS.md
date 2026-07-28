@@ -2,9 +2,18 @@
 
 *How the league operates as an institution. Distinct from format_spec.md (what the competition is) and claude.md (how the platform is built). This document covers federation, governance, chapters, roles, and the verification system.*
 
+> **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
+> (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
+> **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
+> additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
+> against other documents. The full audit — including every known cross-document
+> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+
 ---
 
 ## 1. The League as a Federated Platform
+
+> **Status: DESIGNED** as an institution; the *platform* substrate for it is BUILT (chapters are first-class entities). One chapter exists.
 
 HackLet League is structured as a federated platform that aggregates competitive events run by chapters under shared league standards. The league itself maintains methodology, infrastructure, fuzz catalog, and rankings. Chapters operate their own events using league-supplied substrate and standards. Growth happens through chapter creation and verification, not through league-direct event expansion.
 
@@ -17,6 +26,8 @@ The structural precedent for the whole enterprise is the **Financial Modeling Wo
 The league is built as a platform from day one, even though early operations may involve only one or two chapters. The federated architecture is foundation for expansion — chapters as first-class entities exist in the data model and platform UI from the start, ready to accommodate growth without architectural refactoring.
 
 ## 2. What the League Provides vs. What Chapters Provide
+
+> **Status: DESIGNED** — the division of responsibility is policy. Of the league-side list, only the platform itself exists.
 
 ### League Responsibilities
 
@@ -51,6 +62,8 @@ The league does not manage chapter infrastructure directly. The platform does no
 This boundary clarifies what the platform actually is: event coordination and credentialing infrastructure, not a workstation management system.
 
 ## 3. Chapter Lifecycle and Modes
+
+> **Status: MIXED** — `Chapter.mode` is BUILT (`backend/chapters/models.py:22`); the per-mode behaviour described below is not implemented.
 
 Chapters exist in one of three operational modes:
 
@@ -92,9 +105,11 @@ Chapter owners control mode transitions. The platform may auto-suggest archive m
 
 ## 4. Chapter Tiers and Verification
 
+> **Status: MIXED** — `Chapter.tier` and `verification_status` are BUILT and gate the global leaderboard (`backend/rankings/services.py:116-123`). The verification *process* is DESIGNED (Stage 9); approval is manual through Django admin.
+
 Chapters are tiered based on their operational rigor. The tier system is a **mechanic-availability gradient**, not just an integrity gradient: each tier credentials what its infrastructure can actually enforce, and operates the format mechanics its infrastructure can actually support. Higher tiers don't "improve" lower tiers; they *enable additional credentialing claims* that depend on additional infrastructure.
 
-The tiers exist because the format's integrity properties hang together with infrastructure dependencies. Token budget enforcement requires firewall isolation plus league-hosted AI substrate (Tier A). Substrate equality as a credentialing claim requires controlled AI access (Tier A). Resource calibration as a measurable skill requires enforceable token usage measurement (Tier A). At lower tiers, these mechanics adjust honestly rather than claiming enforcement that doesn't exist.
+The tiers exist because the format's integrity properties hang together with infrastructure dependencies. Token budget enforcement requires firewall isolation plus league-hosted AI substrate (Tier A). Substrate equality as a credentialing claim requires controlled AI access (Tier A). Resource *measurement* requires enforceable token usage measurement (Tier A) — note that measurement is all this buys: resource calibration as a *credentialed skill* is a claim the league has withdrawn pending data (see "Token Budget's Two Functions" below, and format_spec.md §5.5). At lower tiers, these mechanics adjust honestly rather than claiming enforcement that doesn't exist.
 
 The format's load-bearing integrity mechanism — the fuzz catalog — operates at **full strength at every tier**. The fuzz catalog evaluates submissions identically regardless of how they were produced; slop loses to fuzz regardless of who or what produced it. This is what makes lower-tier events produce real format-validation signal even without credentialing-grade enforcement.
 
@@ -171,6 +186,8 @@ Verification may be revoked or events sanctioned if standards slip — see §11 
 
 ## 5. Role Hierarchy
 
+> **Status: MIXED** — superadmin, owner, organizer, judge and player are BUILT across `ChapterStaff.roles` and `EventParticipant.role`. Judge subroles ship three values, not the four named below.
+
 The platform supports six distinct role levels, with permissions cascading appropriately:
 
 ### Superadmin
@@ -229,6 +246,8 @@ No login required. Access includes:
 
 ## 6. User Account Model
 
+> **Status: BUILT** — one global account, per-chapter scoping, cross-chapter roles all work as described.
+
 Users have one global account on hackletleague.com. From a single account, a user can:
 
 - Apply for membership in any chapter
@@ -242,6 +261,8 @@ The platform supports federation from day one by treating chapters as first-clas
 
 ## 7. Centralized AI Substrate
 
+> **Status: DESIGNED** — no OpenRouter integration exists. None of the cost controls below are implemented.
+
 The league supplies a single OpenRouter integration that all chapters use. This is centralized rather than chapter-supplied because:
 
 - Substrate equality is foundational to format measurement validity
@@ -252,7 +273,7 @@ The league supplies a single OpenRouter integration that all chapters use. This 
 
 Cost controls are enforced through:
 
-- Per-player token budgets (100,000 per round, server-enforced)
+- Per-player token budgets (100,000 per round, server-enforced) — **ASSUMED** figure, and *not currently enforced anywhere*: no proxy exists (format_spec.md §5.5)
 - Per-event bounded total based on player count
 - Per-chapter monthly limits with anomaly detection
 - Emergency shutoff for usage anomalies
@@ -260,6 +281,8 @@ Cost controls are enforced through:
 The OpenRouter API key is stored encrypted server-side and never exposed to clients. All AI calls flow through the league's backend proxy.
 
 ## 8. Permissionless Chapter Creation with Gated Verification
+
+> **Status: MIXED** — creation and light review are BUILT; the tier-A verification path is DESIGNED.
 
 Anyone with a platform account can create a chapter. Chapter creation includes:
 
@@ -275,6 +298,8 @@ The brand is protected through review at all tiers (even tier C requires basic l
 
 ## 9. The Platform as Foundation for Expansion
 
+> **Status: BUILT** — the federated data model genuinely does support this today.
+
 At MVP launch, the league may operate with only one or two chapters. The platform's federated architecture is foundation for expansion rather than current operational necessity. The chapter directory may have one entry at launch; the cross-chapter ranking math may operate on one chapter's data; the verification system may have one verified chapter.
 
 This is appropriate. The architecture supports the institutional scale hacklet aspires to without requiring that scale to exist today. As chapters are added over months and years, the platform accommodates them without architectural changes. New chapter equals new data, not new code.
@@ -282,6 +307,8 @@ This is appropriate. The architecture supports the institutional scale hacklet a
 The institutional design from day one signals to anyone evaluating hacklet (chapter creators, judges, players, sponsors, employers) that this is a platform built for scale, not a single university's project that might someday become institutional.
 
 ## 10. Governance Evolution
+
+> **Status: DESIGNED** — policy.
 
 Early stage: superadmin (league founder) makes all platform decisions, approves all chapters, sets all standards.
 
@@ -292,6 +319,8 @@ Mature stage: formal governance structure with elected representation from verif
 The governance evolution is intentional but unhurried. Premature formalization adds bureaucracy without value. Governance matures as the league grows and as decisions affecting many chapters become more frequent.
 
 ## 11. Sanctions and Integrity Enforcement
+
+> **Status: DESIGNED** — no sanction, downgrade or voiding mechanism exists on the platform.
 
 Integrity violations are handled with sanctions calibrated to what actually failed. The league operates two distinct sanction tracks because chapter-level integrity failure and player-level integrity failure are different problems requiring different responses.
 
@@ -352,6 +381,8 @@ Chapters and players subject to sanctions have a right to appeal:
 Appeals must be filed within 14 days of sanction notice. Decisions are typically issued within 30 days of appeal filing.
 
 ## 12. Operational Integrity: Dogfooding the Catalog
+
+> **Status: DESIGNED** — an intention, not a practice: the catalog has never been run against league infrastructure, and no such gate exists in CI.
 
 The league runs the fuzz catalog against league infrastructure (hackletleague.com platform code, league-hosted AI substrate, fuzz runner itself) before every public release. The same probes that evaluate player submissions evaluate the league's own production code.
 

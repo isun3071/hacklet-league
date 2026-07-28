@@ -2,9 +2,18 @@
 
 *Operational template for HackLet Tier A events. For tier philosophy and verification, see LEAGUE_OPERATIONS.md §4. For format mechanics and scoring, see format_spec.md. For Tier B and Tier C operational profiles, see TIER_B_OPERATIONS.md and TIER_C_OPERATIONS.md.*
 
+> **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
+> (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
+> **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
+> additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
+> against other documents. The full audit — including every known cross-document
+> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+
 ---
 
 ## 1. Tier A Identity
+
+> **Status: DESIGNED** — no Tier A chapter exists; first verification is Year 3+ territory (§14).
 
 Tier A is the **credentialing-grade tier** of HackLet operations. Tier A chapters have demonstrated infrastructure that makes faking results structurally hard, which is what makes their wins reliable credentials in the labor market. Tier A is also the **integrity-maximizing end** of the freedom-integrity tradeoff (LEAGUE_OPERATIONS.md §4): Tier A trades player workflow freedom for structural equality, anti-cheating enforcement, reproducible measurement, and market-meaningful credentials.
 
@@ -13,6 +22,8 @@ Tier A events contribute to **global league rankings**. Wins propagate through t
 Tier A is where HackLet operates as a **distinct competitive institution** comparable to FIDE chess or FMWC financial modeling — independent of hackathon ecosystem framing, with its own credentialing claims, its own broadcast production, its own esports identity.
 
 ## 2. Infrastructure Requirements
+
+> **Status: DESIGNED** — none of this is built. The SCP capture at the freeze boundary is Stage 7 (BUILD_ROADMAP), not current behaviour.
 
 Tier A chapters must demonstrate the following infrastructure to qualify for verification:
 
@@ -58,9 +69,11 @@ Tier A chapters must demonstrate the following infrastructure to qualify for ver
 
 ## 3. AI Substrate at Tier A
 
+> **Status: DESIGNED** — no proxy exists, so nothing below is enforced today.
+
 The league hosts AI substrate at Tier A through the unified-substrate model (see format_spec.md §5.3):
 
-**Chat-window interface**: browser tab from each workstation to hackletleague.com chat window. The interface speaks the league's OpenAI-compatible chat completions endpoint (`/api/v1/chat/completions`). Players access this throughout the build phase and during pitch preparation (with reduced functionality at freeze — see §5).
+**Chat-window interface**: browser tab from each workstation to hackletleague.com chat window. The interface speaks the league's OpenAI-compatible chat completions endpoint (`/api/v1/chat/completions`). Players access this throughout the build phase and during pitch preparation (with reduced functionality at freeze — see §4). *(Access during pitch preparation is **contested**: the §5.5 gate cuts substrate access at build end. See the OPEN note in format_spec.md §5.5. The prior cross-reference here pointed at §5, which is the submission mechanism and says nothing about AI.)*
 
 **In-IDE agent interface** (when deployed, Stage 12+): league-built signed VSCodium extension locked to hackletleague.com. Provides chat sidebar plus accept/reject UI for agent-proposed file changes, modeled on Cline/Roo Code patterns. Talks to the same OpenAI-compatible endpoint with shared per-player token budget.
 
@@ -70,11 +83,19 @@ The league hosts AI substrate at Tier A through the unified-substrate model (see
 
 **Audit logging**: every AI call is logged at the proxy with player attribution, timestamp, token counts, and prompt content (for post-event review and dispute resolution). The audit trail is part of the credentialing integrity infrastructure — disputes about budget consumption or substrate behavior can be resolved through audit log review.
 
-**Token budgets enforced**: per-player token budget per round (default 100k for Sprint timer, scales with timer per format_spec.md §1). Per-prompt cap of 25k tokens. Both enforced server-side at the proxy. Players who exhaust budget have no AI access remaining for the round; this is part of the resource calibration credentialing claim.
+**Token budgets enforced**: per-player token budget per round (default 100k for Sprint timer, scales with timer per format_spec.md §1). Per-prompt cap of 25k tokens. Both enforced server-side at the proxy. Players who exhaust budget have no AI access remaining for the round.
+
+The budget is **cost control first and an efficiency signal second** — a ceiling that stops a runaway loop from burning a chapter's month in one round, not a number calibrated to bind on a normal round and force triage (format_spec.md §5.5, LEAGUE_OPERATIONS.md §4). Earlier drafts of this section framed budget exhaustion as *"part of the resource calibration credentialing claim."* That claim is withdrawn until on-substrate data supports it. The **25k per-prompt cap is known to be non-functional for agentic use** — a single agentic step already carries more than that in resident context (format_spec.md §5.5). Both figures stand unchanged pending measurement; neither is currently enforced anywhere, because no proxy exists.
 
 ## 4. Round Timing — Tier A Standard Profile (135 Minutes)
 
+> **Status: BUILT (the clock)** — `backend/rounds/services.py:15-25` matches this profile exactly, the only tier timing block that verifies clean. The phase *contents* described below are DESIGNED. Timestamps are ILLUSTRATIVE (see below).
+
 The Tier A round profile is the format's full operational expression with production rhythm preserved:
+
+> **ILLUSTRATIVE** — a suggested itinerary, not a normative schedule. The durations are the
+> design commitment; the absolute timestamps are a worked example at a hypothetical on-time
+> start. Enforced rules key off round *state*, never the wall clock (format_spec.md §3).
 
 ```
 T+0:00   → T+5:00    (5 min)  — Opening ceremony with broadcast intro
@@ -100,9 +121,9 @@ At T+29:00, code freeze takes effect simultaneously. The network cuts for code c
 
 *Code submission and central fuzzing*: at freeze each workstation copies its final code state to league infrastructure via SCP. League infrastructure deploys each submission in an ephemeral container with assigned port, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; local fuzz during build was intelligence-gathering only.
 
-*Judges evaluate submissions*: judges interact with each submission live in their portals while the fuzz runner completes work. The panel includes four permanent specialized roles (tester judge with override capability, UI/UX/HCI judge, general engineering judge, and nontech stakeholder judge). With 18 minutes for 8 submissions across 4 judges, each judge has ~9 minutes per submission for substantive evaluation. Fuzz runner output gives quick technical baseline; clickaround surfaces what automation can't measure.
+*Judges evaluate submissions*: judges interact with each submission live in their portals while the fuzz runner completes work. The panel includes four permanent specialized roles (tester judge with override capability, UI/UX/HCI judge, general engineering judge, and nontech stakeholder judge). Because the four roles are permanent and specialized, **every judge scores every player** — the panel does not divide the field. Each judge therefore covers all 8 submissions within the 18-minute window: **about 2.25 minutes per submission**. Fuzz runner output gives quick technical baseline; clickaround surfaces what automation can't measure. *(This figure previously read "~9 minutes per submission," which is 18 × 4 ÷ 8 — the number obtained by treating the four judges as splitting the field two submissions apiece, which the permanent-role structure forbids. The phase duration is unchanged.)*
 
-*Players prepare pitches*: code files become read-only at freeze; players retain access to submitted code, README, and the chat-window AI interface for pitch preparation. Agent-interface edit capabilities are disabled at freeze; chat-window AI assistance remains for pitch planning and anticipating cross-examination. Players who tokenmaxxed during build have no AI assistance for prep. This is the strategic tradeoff. Players also author **PITCH.md** as part of pitch preparation, though at Tier A the live pitch + cross-ex is the primary credentialing dimension (see §8).
+*Players prepare pitches*: code files become read-only at freeze; players retain access to submitted code, README, and the chat-window AI interface for pitch preparation. Agent-interface edit capabilities are disabled at freeze; chat-window AI assistance remains for pitch planning and anticipating cross-examination. Players who tokenmaxxed during build have no AI assistance for prep. This is the strategic tradeoff. *(**Contested** — this paragraph and §4's freeze paragraph above disagree: that one cuts the proxy from the buzzer forward, this one keeps chat available afterward. The buzzer-enforcement commit rewrote the freeze paragraph and left this one untouched. See the OPEN note in format_spec.md §5.5.)* Players also author **PITCH.md** as part of pitch preparation, though at Tier A the live pitch + cross-ex is the primary credentialing dimension (see §8).
 
 **Pitch + cross-examination (28 min for 8 players)**: each player presents in sequence:
 - 60 seconds of pitch — what they built, key choices, what makes their submission distinctive
@@ -133,6 +154,8 @@ Concurrent with judge deliberation, **audience votes** for People's Hacklet thro
 
 ## 5. Submission Mechanism
 
+> **Status: DESIGNED** — **not current behaviour.** The platform ships one portal zip-upload path with no tier branch (`backend/rounds/views.py:212-253`); SCP capture is Stage 7 (BUILD_ROADMAP.md Stage 7). Every present-tense sentence in this section describes future work.
+
 **SCP from workstation at code freeze**. At Tier A, each workstation runs a league daemon that copies the player's working directory via SCP to league infrastructure at `/opt/hacklet/submissions/$EVENT_ID/$ROUND_ID/$USER/` at T+29:00 simultaneously across all workstations.
 
 The submission daemon runs as a **service account** with pre-configured SCP credentials targeting the central path. The player's ephemeral Unix account is just the source filesystem to copy *from*. The player's account doesn't accumulate git credentials, doesn't maintain long-lived repository state, and is deleted via `userdel -r` at Zamboni Period.
@@ -144,6 +167,8 @@ The submission daemon runs as a **service account** with pre-configured SCP cred
 This differs from Tier C portal upload + grace period (see TIER_C_OPERATIONS.md §6) because Tier A's controlled workstations enable automatic capture; Tier C's BYOD substrate requires player-initiated upload with grace allowance for network latency.
 
 ## 6. Broadcast Architecture
+
+> **Status: DESIGNED** — Stage 6.
 
 Tier A is the **only tier with live broadcast production**. The broadcast infrastructure requires controlled workstations that can be screen-shared without compromising player privacy — a constraint that BYOD substrates (Tier C) preclude entirely and that Tier B's optional workstation hosting doesn't necessarily provide.
 
@@ -188,6 +213,8 @@ Players who don't consent to broadcast can't participate in Tier A events. This 
 
 ## 7. Fuzz Catalog Evaluation
 
+> **Status: DESIGNED** — the runner exists as a standalone project but is not integrated with the platform; no FuzzTest/FuzzResult tables exist.
+
 The fuzz catalog operates at **full strength** at Tier A (and at every tier — the catalog is tier-agnostic per LEAGUE_OPERATIONS.md §4). The Tier A operational difference is that submission infrastructure enables more thorough catalog execution because submissions arrive in known-format from controlled workstations.
 
 **Catalog scope**: both public and hidden pools execute against each Tier A submission. The hidden pool provides additional adversarial signal that players didn't have access to during build. Hidden pool composition evolves through catalog development discipline (see FUZZ_RUNNER_SPEC.md).
@@ -197,6 +224,8 @@ The fuzz catalog operates at **full strength** at Tier A (and at every tier — 
 **Catalog evolution**: post-event AI agent analysis runs against published Tier A submissions identifying novel vulnerability patterns. Findings curated by league catalog maintainers into new permanent catalog probes. Catalog matures through Tier A operational data feedback (see IDEAS_FOR_LATER.md on AI pentest agent for catalog development).
 
 ## 8. Scoring and Categorical Awards
+
+> **Status: MIXED** — three awards are BUILT (`backend/rounds/scoring.py:132-137`). People's Hacklet and Most Efficient are not, and Most Efficient's presence here contradicts format_spec §4.4 (DOC_STATE C-06). 'Best Fuzz Rank' below is stale for 'Best Slop Rank'.
 
 Per format_spec.md §4, Tier A operates the full scoring framework:
 
@@ -221,6 +250,8 @@ See §10 for multi-day tournament structure.
 
 ## 9. Live Judging Protocol
 
+> **Status: DESIGNED** — the four-role panel is the locked decision (JUDGE_PANEL_RECONCILIATION_PATCH.md) but is unimplemented: `judge_specialization` ships three values, not four, and scoring never reads it.
+
 Tier A uses **human judge corps** with calibrated panel roles. LLM judging is not used at Tier A because the live performance dimension (pitch + cross-ex) requires human evaluators capable of real-time question generation, body-language reading, follow-up probing.
 
 **Judge panel composition (four permanent roles):**
@@ -235,13 +266,33 @@ Four judges, four rubrics, weighted 30/20/20/30 into the 0-100 Communication axi
 
 **Cross-examination structure**: each judge limited to one substantive question per player during the 120-sec cross-ex window. Four judges produce four questions. Players manage answer length strategically — verbose answers cost remaining question slots. Cross-examination tests defense under live pressure, which is the dimension human judging captures that LLM judging cannot.
 
+> **Clock: SETTLED. Mechanism: OPEN.** The *timing* — 60s pitch + 120s cross-ex — is settled;
+> both candidate models use it, so JUDGE_PANEL_RECONCILIATION_PATCH.md's instruction not to
+> overwrite the timing has been satisfied by leaving it alone, and it can now be treated as
+> fixed. What remains unresolved is the **anti-filibuster mechanism**, and the two candidates
+> are different rubrics, not different clocks:
+>
+> - **Ration the judges' questions** (this paragraph): one substantive question each; a verbose
+>   answer consumes a later judge's slot. Makes the player liable for the panel's clock
+>   management.
+> - **Score the player's concision** (NONTECH_JUDGE_NOTES.md §8): no rationing; the rubric
+>   scores "did the player answer what was asked and yield the floor, or filibuster / dodge /
+>   over-explain." A rational player then answers tight, so the panel gets *more* questions in.
+>
+> Picking one changes what the rubrics measure. **Not decided here.**
+
 ## 10. Multi-Day Tournament Template
+
+> **Status: DESIGNED** — Stage 8. Duplicates IDEAS_FOR_LATER.md's entry nearly verbatim; the two will drift.
 
 Tier A regional and championship events use multi-day tournament structure (per IDEAS_FOR_LATER.md "Multi-day Tier A tournament template"). The full template:
 
 ### Qualifying Days (Days 1-2)
 
 12 rounds across 2 days × 2 concurrent pods. Schedule per day:
+
+> **ILLUSTRATIVE** — a suggested itinerary. Multi-day blocks absorb the most delay of any
+> profile in these documents.
 
 ```
 9:00-9:25   — Opening / recap ceremony
@@ -263,6 +314,9 @@ End of Day 2 (~19:00): qualifier announcement, snake-draft pod assignment for Da
 ### Day 3 Championship Structure
 
 Top 16 qualifiers advance to Day 3. Ranks 17-24 designated as alternates.
+
+> **ILLUSTRATIVE** — a suggested itinerary. The alternate-activation cutoff (9:15 AM) is the
+> one hard time in this block, because it gates who competes.
 
 ```
 9:00-9:25   — Opening / finals ceremony
@@ -338,6 +392,8 @@ Multi-day tournament demands a corps of 6-8 senior judges with rotation across p
 
 ## 11. Anti-Cheating Enforcement
 
+> **Status: DESIGNED** — every layer listed depends on Stage 7 workstation hardening.
+
 Tier A integrity infrastructure makes cheating **structurally hard**:
 
 **Workstation isolation**: firewall allowlist prevents external AI access. The only AI substrate available is the league-hosted endpoint. Players cannot use Cursor, GitHub Copilot, ChatGPT, or any external AI from workstations.
@@ -356,6 +412,8 @@ These layers compose. Defeating one isn't sufficient; cheating would require def
 
 ## 12. Credentialing Claims
 
+> **Status: DESIGNED** — claims about a tier that has never run.
+
 Tier A wins carry **substantial market signal**:
 
 - **Global league ranking contribution**: Tier A wins propagate through federated platform to global rankings
@@ -371,6 +429,8 @@ Tier A wins carry **substantial market signal**:
 
 ## 13. Chapter Variant Portfolio
 
+> **Status: DESIGNED**.
+
 Tier A chapters' variant scope is determined by their verification application. Specialization is **common but not required**: chapters often concentrate Tier A verification on one variant or related variant family for operational efficiency. Chapters with substantial operational capacity may apply for verification across multiple variants over time.
 
 The 1-event-1-format rule (per format_spec.md §7.1) means each event commits to one variant. Chapters host many events across varied formats over their lifetime. Cross-chapter coordination produces cross-format championships.
@@ -378,6 +438,8 @@ The 1-event-1-format rule (per format_spec.md §7.1) means each event commits to
 Initial Tier A chapters pick variants matching community demand (BU community probably wants Vibe Sprint based on cyber/AI club's existing comfort with chat-window AI workflows). Chapters expand verification as infrastructure and operational experience grow.
 
 ## 14. Strategic Timing
+
+> **Status: DESIGNED** — planning; consistent with BUILD_ROADMAP's Stage-Tier mapping.
 
 First Tier A chapter verification is **Year 3+ territory** in the league's strategic sequencing (see TIER_C_OPERATIONS.md §14). Tier A infrastructure investment is justified only after Tier C MVR operations have demonstrated sustained operational viability across multiple chapters over 1-3 years.
 

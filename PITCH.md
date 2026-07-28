@@ -1,3 +1,11 @@
+> **Status: DESIGNED throughout — pitch copy, written to sell a format that does not yet run.**
+> Last substantively revised 2026-06-23, so it predates the four substrate decisions of
+> 2026-07-28 entirely. Specifically unbuilt as described: the server-enforced 100k token cap
+> (an ASSUMED figure, and no proxy exists), SCP auto-capture from workstations, ephemeral
+> container deployment, and the LLM judging panel. The Tier C MVR *timing* in Pitch 3 does
+> match the shipped clock. Nothing here should be read as a description of current
+> capability; check claims against [DOC_STATE.md](DOC_STATE.md) before public use.
+
 Pitch 1: Tier A Spectator Audience
 
 okay so let's talk about competitive engineering as a thing you watch.

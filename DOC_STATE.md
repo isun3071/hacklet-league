@@ -613,3 +613,36 @@ BUILD_ROADMAP:162 ChapterMembership → ChapterStaff; BUILD_ROADMAP:207/231 git 
 
 **Not Phase 2** — these need a call and are carried to Phase 3: C-01, C-06, C-07, C-08,
 C-09, C-11, C-12, C-14, C-15, C-16, C-17, C-18, C-19, C-20.
+
+---
+
+## Phase 2 — applied 2026-07-28
+
+Mechanical only. No contradiction was resolved by choosing a side.
+
+- **Terminology.** *Build end* (build time is up) and *round end* (round is over) are now
+  distinct terms, defined canonically in format_spec §5.5. The gate condition and the 403
+  response body were corrected in format_spec, ARCHITECTURE, BUILD_ROADMAP and CHANGELOG.
+- **C-07 reconciled to one question.** The two self-contradictions (TIER_A, ARCHITECTURE) were
+  vocabulary plus one real policy question. The vocabulary is fixed; the policy question is
+  stated once as an OPEN note in format_spec §5.5, and all six affected passages are marked
+  CONTESTED and point at it. Not decided.
+- **ILLUSTRATIVE.** Applied to all eight timing blocks across TIER_A (3), TIER_B (1), TIER_C
+  (2), ARCHITECTURE (1), with the canonical definition in format_spec §3.
+- **Arithmetic.** TIER_A §4: ~9 min → **~2.25 min** per submission per judge. Phase duration
+  unchanged.
+- **Status markers.** 112 section markers across the seven structural docs; whole-document
+  status notes on the six others; a reading legend on each.
+- **Propagation.** Token-budget reframe → TIER_A §3, LEAGUE_OPS §4, format_spec §10. DNF ≠ zero
+  → TIER_C §6. Deduction-only → format_spec §6 (marked SUPERSEDED, not rewritten — the rewrite
+  contains a decision). Stale names/paths → BUILD_ROADMAP Stages 1–3.
+- **Citations.** Untraceable figures marked ASSUMED in place: 100k tokens, 50 fuzz points, the
+  timer→budget ladder, LLM judging cost and latency, the 5s/3s speed thresholds, the wrapper
+  and YC percentages, the CS-undergrad chat share. The 7.2M measurement is marked MEASURED with
+  an outstanding run identification. **No v11 corpus value was written into any doc.**
+- **C-11.** Clock marked SETTLED (60s + 120s); mechanism marked OPEN with both candidates
+  stated. TIER_B's 90-second window marked UNCORROBORATED.
+
+**Deliberately not touched:** C-02 and C-20 (code, handed to the platform session — marked in
+DATA_MODEL and TIER_C but not fixed); `frontend/`, `backend/`, `fuzz-runner/`,
+`FUZZ_RUNNER_SPEC.md`.

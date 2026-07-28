@@ -2,9 +2,18 @@
 
 *Service relationships, request flows, deployment topology, and integration points for hackletleague.com.*
 
+> **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
+> (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
+> **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
+> additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
+> against other documents. The full audit — including every known cross-document
+> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+
 ---
 
 ## Services
+
+> **Status: MIXED** — **three services run, not four.** Django, Next.js and PostgreSQL are BUILT. Redis/Channels is DESIGNED: there is no Channels dependency and `backend/hacklet/asgi.py:6` is plain Django ASGI. The frontend polls every 5s (`frontend/components/RoundLive.tsx:103`).
 
 The platform runs four primary services in production:
 
@@ -25,6 +34,8 @@ External services the platform integrates with:
 
 ### Authentication Flow
 
+> **Status: BUILT** — allauth headless, server-side sessions, no JWT. Accurate as written.
+
 1. User visits `/login` on Next.js frontend
 2. User submits credentials to Django backend `/api/auth/login`
 3. Django validates via django-allauth
@@ -38,6 +49,8 @@ Sessions are server-authoritative. JWTs are not used.
 
 ### Public Page Flow
 
+> **Status: BUILT** — SSR via the internal API.
+
 1. User visits `/` (or `/about`, `/methodology`, `/leaderboards`, `/chapters/[slug]`)
 2. Next.js renders with server-side rendering (SSR)
 3. SSR fetches data from Django REST API on the server
@@ -48,16 +61,18 @@ Public pages are SEO-friendly through SSR. Cache-control headers allow CDN cachi
 
 ### Player AI Chat Flow (during active event)
 
+> **Status: DESIGNED** — **no endpoint in this flow exists.** No `/api/ai/chat`, no `/api/v1/chat/completions`, no `backend/ai_proxy/` app, no OpenRouter integration, no streaming transport. Stage 4.
+
 1. Player at workstation browser is on `/play/event-[id]` (authenticated as player, enrolled in active event)
 2. Player types prompt into chat interface
 3. Frontend posts to `/api/ai/chat` with prompt
-4. Django validates: user is player in this round, round is in build OR evaluation phase (chat retained during prep, files become read-only), budget not exhausted
+4. Django validates: user is player in this round, round is in build OR evaluation phase (chat retained during prep, files become read-only), budget not exhausted — *the "OR evaluation" clause is **contested**; step 10's gate cuts at build end. See the OPEN note in format_spec.md §5.5*
 5. Django retrieves player's running token total for this round
 6. Django constructs OpenRouter request with the season's model
 7. Django streams response from OpenRouter
 8. Django streams tokens back to frontend via WebSocket or SSE
 9. Django updates token total incrementally as tokens stream
-10. If the budget is exhausted or the round has ended mid-response, Django cuts the in-flight stream and refuses further requests with 403 (format_spec.md §5.5) — one gate, two conditions, no rollback
+10. If the budget is exhausted or build time is up mid-response, Django cuts the in-flight stream and refuses further requests with 403 (format_spec.md §5.5) — one gate, two conditions, no rollback. Build end, not round end; the two are ~100 min apart
 11. Frontend displays streamed response in chat UI
 12. Frontend never sees the OpenRouter API key
 
@@ -66,6 +81,8 @@ The OpenRouter API key is stored encrypted server-side (environment variable or 
 The proxy is also exposed as an **OpenAI-compatible chat completions endpoint** (`/api/v1/chat/completions`), alongside the simple `/api/ai/chat` the portal uses. Any OpenAI-protocol client — the chat-window interface today, an in-IDE agent interface later, CLI tools — targets it with the same session auth, budget enforcement, and audit logging. Compatibility is surface-only: Django pins the season's model, enforces token/fuzz budgets and rate limits server-side, and logs every call; clients cannot choose the model or exceed budget. This decouples the substrate from any specific client choice without changing the API contract.
 
 ### Fuzz Trigger Flow (during build phase, local runner)
+
+> **Status: DESIGNED** — no fuzz trigger endpoint, no budget accounting, no local runner. Stage 5/7.
 
 1. Player clicks a fuzz category trigger button in the league portal
 2. Frontend posts to `/api/fuzz/trigger` with category and submission context
@@ -81,6 +98,8 @@ The local fuzz runner contains the public test pool only. The hidden pool exists
 
 ### Code Submission and Authoritative Fuzz Flow (at code freeze)
 
+> **Status: DESIGNED except step 3's Tier C branch** — portal upload is BUILT (`backend/rounds/views.py:212-253`) and is currently the *only* path for every tier. SCP, container deploy, port assignment, FuzzResult records and the git-org mirror are all unbuilt.
+
 1. T+29:00 (round-relative) arrives; Django signals all active player rounds via WebSocket
 2. Django updates round status to evaluation; agent-interface edit capabilities are revoked (for sessions where the agent was in use, no file modifications via the agent post-freeze); files in the player's home directory become read-only via filesystem permission flip
 3. The submission reaches league infrastructure at `/opt/hacklet/submissions/$EVENT_ID/$ROUND_ID/$USER/` (service-account path on the league server, not a personal home directory). **Tier A/B:** a league daemon on the locked workstation copies the player's working directory there automatically via SCP. **Tier C (BYOD):** the player uploads to the league portal within a short grace period after freeze. Steps 4–9 are identical regardless of how the code arrived
@@ -93,9 +112,11 @@ The local fuzz runner contains the public test pool only. The hidden pool exists
 
 At Tier A/B, SCP-based capture (rather than git push from the workstation) reflects the per-player account lifecycle on workstations. The player's ephemeral, non-sudo Unix account doesn't accumulate git credentials, doesn't maintain long-lived repository state, and is deleted via `userdel -r` at the Zamboni Period. The submission daemon runs as a service account with pre-configured SCP credentials targeting the central path; the player's account is just the source filesystem to copy *from*. The chapter's firewall must allow workstation outbound SCP to the league submission endpoint. At Tier C there is no league-controlled workstation, so the player uploads to the league portal themselves within the grace period; the downstream deploy → container → fuzz → score pipeline is unchanged.
 
-The AI chat interface remains available during pitch preparation even after files become read-only — players who saved budget can use AI for pitch prep; players who tokenmaxxed get no prep assistance. This is consistent with the no-coddling design principle.
+The AI chat interface remains available during pitch preparation even after files become read-only — players who saved budget can use AI for pitch prep; players who tokenmaxxed get no prep assistance. This is consistent with the no-coddling design principle. *(**Contested** — this contradicts the chat flow's step 10 above, which cuts substrate access at build end. The buzzer-enforcement commit rewrote step 10 and left this paragraph untouched. See the OPEN note in format_spec.md §5.5.)*
 
 ### Scoring Flow
+
+> **Status: MIXED** — judge scoring and the scoring engine are BUILT, but this description is inaccurate in two ways: the route is `/api/scores/`, not `/api/scoring/submit`; and results are computed on demand from whatever scores exist rather than after all judges complete (`backend/rounds/scoring.py:57-72`).
 
 1. Judge in `/judge/event-[id]` portal sees their queue of submissions
 2. Judge interacts with submission (fuzz override for tester, scorecard for others)
@@ -109,7 +130,14 @@ The AI chat interface remains available during pitch preparation even after file
 
 ### Event Lifecycle Flow
 
+> **Status: MIXED** — the phase boundaries are BUILT and match `backend/rounds/services.py`. The transition *mechanism* described below is not: there is no scheduled task and no signal emission; the live phase is derived on read.
+
 Round status transitions follow a defined state machine:
+
+> **ILLUSTRATIVE** — the timestamps below are a worked example at a hypothetical on-time
+> start, not a normative schedule (format_spec.md §3). The *state* names are the contract;
+> the times are not. Transitions must be driven by phase boundaries stored per round, never
+> by a global clock reading.
 
 ```
 scheduled
@@ -118,7 +146,7 @@ opening (T+0:00) — round starts with 5-min host introduction
    ↓
 build (T+5:00) — 24-min build phase
    ↓
-evaluation (T+29:00) — 18-min concurrent: fuzz runner + judges + players prep pitches (AI chat retained, files read-only, agent-interface edits disabled)
+evaluation (T+29:00) — 18-min concurrent: fuzz runner + judges + players prep pitches (AI chat retained [CONTESTED, see format_spec §5.5], files read-only, agent-interface edits disabled)
    ↓
 pitching (T+47:00) — 28-min for 8 players at 3.5 min each (60s pitch + 120s cross-ex + 30s transition)
    ↓
@@ -141,6 +169,8 @@ State changes emit signals that update relevant clients via WebSocket.
 
 ### Workstation Session Lifecycle (per round)
 
+> **Status: DESIGNED** — Stage 7, and correctly self-labelled.
+
 Workstations are not re-imaged every round. At round start the chapter's RMM provisions an ephemeral, non-sudo Unix account from `/etc/skel`; at round end it terminates the player's session and processes and runs `userdel -r`, wiping the home directory and session state in seconds. System state persists untouched between rounds. Full image restoration is exceptional — between events, on a tamper-detection signal, or scheduled maintenance. Each session is recorded as a `WorkstationSession` (see DATA_MODEL.md) for credentialing audit.
 
 The platform does not perform this directly — chapters operate their own RMM (the workstation-autonomy principle in claude.md). The platform records sessions and consumes tamper signals. This is a Stage 7 concern, documented here so the integrity and audit model stays coherent.
@@ -148,6 +178,8 @@ The platform does not perform this directly — chapters operate their own RMM (
 ## External Integrations
 
 ### OpenRouter
+
+> **Status: DESIGNED** — `backend/ai_proxy/` does not exist. Nothing in the codebase reads `OPENROUTER_API_KEY`.
 
 Single integration point for AI substrate. Configuration:
 
@@ -160,6 +192,8 @@ Single integration point for AI substrate. Configuration:
 The integration is centralized in `backend/ai_proxy/` Django app. No other app calls OpenRouter directly. Future season model changes happen here.
 
 ### Broadcast Infrastructure
+
+> **Status: DESIGNED** — Stage 6.
 
 Tier A chapters running broadcast-quality events use broadcast infrastructure components:
 
@@ -181,6 +215,8 @@ Chapter documents (verification application uploads), broadcast recordings, larg
 ## Deployment Topology
 
 ### Production (Hetzner VPS)
+
+> **Status: MIXED** — Caddy, Docker Compose and PostgreSQL are BUILT; Redis and daphne are not. The heading is stale: the platform runs on a home Proxmox VM, with the Hetzner move deferred until pilot dates lock (BUILD_ROADMAP Status & Deviations).
 
 Single VPS running:
 
@@ -218,6 +254,8 @@ Database seeded with fixtures or factory_boy generated data. Development uses en
 Optional intermediate environment for testing changes before production. Same topology as production, smaller VPS, isolated database.
 
 ## Environment Configuration
+
+> **Status: MIXED** — `OPENROUTER_API_KEY` is listed as **Required** but is read by nothing.
 
 Configuration via environment variables, loaded via django-environ:
 
@@ -258,6 +296,8 @@ These are explicit deferrals. Build for current scale, refactor when scale deman
 
 ### Defense in Depth
 
+> **Status: MIXED** — TLS, session cookie flags, CSRF, ORM parameterisation, React escaping and DRF serializer validation are BUILT. Rate limiting exists only on the newsletter endpoint.
+
 - TLS everywhere (Let's Encrypt via Caddy or certbot)
 - Session cookies httpOnly, secure, same-site strict
 - CSRF protection on all state-changing endpoints
@@ -276,6 +316,8 @@ These are explicit deferrals. Build for current scale, refactor when scale deman
 
 ### Audit Trail
 
+> **Status: DESIGNED** — no AuditLog model exists; none of these events are recorded.
+
 - All significant operations logged to AuditLog
 - Authentication events (login, logout, failed attempts)
 - Authorization decisions (denied access)
@@ -284,12 +326,16 @@ These are explicit deferrals. Build for current scale, refactor when scale deman
 
 ### Permission Enforcement
 
+> **Status: MIXED** — authentication and role checks are BUILT (`backend/chapters/permissions.py`). **django-guardian is not installed**; object-level permissions are done with queryset scoping instead.
+
 - Django middleware checks authentication
 - View decorators check role permissions
 - django-guardian for object-level (chapter-scoped) permissions
 - Never trust client-claimed roles or scopes
 
 ## Future Considerations
+
+> **Status: DESIGNED** — correctly tensed already; the model for the rest of this document.
 
 Explicitly deferred from MVP, documented for awareness:
 

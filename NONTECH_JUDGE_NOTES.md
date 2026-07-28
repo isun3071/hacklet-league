@@ -1,5 +1,13 @@
 # Nontech / Stakeholder Judge — Design Notes
 
+> **Status: WORKING NOTES — with two positions since decided against.** The file's own header is
+> accurate and should stay. But §1's "the three technical judges share ONE rubric" and §10's
+> "aggregation — not decided" were both **superseded** by the four-rubric 30/20/20/30 decision
+> locked in JUDGE_PANEL_RECONCILIATION_PATCH.md and landed in format_spec §4.1. Read those two
+> passages as history. §8's concision model is *not* superseded — it is a live candidate in the
+> still-open cross-examination mechanism question (DOC_STATE C-11), and §9's slop-reveal timing
+> conflicts with TIER_A §4 (C-16). Both are carried as open decisions.
+
 *Working notes, not canonical yet. Captures the stakeholder-judge deep-dive. Flags open questions honestly rather than pretending they're resolved.*
 
 ---

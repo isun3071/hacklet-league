@@ -1,5 +1,12 @@
 # HackLet League — Build Roadmap
 
+> **Status: the reference for tense discipline in this doc set.** This document already scopes
+> its claims by stage and marks deferred work as deferred; the other documents are being brought
+> up to it rather than the reverse. Stages 0-3 are shipped and verified against code; Stage 4 is
+> active and unstarted; Stage 5 is proceeding out of order as a standalone project. Three Stage-3
+> line items have been corrected to match what actually shipped (polling not WebSockets, zip not
+> git, `ChapterStaff` not `ChapterMembership`). Full audit in [DOC_STATE.md](DOC_STATE.md).
+
 *Staged build plan for hackletleague.com. Designed for scope discipline — each stage has explicit in-scope and out-of-scope items. Stages must be shipped sequentially; no stage begins until the previous one is complete and deployed.*
 
 *This document is for both the human developer (Ian) and Claude Code. Both should reference this to determine what work is appropriate for the current stage. When in doubt about whether a feature belongs in the current stage, the answer is no.*
@@ -95,7 +102,7 @@ One focused afternoon (3-4 hours).
 ### In Scope
 
 - Django project initialized with proper structure per claude.md
-- PostgreSQL database with initial schema per DATA_MODEL.md (User, Chapter, ChapterMembership entities at minimum)
+- PostgreSQL database with initial schema per DATA_MODEL.md (User, Chapter, ChapterStaff entities at minimum — shipped as `ChapterStaff`; the entity was renamed from `ChapterMembership` in migration `0004` because the old name conflated organizers, judges, and players)
 - User signup, login, logout, password reset via django-allauth
 - Email verification flow
 - User profile page with basic editing
@@ -159,7 +166,7 @@ Foundation must exist before anything else. Auth, chapters, and users are the lo
 - Judge assignment within events (which judges, what specialization role)
 - Event status lifecycle: scheduled, registration open, registration closed, in progress (placeholder), completed
 - Chapter member management UI (chapter admins can view members, change roles)
-- ChapterMembership entity fully implemented with roles
+- ChapterStaff entity fully implemented with roles (renamed from `ChapterMembership`, migration `0004`)
 - Basic role permissions enforced (chapter admins can only manage their chapter)
 
 ### Out of Scope
@@ -202,9 +209,9 @@ Events are the next layer of structure built on chapters. Stage 2 establishes th
 
 - Round entity per DATA_MODEL.md (multiple rounds per event now supported)
 - Round state machine: scheduled, opening, build, evaluation, pitching, deliberation, awards, completed
-- Server-authoritative timer infrastructure with WebSocket updates (now we need real-time)
+- Server-authoritative timer infrastructure (**shipped with 5-second polling, not WebSockets** — Channels/Redis were not added; the phase is derived on read from stored absolute boundaries rather than pushed)
 - Player check-in flow for rounds they're enrolled in
-- Code submission collection at code freeze (manual git push initially — chapter admin provides instructions)
+- Code submission collection at code freeze (**shipped as portal zip upload**, not git — git was dropped as a needless middleman and attack surface, DATA_MODEL.md Submission)
 - Submission entity per DATA_MODEL.md
 - Basic judge interface for manual scoring (no fuzz integration yet — judges score everything by hand)
 - Score entity per DATA_MODEL.md
@@ -228,7 +235,7 @@ Events are the next layer of structure built on chapters. Stage 2 establishes th
 
 - A chapter can create an event with one round, schedule it, and run it
 - Players can check in, the round opens, timer counts down through phases
-- At code freeze, players manually submit code via git or zip upload
+- At code freeze, players submit code via portal zip upload (git path dropped)
 - Judges score submissions through web interface
 - Scoring engine computes composite scores and announces winners
 - Results appear on event page and contribute to rankings
@@ -254,7 +261,7 @@ The format's central mechanic (round execution) needs to exist before AI integra
 - AI chat interface in player portal (created in this stage)
 - Player portal as new route in Next.js frontend
 - Token counting per player per round (input + output, server-side)
-- Substrate cutoff as one server-side gate with two conditions — budget exhausted or round ended — returning 403 (not 429) with player-facing text, and terminating in-flight streams rather than only refusing new requests (format_spec.md §5.5)
+- Substrate cutoff as one server-side gate with two conditions — budget exhausted or build time up (build end, *not* round end) — returning 403 (not 429) with player-facing text, and terminating in-flight streams rather than only refusing new requests (format_spec.md §5.5)
 - Streaming responses from OpenRouter to player via WebSocket
 - Prompt history per player per round
 - Comprehensive audit log of all AI interactions
