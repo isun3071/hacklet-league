@@ -94,7 +94,7 @@ T+107:00 → T+135:00 (28 min)  — Zamboni Period (workstation reset)
 
 **Build phase (24 min)**: at T+5:00 the central system simultaneously unlocks all workstations and reveals the round prompt. Players have 24 minutes to construct a web application of their choice. No required features, no mandated architectures. Players direct AI substrate through chat-window and (when available) agent interface. Local fuzz invocations are intelligence-gathering only; central catalog testing happens at freeze (see §7).
 
-At T+29:00, code freeze takes effect simultaneously. The network cuts for code changes. All build activity ceases — no further coding, no agent edits via the in-IDE interface, no fuzz invocations against the workstation. AI responses mid-generation are truncated; partial code changes roll back to pre-prompt state. The submission is what existed at freeze.
+At T+29:00, code freeze takes effect simultaneously. The network cuts for code changes. All build activity ceases — no further coding, no agent edits via the in-IDE interface, no fuzz invocations against the workstation. The league proxy refuses all requests for the round from the buzzer forward and terminates any in-flight response mid-generation (format_spec.md §5.5) — server-side, with no client cooperation required. Human edits at freeze are the separate rule and are inspector-enforced at Tier A. The submission is what existed at freeze.
 
 **Concurrent evaluation + pitch preparation (18 min)**: judges and players work in parallel for 18 minutes:
 

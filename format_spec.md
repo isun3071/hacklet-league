@@ -53,7 +53,7 @@ Every HackLet round operates the following phase sequence:
 
 **Opening / Round Introduction**: host welcomes the room, frames the round (which variant, what's at stake, where this fits in the season), introduces players. Workstations or laptops remain locked or unprepared. This phase establishes orientation and (at Tier A) production rhythm.
 
-**Build Phase**: the central system simultaneously unlocks all workstations and reveals the round prompt. Players have the variant's timer (24 minutes for Sprint, 12 for XP, 48 for Agile, etc.) to construct a web application. No required features, no mandated architectures. Players direct AI substrate however they choose within tier constraints. At freeze (build phase end), the network cuts for code changes, all build activity ceases — no further coding, no agent-interface edits, no fuzz invocations. AI responses mid-generation are truncated; partial code changes roll back to pre-prompt state.
+**Build Phase**: the central system simultaneously unlocks all workstations and reveals the round prompt. Players have the variant's timer (24 minutes for Sprint, 12 for XP, 48 for Agile, etc.) to construct a web application. No required features, no mandated architectures. Players direct AI substrate however they choose within tier constraints. At freeze (build phase end), the network cuts for code changes, all build activity ceases — no further coding, no agent-interface edits, no fuzz invocations. The league proxy stops serving the round at the buzzer: new requests are refused and in-flight responses are cut mid-generation (§5.5).
 
 **Evaluation Phase**: at freeze, submissions move to scoring infrastructure. Submission mechanism varies by tier — SCP from controlled workstations at Tier A/B, portal upload with grace period at Tier C (see tier docs for specifics). League infrastructure receives each submission, deploys in an ephemeral container, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; any local fuzz invocations during build were intelligence-gathering only. Post-competition, submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
 
@@ -313,11 +313,20 @@ Each player receives per round:
 - **100,000 tokens** total (input + output + chain-of-thought)
 - **50 fuzz budget points** for player-triggered self-testing during build
 
-Token budget is a hard cap enforced server-side. Once reached:
+**What the token budget is for.** The budget is **cost control first and an efficiency signal second**. It is a ceiling that stops a runaway loop from burning a chapter's month in one round, not a number calibrated to bind on a normal round and force triage. Earlier drafts leaned on the second function — resource calibration as a credentialed skill — as though the cap were tight enough to make every prompt a real allocation decision. It is not, and the format should not claim it is.
 
-- The current model response is truncated at the cap point
-- Any code changes from the truncated response are rolled back
-- The player may continue working in the IDE without AI assistance
+**The one measurement we have.** A live 24-minute Underspecified round consumed roughly **7.2 million tokens** against the documented cap of 100,000, with approximately 85,000 resident in context at any moment. The gap is not overuse; it is the difference between *cumulative* consumption and *instantaneous* context — an agentic client re-sends its working context on every step, so the same 85,000 tokens are billed dozens of times over. The corollary is that the **25,000 per-prompt cap is non-functional for agentic use**, because a single agentic step already carries more than that in resident context.
+
+**This does not yet justify a new number.** There is exactly one measurement, n=1, and it was taken off-substrate on DeepSeek V4-Pro rather than the season-one V4-Flash. It is recorded here as a bound on how far the documented figures are from observed behavior, not as a basis for setting a replacement cap. The numbers above stand until there is enough on-substrate data to move them.
+
+**Substrate access ends at a single server-side gate with two conditions: the budget is exhausted, or the round has ended.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
+
+- The proxy refuses the request with **403, not 429**. A 429 signals retry-later, and agentic clients have backoff wired to it, so an agent would sit in a retry loop while the player watches a spinner. 403 is terminal and surfaces immediately.
+- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or the round is over.
+- **In-flight requests are cut, not allowed to finish.** A request issued at 23:59 would otherwise return usable code after the buzzer, so open connections are terminated rather than merely refusing new ones.
+- The player may continue working in the IDE without AI assistance.
+
+Human edits at freeze are a separate rule and remain tier-dependent: inspector-enforced at Tier A, honor system at Tier B (see the tier operations documents).
 
 Edited or regenerated prompts do not refund tokens. Each prompt submission costs against the budget regardless of subsequent edits.
 
@@ -358,6 +367,8 @@ Submissions must run as **self-contained applications**. The fuzz runner provide
 - Cloud storage services
 
 The 24-minute format makes serious external integration impractical even with AI assistance; the constraint reflects format reality, not arbitrary limitation. Players keep full freedom to write integration code, but the runner does not provide the environment for it to function, so such code fails its relevant probes. The policy relaxes as the league builds integration-testing infrastructure at higher tiers (Phase 3 — see IDEAS_FOR_LATER.md). **The one carve-out from the "third-party API keys unsupported" line above is runtime model inference, provided through the league's own proxy under §5.8 — precisely because the league controls that key rather than the player supplying an external one.**
+
+**What is restricted, and what is not.** At Tier A the restriction on external credentials was never a written rule; it is **structural**, a consequence of the workstation firewall and RMM (§5.1, §5.2) leaving nothing external to reach. That structural restriction applies to **player-supplied credentials only**. It is not, and must not become, a prohibition on the AI-wrapper *category* of application. Wrappers are the dominant shape of contemporary software — Y Combinator's Fall 2025 batch was ~92% AI-incorporating, up from ~88% the batch before — and a league whose entire premise is that AI is the substrate cannot coherently firewall out the most common thing built on it. The resolution is not to relax the environment but to supply the credential: league-issued proxy keys (§5.8) give the app a sanctioned inference endpoint while the league keeps control of the key, the model, the budget, and the audit trail. Player-supplied keys stay unreachable; league-issued keys are available on request.
 
 ### 5.8 App-Tier Substrate Access (League-Issued Proxy Keys)
 

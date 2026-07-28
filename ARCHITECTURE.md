@@ -57,7 +57,7 @@ Public pages are SEO-friendly through SSR. Cache-control headers allow CDN cachi
 7. Django streams response from OpenRouter
 8. Django streams tokens back to frontend via WebSocket or SSE
 9. Django updates token total incrementally as tokens stream
-10. If budget would exceed limit mid-response, Django truncates and signals frontend
+10. If the budget is exhausted or the round has ended mid-response, Django cuts the in-flight stream and refuses further requests with 403 (format_spec.md §5.5) — one gate, two conditions, no rollback
 11. Frontend displays streamed response in chat UI
 12. Frontend never sees the OpenRouter API key
 

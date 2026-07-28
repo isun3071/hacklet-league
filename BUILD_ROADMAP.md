@@ -254,7 +254,7 @@ The format's central mechanic (round execution) needs to exist before AI integra
 - AI chat interface in player portal (created in this stage)
 - Player portal as new route in Next.js frontend
 - Token counting per player per round (input + output, server-side)
-- Token budget enforcement with hard cap, truncation, and rollback
+- Substrate cutoff as one server-side gate with two conditions — budget exhausted or round ended — returning 403 (not 429) with player-facing text, and terminating in-flight streams rather than only refusing new requests (format_spec.md §5.5)
 - Streaming responses from OpenRouter to player via WebSocket
 - Prompt history per player per round
 - Comprehensive audit log of all AI interactions
@@ -280,7 +280,7 @@ The format's central mechanic (round execution) needs to exist before AI integra
 - They open hackletleague.com in browser, log in, navigate to active event
 - They see the AI chat interface with their token budget displayed
 - They chat with Deepseek through the platform during build phase
-- Token budget enforced — they get cut off if they exceed it with proper truncation and rollback
+- Token budget enforced — they get cut off at the cap with a terminal 403 and a readable reason, and an in-flight response is cut rather than allowed to complete
 - All interactions logged for audit
 - They can build a real app in 24 minutes with AI assistance through the platform
 
