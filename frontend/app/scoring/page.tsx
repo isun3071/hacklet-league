@@ -144,6 +144,12 @@ performance  speed gates (ttfb/fcp/inp) · load · dos resistance`}</pre>
 
       <h2 className="h2"># your part: a dockerfile</h2>
       <p className="body">
+        <span className="hl">
+          your application is graded as deployed. whatever answers on your port at the buzzer is
+          what is scored.
+        </span>
+      </p>
+      <p className="body">
         your submission includes a <code>Dockerfile</code> (we ship starter templates for every
         common stack, so you barely touch it). your app listens on the port we hand it via{" "}
         <code>$PORT</code>. if you need a database, connect to the one we provide at{" "}
