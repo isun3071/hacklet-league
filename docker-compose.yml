@@ -3,7 +3,10 @@
 # Host-agnostic: runs identically on the home Proxmox VM today and a Hetzner VPS
 # later. Only .env differs between hosts. See DEPLOY.md.
 #
-#   caddy    -> serves the landing page at /, reverse-proxies /api /admin /static to backend
+#   caddy    -> reverse-proxies /api /static /_allauth /accounts /$ADMIN_PATH to backend,
+#               and everything else to the Next.js frontend. It does NOT serve landing/ —
+#               the Caddyfile has no file_server, so the ./landing:/srv mount below is
+#               vestigial from Stage 0. Kept because landing/ is still a maintained artifact.
 #   backend  -> Django (gunicorn). Runs migrate + collectstatic on start.
 #   db       -> PostgreSQL 16
 
