@@ -109,7 +109,7 @@ retire the tournament-level set, or only the per-round set? Docs still carry the
   argument that sponsor-facing material leans on.
 - **Blocked on**: nothing. Decidable now, and it gates D-12.
 
-### D-06 — §5.4 vs IDEAS substrate drift (Rust and Ruby)
+### D-06 — §5.4 vs IDEAS substrate drift (Rust and Ruby) (C-09)
 
 [format_spec.md §5.4](format_spec.md#L302) puts **Rust and Ruby in Tier 2** (maintained
 substrate parity, mirrored web frameworks). [IDEAS_FOR_LATER.md:99](IDEAS_FOR_LATER.md#L99)

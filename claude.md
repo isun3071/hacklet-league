@@ -4,6 +4,33 @@
 
 ---
 
+## Start here
+
+**The docs describe more than the code implements, deliberately.** format_spec.md and the tier
+operations documents specify the eventual format; the platform implements it in stages. A
+document describing a mechanism is not evidence the mechanism exists.
+
+Four things to know before you touch anything:
+
+1. **Check the stage.** BUILD_ROADMAP.md's *Status & Deviations* block is the current truth.
+   As of 2026-07-28: Stages 0-3 shipped, **Stage 4 (AI substrate) is active and unstarted**,
+   Stage 5 (fuzz runner) is proceeding out of order as a standalone project in `fuzz-runner/`.
+2. **Check the status marker.** Every section of every structural doc now carries one:
+   **BUILT** (with a file:line citation), **DESIGNED**, **MIXED**, or **SUPERSEDED**. Timing
+   blocks carry **ILLUSTRATIVE**. Absent a marker, assume nothing.
+3. **Cite the code, not the doc.** Before claiming what the platform does, open the file and
+   cite `path.py:line`. Design docs describe intent. This one did too, for a while: its
+   structure tree listed six backend apps that never existed and a frontend `src/` directory
+   that never existed.
+4. **Two other sessions may be active.** `fuzz-runner/` and FUZZ_RUNNER_SPEC.md belong to the
+   fuzzer session. `backend/` and `frontend/` are frequently held by the platform session.
+   Check `git status` and recent commits before editing shared files.
+
+Not-yet-decided questions are collected in DECISIONS_OWED.md. If a task needs one resolved,
+ask rather than choosing — several of them look like small wording calls and are not.
+
+---
+
 ## Project Identity
 
 HackLet League is a competitive format for AI-assisted technical building. In one sentence: hackathon, but minutes instead of hours, with a cheering audience. Players spend 24 minutes building a web application using a sanctioned AI substrate, then defend their work through automated adversarial testing, judge inspection, and live cross-examination.
@@ -28,16 +55,40 @@ Correct usage:
 
 ## Tech Stack
 
-- **Backend**: Django 5.x + Django REST Framework + Django Channels
-- **Database**: PostgreSQL 16
-- **Frontend**: Next.js 15 + TypeScript + Tailwind CSS
-- **Auth**: Django built-in auth + django-allauth (email, optional OAuth providers)
-- **Permissions**: django-guardian for object-level (chapter-scoped) permissions
-- **Realtime**: Django Channels for WebSocket connections
-- **AI Proxy**: httpx-based proxy to OpenRouter (DeepSeek V4 Flash for season 1)
-- **Deployment**: Docker Compose on Hetzner VPS
-- **CI/CD**: GitHub Actions
+**Installed and running** (verified against `backend/pyproject.toml` and
+`frontend/package.json`):
+
+- **Backend**: Django 5.x + Django REST Framework
+- **Database**: PostgreSQL 16 in prod; SQLite locally (the dev box has no Docker/Postgres)
+- **Frontend**: Next.js 16 + React 19 + TypeScript + Tailwind v4
+- **Auth**: django-allauth **headless**, session-based, with Google OAuth via socialaccount
+- **Permissions**: hand-rolled queryset scoping — see `backend/chapters/permissions.py`
+- **Serving**: gunicorn (WSGI) behind Caddy, whitenoise for static
+- **Email**: django-anymail with Resend
+- **Deployment**: Docker Compose on a **home Proxmox VM** (Hetzner deferred until pilot dates lock)
+- **CI/CD**: GitHub Actions — `backend`, `frontend`, then `deploy` on a self-hosted runner
 - **Package Management**: uv (Python), pnpm (JavaScript)
+- **Lint/test**: ruff, pytest + pytest-django + factory-boy, eslint
+
+**Not installed — do not `import` these, they are planned, not present:**
+
+- **Django Channels / WebSockets / Redis** — the round clock ships as **5-second polling**
+  (`frontend/components/RoundLive.tsx:103`); `backend/hacklet/asgi.py` is plain Django ASGI.
+  Real-time transport is unscheduled.
+- **django-guardian** — never added. Object-level permissions are done by scoping querysets
+  to the chapters a user manages. Follow the existing pattern; do not introduce guardian
+  without a decision.
+- **httpx** — not a dependency. The one outbound HTTP call in the codebase
+  (`backend/newsletter/views.py`) uses `requests`, which arrives transitively rather than
+  being declared. If you add an HTTP client, declare it.
+- **OpenRouter / the AI proxy** — Stage 4, unstarted. No `ai_proxy` app, no endpoint, no key
+  read anywhere. `OPENROUTER_API_KEY` appears in ARCHITECTURE.md's required-env list and is
+  read by nothing.
+- **mypy strict** — mypy is in dev deps but `pyproject.toml` has no `[tool.mypy]` section, so
+  nothing enforces it. Treat the convention below as aspirational until configured.
+- **prettier, vitest, playwright, TanStack Query, SWR, Zustand** — none are installed. The
+  frontend has no test runner and no state library; server state is fetched in `lib/` helpers
+  and held in component state.
 
 Stack choices are deliberately boring. The format is novel; the implementation should not be. Django was chosen specifically to leverage existing developer expertise (SAPA-GP background), built-in admin interface for early operations, mature permissions framework, and security defaults appropriate for credentialing infrastructure.
 
@@ -53,7 +104,9 @@ Timers, token budgets, fuzz budgets, scoring math, and all competitive state are
 
 ### Role × Scope Permissions
 
-Permissions are scoped to chapter context. A user is not simply "a judge" — they are "a judge at Chapter X for Event Y." Use django-guardian for object-level permissions where chapter scoping matters. Standard role-based permissions for global concerns.
+Permissions are scoped to chapter context. A user is not simply "a judge" — they are "a judge at Chapter X for Event Y."
+
+**The shipped pattern is queryset scoping, not django-guardian** (which is not installed). See `backend/chapters/permissions.py` for `is_chapter_manager` and `managed_chapter_ids`, and `backend/rounds/views.py` for the standard shape: filter the queryset to what the user may touch, so an unauthorized lookup returns **404 rather than 403** and existence is never leaked. Follow that pattern. Introducing guardian is a decision, not a refactor.
 
 ### Single Web Application with Role-Gated Routes
 
@@ -71,63 +124,71 @@ The league supplies one OpenRouter API key used for all chapters and events. Thi
 
 For credentialing integrity, all significant operations are logged. Chapter status changes, score modifications, verification decisions, role assignments — all auditable with user attribution and timestamps. Use Django's built-in logging plus dedicated audit tables for compliance-sensitive operations.
 
+**Status: aspirational.** No `AuditLog` model exists, and none of the operations above are recorded today, despite DATA_MODEL.md specifying the entity and ARCHITECTURE.md's security section describing the trail as if it runs. Treat this as the standard to build toward, not a description of current behaviour.
+
 ### Server-Side Validation, Always
 
 Never trust client input. Validate all API inputs server-side. Frontend validation is for UX only, never for security or correctness. This applies to game rules, permissions, data constraints, and any business logic.
 
 ## Project Structure
 
-Monorepo with backend and frontend as siblings:
+Monorepo with backend and frontend as siblings. **This is the tree as it exists**, verified
+2026-07-28. It is not the aspirational layout — an earlier version of this section listed six
+backend apps that were never created (`scoring/`, `fuzz/`, `ai_proxy/`, `api/`, `audit/`,
+`tests/`) and omitted three that exist, and put the frontend under a `src/` directory that has
+never existed. If you are looking for a directory named below and it is missing, that is a bug
+in this file, not in your checkout.
 
 ```
 hacklet-league/
 ├── backend/                    # Django project
-│   ├── hacklet/                # Django project package
-│   │   ├── settings/           # Split settings (base, dev, prod)
-│   │   ├── urls.py
-│   │   └── asgi.py             # Channels-aware
-│   ├── chapters/               # Chapter management app
-│   ├── events/                 # Event and round management
-│   ├── users/                  # User accounts, profiles, memberships
-│   ├── scoring/                # Scoring engine, rankings
-│   ├── fuzz/                   # Fuzz catalog, fuzz runner integration
-│   ├── ai_proxy/               # OpenRouter integration
-│   ├── api/                    # DRF viewsets and serializers
-│   ├── audit/                  # Audit logging
-│   ├── tests/
+│   ├── hacklet/                # project package
+│   │   ├── settings/           # split settings: base, dev, prod
+│   │   ├── urls.py             # THE router — every route is registered here
+│   │   ├── asgi.py             # plain Django ASGI (no Channels)
+│   │   └── wsgi.py             # what gunicorn actually serves
+│   ├── users/                  # custom email-based User (UUID pk, is_superadmin)
+│   ├── chapters/               # Chapter, ChapterStaff, permissions.py, stats.py
+│   ├── events/                 # Event, EventParticipant (players/judges/audience)
+│   ├── rounds/                 # Round, Submission, Score
+│   │   ├── services.py         #   phase profiles + server-authoritative clock
+│   │   └── scoring.py          #   two-axis collapse + rank-sum composite
+│   ├── rankings/               # Ranking + leaderboard aggregation (services.py)
+│   ├── newsletter/             # Buttondown signup proxy (view only, no model)
 │   ├── manage.py
 │   ├── pyproject.toml
 │   └── Dockerfile
-├── frontend/                   # Next.js project
-│   ├── src/
-│   │   ├── app/                # App router pages
-│   │   │   ├── (public)/       # Public routes
-│   │   │   ├── (auth)/         # Auth flows
-│   │   │   ├── chapters/       # Chapter pages
-│   │   │   ├── play/           # Player portal
-│   │   │   ├── judge/          # Judge portal
-│   │   │   └── admin/          # Organizer/superadmin
-│   │   ├── components/
-│   │   ├── lib/
-│   │   └── styles/
-│   ├── package.json
-│   ├── tsconfig.json
+├── frontend/                   # Next.js project — NO src/ directory
+│   ├── app/                    # App Router, routes are plain dirs (no route groups)
+│   │   ├── page.tsx layout.tsx
+│   │   ├── about/ contact/ scoring/ leaderboard/ profile/ dashboard/
+│   │   ├── auth/               # login, signup, verify-email/[key]
+│   │   ├── chapters/           # index, new, [slug], [slug]/edit, [slug]/staff
+│   │   └── events/             # index, new, [chapter]/[event]/{-,edit,manage,rounds/[round]}
+│   ├── components/             # RoundLive, JudgeConsole, RoundManager, RoundResults, ...
+│   ├── lib/                    # api.ts (server), http.ts (browser), auth/events/rounds.ts
+│   ├── package.json tsconfig.json eslint.config.mjs
 │   └── Dockerfile
-├── docker-compose.yml
-├── docker-compose.dev.yml
-├── .github/workflows/
-├── claude.md                   # This document
-├── format_spec.md              # The competitive format (tier-agnostic)
-├── LEAGUE_OPERATIONS.md        # League governance + tier system overview
-├── TIER_A_OPERATIONS.md        # Tier A operational template (credentialing-grade)
-├── TIER_B_OPERATIONS.md        # Tier B operational template (middle tier)
-├── TIER_C_OPERATIONS.md        # Tier C operational template (MVR / Extended / multi-round profiles)
-├── DATA_MODEL.md               # Schema details
-├── ARCHITECTURE.md             # Service relationships
-└── README.md
+├── scripts/                    # deploy.sh, db-backup.sh, db-restore.sh
+├── fuzz-runner/                # standalone grader — OWNED BY ANOTHER SESSION, do not edit
+├── landing/                    # superseded static landing (Stage 0), kept but dead
+├── docker-compose.yml  docker-compose.dev.yml  Caddyfile
+└── .github/workflows/
 ```
 
-Django apps are organized by domain concern. Each app owns its models, migrations, business logic, and tests. Cross-app dependencies should be minimal and explicit.
+Every Django app owns `models.py`, `serializers.py`, `views.py`, `admin.py`, `tests.py`, and
+`migrations/`. There is **no central `api/` app** — DRF viewsets live in each app's `views.py`
+and are registered on the one router in `hacklet/urls.py`. There is **no central `tests/`
+directory** — tests are per-app `tests.py`. Cross-app dependencies should be minimal and
+explicit.
+
+**Not present, and named here so you do not go looking:** no `ai_proxy/` (Stage 4), no `fuzz/`
+(Stage 5 — the runner is a separate project in `fuzz-runner/` and is not yet wired to the
+platform), no `audit/` (no `AuditLog` model exists despite the principle below), no
+`play/`, `judge/`, or `admin/` frontend portals.
+
+There is no root `README.md`, though several documents link to one. `frontend/README.md`
+exists and is the Next.js default.
 
 ## Code Conventions
 
@@ -147,8 +208,9 @@ Django apps are organized by domain concern. Each app owns its models, migration
 - **Linter**: eslint with next.js and typescript configs
 - **Style**: typescript strict mode, no `any` without justification
 - **Components**: functional components with hooks, no class components
-- **State**: server state via TanStack Query or SWR, client state via React Context or Zustand for complex cases
 - **Naming**: PascalCase for components, camelCase for functions/variables, kebab-case for files
+
+Two corrections to what this section used to claim. **Prettier is not installed** — eslint (`eslint-config-next`) is the only frontend tooling, and `pnpm lint` is the only check CI runs on the frontend besides `build`. And **no state library is installed**: not TanStack Query, not SWR, not Zustand. Server data is fetched through `lib/api.ts` (server components) or `lib/http.ts` (browser) and held in component state; polling lives in the component that needs it. Add a state library only if the need is real, and say so in the PR.
 
 ### Git Workflow
 
@@ -160,9 +222,9 @@ Django apps are organized by domain concern. Each app owns its models, migration
 
 ### Testing
 
-- **Backend**: pytest, with django integration. Unit tests for business logic, integration tests for API endpoints, factory_boy for test data.
-- **Frontend**: vitest for unit tests, playwright for end-to-end on critical flows.
-- **Coverage**: not a percentage target. Test what matters: scoring math, permissions, state transitions, AI proxy budget enforcement.
+- **Backend**: pytest + pytest-django + factory-boy. Unit tests for business logic, integration tests for API endpoints. Tests live in each app's `tests.py`. **Run them locally on SQLite via `uv` before every backend commit** — the dev box has no Docker or Postgres, and CI runs the same suite against Postgres.
+- **Frontend**: **no test runner is installed.** vitest and playwright are aspirational; the only frontend CI check is `pnpm lint` plus the production build. Do not write frontend tests against a runner that is not there — add the runner first, in its own commit.
+- **Coverage**: not a percentage target. Test what matters: scoring math, permissions, state transitions, and (when it exists) AI proxy budget enforcement.
 
 ## Common Pitfalls
 
@@ -174,11 +236,13 @@ Frontend may display token budget remaining, but the budget is enforced server-s
 
 ### Never Expose OpenRouter Key to Frontend
 
-The AI proxy is a Django endpoint. Frontend sends chat messages to `/api/ai/chat`, Django adds the API key and calls OpenRouter, returns response. The key never appears in frontend code, never in JavaScript, never in any client-accessible location.
+**None of this exists yet — it is the Stage 4 design, stated here so it gets built correctly.** When the AI proxy lands, it is a Django endpoint: the frontend sends chat messages to `/api/ai/chat`, Django adds the API key and calls OpenRouter, and returns the response. The key never appears in frontend code, never in JavaScript, never in any client-accessible location. Today there is no `ai_proxy` app, no endpoint, and nothing reads `OPENROUTER_API_KEY`.
+
+Two substrate rules to build against, both settled: the cutoff is **one server-side gate with two conditions** — budget exhausted, or **build time is up** (build end, *not* round end; those are roughly a hundred minutes apart) — returning **403, not 429**, with a player-facing body, cutting in-flight streams rather than only refusing new requests. See format_spec.md §5.5, which also carries an open question about whether pitch preparation gets a carve-out. Do not implement the carve-out either way until that is decided.
 
 ### Always Scope Permissions to Chapter Context
 
-A judge has permissions at specific chapters for specific events, not globally. When checking permissions, include the chapter context. django-guardian handles this naturally; use it. Don't fall back to global role checks for chapter-scoped operations.
+A judge has permissions at specific chapters for specific events, not globally. When checking permissions, include the chapter context. Use the queryset-scoping helpers in `backend/chapters/permissions.py` (django-guardian is **not** installed — see Role × Scope Permissions above). Don't fall back to global role checks for chapter-scoped operations.
 
 ### Sessions, Not JWTs
 
@@ -207,9 +271,18 @@ For operations that affect credentialing integrity (score changes, verification 
 - **TIER_A_OPERATIONS.md** — Tier A operational template. Credentialing-grade tier with full 135-min round profile, broadcast architecture, multi-day tournament template (snake-draft, alternates, two-leaderboard, tag credentialing), anti-cheating enforcement.
 - **TIER_B_OPERATIONS.md** — Tier B operational template. Middle tier with league-hosted substrate + honor-system enforcement. 135-min round profile shared with Tier A but lighter operational burden.
 - **TIER_C_OPERATIONS.md** — Tier C operational template. Training tier and Minimum Viable Round (MVR) floor. BYOD substrate, no enforced budgets, three operational profiles (the 60-min MVR with PITCH.md + LLM judging; Tier C Extended with live pitch/cross-ex + human judges; multi-round MVR-days). PITCH.md as canonical written communication artifact.
-- **DATA_MODEL.md** — Database schema. The entities, relationships, constraints. Required reading before writing models or queries.
-- **ARCHITECTURE.md** — Service relationships, request flows, deployment topology.
-- **README.md** — Getting started for developers.
+- **DATA_MODEL.md** — Database schema. The entities, relationships, constraints. Required reading before writing models or queries. Nine of its sixteen entities exist; each section says which.
+- **ARCHITECTURE.md** — Service relationships, request flows, deployment topology. The most over-asserted document in the set; read its status markers, not just its prose.
+- **BUILD_ROADMAP.md** — **Read this first to find out what stage we are in.** Stage gating, in-scope/out-of-scope per stage, and the Status & Deviations block that says what actually shipped. It is the reference for tense discipline; the other documents are being brought up to it.
+- **CHANGELOG.md** — What changed and why, by stage. The decision record for anything that looks arbitrary.
+- **IDEAS_FOR_LATER.md** — The parking lot. Per BUILD_ROADMAP Rule 2, out-of-scope ideas go here instead of getting built.
+- **DOC_STATE.md** — Audit of every document's status (BUILT / DESIGNED / MEASURED / ASSUMED / SUPERSEDED) plus every known cross-document contradiction, `C-01`…`C-22`, each cited to file and line.
+- **DECISIONS_OWED.md** — The 23 open calls that need Ian, with options and costs. **If a task requires resolving one of these, stop and ask rather than picking.**
+- **FUZZ_RUNNER_SPEC.md** and **fuzz-runner/** — owned by a separate session. Do not edit either. The two copies of the spec have already drifted.
+- **DEPLOY.md** — Deployment, backups, and the host migration runbook.
+- **AGENTS.md** — Agent-facing notes.
+
+There is no root `README.md`, though this file and others have linked to one.
 
 ## Naming and Copy Conventions
 
@@ -271,8 +344,8 @@ This document is project conventions only. It does not:
 - Define league governance (that's LEAGUE_OPERATIONS.md)
 - Specify the database schema (that's DATA_MODEL.md)
 - Detail service interactions (that's ARCHITECTURE.md)
-- Document specific API endpoints (those are documented in code)
-- Cover deployment procedures (those are in DEPLOYMENT.md when written)
+- Document specific API endpoints (those are documented in code — the router in `backend/hacklet/urls.py` is the index)
+- Cover deployment procedures (those are in **DEPLOY.md**, which exists; this line previously pointed at a `DEPLOYMENT.md` that was never written)
 
 Read the appropriate document for the concern you're addressing. This document is the entry point that points to the others.
 
