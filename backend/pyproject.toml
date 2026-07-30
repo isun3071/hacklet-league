@@ -12,6 +12,10 @@ dependencies = [
     "gunicorn>=23",
     "django-allauth[socialaccount]>=65.3",
     "django-anymail[resend]>=11",
+    # Used directly by newsletter/views.py for the Buttondown proxy. It already arrived
+    # transitively via allauth/anymail; declared here so the one outbound HTTP call in the
+    # codebase does not depend on another package's dependency graph.
+    "requests>=2.32",
 ]
 
 [dependency-groups]
