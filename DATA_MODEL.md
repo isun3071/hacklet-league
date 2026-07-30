@@ -242,7 +242,7 @@ A set `tamper_flag` forces image restoration before the workstation is reused. L
 
 ### FuzzTest
 
-> **Status: SUPERSEDED** — `points_defended` (positive) / `points_broken` (negative) / `points_gracefully_handled` is the **pre-slop award-points model**. format_spec §4.2 is deduction-only: a passing probe contributes exactly zero and there is no positive award. Not fixed here — handed to the platform session (DOC_STATE C-02).
+> **Status: DESIGNED** — no model exists (`backend/rounds/models.py` has `Round`, `Submission`, `Score` only), so this is the spec Stage 5 will build from. The **award-points fields were removed 2026-07-30** (`points_defended` / `points_gracefully_handled` / `points_broken`) and replaced with a single non-negative `penalty`, closing DOC_STATE **C-02**. Two fields below still carry open questions — see the note after the table.
 
 The catalog of automated tests. Grows to hundreds of entries over seasons.
 
@@ -258,20 +258,22 @@ difficulty_tier     : enum (1, 2, 3, 4, 5)
 intent_dependence   : enum (universal, intent_sensitive)
 applicability_notes : text (guidance for judges when intent_sensitive)
 test_definition     : jsonb (the actual test specification)
-points_defended     : int (positive value)
-points_gracefully_handled : int, nullable (only for non-adversarial)
-points_broken       : int (negative value)
+penalty             : int (>= 0) — the slop this probe adds when it fires
 attack_type         : enum (adversarial, non_adversarial)
 variant_group_id    : UUID, nullable (groups syntactic variants of same logical attack)
 created_at          : timestamp
 deprecated_at       : timestamp, nullable
 ```
 
-Tests are split into two bundles (security and QA) reflecting their different correctness models. Security tests are universally correct. QA tests are tagged for intent-dependence. Variant groups bind tests that probe the same logical attack with different syntactic presentations. The applicability_notes field guides tester judges in deciding whether an intent-sensitive test applies to a given submission. Deprecated tests remain in the schema but don't run in new events.
+**Deduction-only, per format_spec §4.2.** A probe has one job: detect whether a specific kind of slop is present. If it fires, it adds `penalty`. If it does not fire — whether the submission defended correctly or the targeted surface does not exist — it adds exactly zero. There is no positive award, so there is no `points_defended`, and there is no negative value, because `penalty` is added to a score where **higher is worse**. `penalty` is per *probe*; a variant group contributes its penalty once no matter how many of its variants fire.
+
+Tests are split into bundles reflecting their different correctness models. Security tests are universally correct. Variant groups bind tests that probe the same logical attack with different syntactic presentations. Deprecated tests remain in the schema but don't run in new events.
+
+*Two fields carry open questions and were left as-is:* `bundle` lists two values where the runner ships three, and `intent_dependence` / `applicability_notes` presuppose per-test intent classification and a judge applicability decision. Both belong to the fuzz-runner session's scope and the second is entangled with **D-18** (whether the tester judge gets a per-probe override). Neither is a points-model problem, so neither was touched here.
 
 ### FuzzResult
 
-> **Status: SUPERSEDED** — same: `points_contributed` 'can be positive, zero, or negative', and the four-value `outcome` enum encodes the retired model. Handed to the platform session (DOC_STATE C-02).
+> **Status: DESIGNED** — no model exists. The signed `points_contributed` and the four-value `outcome` enum **were replaced 2026-07-30** with a non-negative `penalty_contributed` and the three deduction-only outcomes, closing DOC_STATE **C-02**. The two `override_*` fields were deliberately left in place — whether the tester judge gets a per-probe override is **D-18**, still open.
 
 The outcome of one fuzz test against one submission. Records only **authoritative results** from central fuzz infrastructure at code freeze. Local fuzz runner results during build are informational only and not stored in this table.
 
@@ -279,20 +281,22 @@ The outcome of one fuzz test against one submission. Records only **authoritativ
 id                  : UUID primary key
 submission_id       : FK Submission
 fuzz_test_id        : FK FuzzTest
-outcome             : enum (defended, gracefully_handled, not_applicable, broken)
-points_contributed  : int (can be positive, zero, or negative)
-override_by_judge   : FK EventParticipant, nullable (if the tester judge overrode)
-override_reason     : text, nullable
+outcome             : enum (slop_detected, clean, not_applicable)
+penalty_contributed : int (>= 0) — the probe's penalty if it fired, else 0
+override_by_judge   : FK EventParticipant, nullable   # D-18 OPEN — see status note
+override_reason     : text, nullable                  # D-18 OPEN
 ran_at              : timestamp
 
 unique constraint: (submission_id, fuzz_test_id)
 ```
 
-Results capture both the automated outcome and any tester judge overrides. Points contributed reflects the final value after override consideration. All results are from central infrastructure execution; local-runner intelligence-gathering during build is not persisted.
+**Why three outcomes and not four.** `defended` and `gracefully_handled` both meant "the probe did not fire," and under deduction-only they are indistinguishable from each other and from having no such surface — all three contribute zero. What survives is the reporting distinction: `clean` (the surface was present and carried no slop) and `not_applicable` (the surface was absent) both score zero but are counted separately, because format_spec §4.2's result bundle needs them apart — **Clean Rate** is clean ÷ (clean + slop_detected), and **Attack Surface Coverage** derives from the applicable count. A submission's slop score is the sum of `penalty_contributed` across its results.
+
+All results are from central infrastructure execution; local-runner intelligence-gathering during build is not persisted.
 
 ### PlayerFuzzInvocation
 
-> **Status: DESIGNED, and SUPERSEDED in its scoring fields** — `score_delta` is signed, inheriting the retired model. Handed over with the two above.
+> **Status: DESIGNED** — no model exists. The signed `score_delta` **was replaced 2026-07-30** with a non-negative `slop_added`, closing DOC_STATE **C-02** for this entity.
 
 Records each player-triggered fuzz invocation during build phase. Used for broadcast leaderboard, audience-visible score accumulation, and budget tracking. Does not contribute to authoritative scoring (that's FuzzResult).
 
@@ -301,14 +305,16 @@ id                       : UUID primary key
 submission_id            : FK Submission
 category                 : varchar (the fuzz category triggered)
 budget_cost              : int (fuzz budget consumed)
-score_delta              : int (signed score change from this invocation)
-running_score_after      : int (player's accumulated slop score after this invocation)
+slop_added               : int (>= 0) — slop this invocation surfaced
+running_slop_after       : int (player's accumulated slop after this invocation)
 running_budget_remaining : int (player's fuzz budget after this invocation)
 invoked_at               : timestamp
-results_summary          : jsonb (counts of defended/broken/etc per this invocation)
+results_summary          : jsonb (counts of slop_detected / clean / not_applicable)
 ```
 
-This table is the data source for broadcast overlays and live leaderboards during build phase. Each invocation creates a row visible to commentators and audience. The running_score_after field enables the leaderboard sort to be efficient without recomputing aggregates per request.
+**Direction matters for the broadcast overlay.** Player-triggered slop only ever goes up within a round, because an invocation can surface slop but never retire it. What falls is the *visible* figure across successive invocations after the player fixes something and re-runs the category — the narrative format_spec §5.1 is built on. `slop_added` is therefore per-invocation and non-negative; `running_slop_after` is the value the leaderboard sorts on, **ascending**, since lower slop is better. It is stored rather than recomputed so the sort stays cheap per request.
+
+This table is the data source for broadcast overlays and live leaderboards during build phase. Each invocation creates a row visible to commentators and audience.
 
 ## Scoring Entities
 

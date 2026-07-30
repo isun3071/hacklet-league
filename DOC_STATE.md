@@ -102,7 +102,7 @@ This is the baseline every BUILT classification below is measured against.
 | 3.2 | Round sizing (8 std, 6–12, 12 max) | DESIGNED | No cap enforced anywhere; `Round.player_count` is a free integer (`models.py:51`) |
 | 3.3 | Broadcast | DESIGNED | |
 | 4.1 | Two axes; four judge roles 30/20/20/30 | **DESIGNED** | Code implements a *different decomposition* — see **C-01** |
-| 4.2 | Deduction-only slop philosophy | DESIGNED | Contradicted by DATA_MODEL's FuzzTest/FuzzResult schema — see **C-02** |
+| 4.2 | Deduction-only slop philosophy | DESIGNED | **C-02 RESOLVED 2026-07-30** — DATA_MODEL's fuzz schema now matches |
 | 4.3 | Best Overall rank-sum | **BUILT** | `scoring.py:95-112`, exact tiebreaker order matches. Runs over the stand-in axis, not slop |
 | 4.4 | Categorical awards | **Mixed** | 3 of 4 BUILT (`scoring.py:132-137`); People's Hacklet DESIGNED. Most Efficient retired per-round here but live in tier docs — **C-06** |
 | 4.5 | Tradeoffs / no permanent meta | DESIGNED | Design rationale |
@@ -181,9 +181,9 @@ This is the baseline every BUILT classification below is measured against.
 | Round | | **BUILT** | `:157` timing_profile enum matches code exactly. `:158` status enum omits `pitching`, `deliberation`, `cancelled` which the code has (`rounds/models.py:24-34`) — minor drift |
 | Submission | | **BUILT** | Accurate, including the "never extracted until Stage 5" note |
 | WorkstationSession | | DESIGNED | Self-labeled Stage 7 — the one honestly-tensed entity |
-| **FuzzTest** | `points_defended` / `points_broken` / `gracefully_handled` | **SUPERSEDED** | Positive/negative award-points model. format_spec §4.2 is deduction-only: passing contributes **zero**. **C-02** |
-| **FuzzResult** | `outcome` enum, `points_contributed` "positive, zero, or negative" | **SUPERSEDED** | Same |
-| PlayerFuzzInvocation | | DESIGNED | Also carries `score_delta`/signed running score |
+| FuzzTest | `penalty : int (>= 0)` | DESIGNED | **C-02 fixed 2026-07-30.** Award-points fields removed. `bundle` (2 values vs the runner's 3) and `intent_dependence` left open, noted in place |
+| FuzzResult | `outcome` 3-value, `penalty_contributed : int (>= 0)` | DESIGNED | **C-02 fixed 2026-07-30.** `override_by_judge` / `override_reason` deliberately retained — **D-18** |
+| PlayerFuzzInvocation | `slop_added : int (>= 0)` | DESIGNED | **C-02 fixed 2026-07-30.** `score_delta` → `slop_added`, running score renamed and documented as ascending-sort |
 | EventParticipant | | **BUILT with a known gap** | `:294` enum includes `stakeholder`; the code has only tester/ux_designer/general (`events/models.py:99-102`). The **⚠ flag at `:315`** correctly states the scoring-math divergence — this is the single most honest passage in the doc set |
 | Score | | **BUILT** | `:327` facet enum matches `rounds/models.py:134-140` exactly |
 | Ranking | | **BUILT** | Enums match `rankings/models.py:12-20`; `:359` accurately describes shipped Stage 3 behavior |
@@ -371,14 +371,26 @@ mean of six facet score-types collapsed into two axes; `judge_specialization` is
 `DATA_MODEL.md:315` already flags the first-vs-second divergence correctly and warns against
 silently rewriting either. The third (Tier C) is unflagged anywhere.
 
-**C-02 — Fuzz scoring model: deduction-only vs positive/negative points.**
+**C-02 — Fuzz scoring model: deduction-only vs positive/negative points. — RESOLVED 2026-07-30.**
 `format_spec.md:112-118` — "There is no positive reward for passing"; clean contributes 0.
-`DATA_MODEL.md:234-237` — `FuzzTest.points_defended : int (positive value)`,
-`points_gracefully_handled`, `points_broken : int (negative value)`.
-`DATA_MODEL.md:253-254` — `outcome enum (defended, gracefully_handled, not_applicable,
-broken)`, `points_contributed : int (can be positive, zero, or negative)`.
-`DATA_MODEL.md:274` — `PlayerFuzzInvocation.score_delta : int (signed)`.
-The CHANGELOG:24 records the deduction-only change as cascaded to DATA_MODEL. It was not.
+DATA_MODEL's three fuzz entities carried the retired award-points model:
+`FuzzTest.points_defended` (positive) / `points_gracefully_handled` / `points_broken`
+(negative); `FuzzResult.outcome` as a four-value enum with `points_contributed` "can be
+positive, zero, or negative"; `PlayerFuzzInvocation.score_delta` signed. CHANGELOG:24 recorded
+the deduction-only change as cascaded to DATA_MODEL; it had not been.
+
+**Fixed as prose, before it became a migration.** `FuzzTest` now carries a single
+`penalty : int (>= 0)`; `FuzzResult` carries `penalty_contributed : int (>= 0)` and the three
+deduction-only outcomes (`slop_detected` / `clean` / `not_applicable`, the last two scoring
+zero but counted apart so Clean Rate and Attack Surface Coverage still work);
+`PlayerFuzzInvocation.score_delta` became `slop_added : int (>= 0)`. No model exists for any of
+the three (`backend/rounds/models.py` has `Round`, `Submission`, `Score` only), so this cost
+nothing today — it would have cost a migration once Stage 5 built from the schema.
+
+**Deliberately left standing**, each noted in place rather than silently changed:
+`FuzzResult.override_by_judge` / `override_reason` (**D-18**), `FuzzTest.bundle` listing two
+values where the runner ships three, and `intent_dependence` / `applicability_notes`, which
+presuppose per-test intent classification the runner spec says the schema should not carry.
 
 **C-03 — Tier scoring asymmetry survives deduction-only.**
 `format_spec.md:408` — collegiate advanced categories are "opt-in bonus opportunities with
@@ -605,7 +617,7 @@ and verified at `services.py:19`; it does not move.
 
 **Phase 2(c) propagation candidates** — decisions already made, applied unevenly:
 C-04 (token budget purpose → TIER_A:73, LEAGUE_OPS:97, format_spec:520);
-C-02 (deduction-only → DATA_MODEL FuzzTest/FuzzResult/PlayerFuzzInvocation);
+C-02 (deduction-only → DATA_MODEL FuzzTest/FuzzResult/PlayerFuzzInvocation) — **done 2026-07-30**;
 C-13 (DNF ≠ zero → TIER_C:103);
 C-03 (deduction-only → format_spec §6 tier scoring language);
 C-21/C-22 (tense-marking only — the underlying decisions are not in dispute);
@@ -643,6 +655,9 @@ Mechanical only. No contradiction was resolved by choosing a side.
 - **C-11.** Clock marked SETTLED (60s + 120s); mechanism marked OPEN with both candidates
   stated. TIER_B's 90-second window marked UNCORROBORATED.
 
-**Deliberately not touched:** C-02 and C-20 (code, handed to the platform session — marked in
-DATA_MODEL and TIER_C but not fixed); `frontend/`, `backend/`, `fuzz-runner/`,
-`FUZZ_RUNNER_SPEC.md`.
+**Deliberately not touched:** C-20 (the grace period — code vs four documents, still a call);
+`frontend/`, `backend/`, `fuzz-runner/`, `FUZZ_RUNNER_SPEC.md`.
+
+**Closed after this audit (2026-07-30, platform session):** **C-02** — DATA_MODEL's three fuzz
+entities rewritten in deduction-only terms while they were still prose. See the C-02 entry
+above for what was left standing and why.

@@ -12,6 +12,20 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## Deduction-only reaches the fuzz schema at last (2026-07-30, DOC_STATE C-02)
+
+DATA_MODEL's three fuzz entities were still written in the award-points model retired a month earlier. Now they are not.
+
+- **`FuzzTest`** — `points_defended` / `points_gracefully_handled` / `points_broken` collapse into one `penalty : int (>= 0)`. There is no positive award to record, and the value is added to a score where higher is worse, so it is never negative.
+- **`FuzzResult`** — `points_contributed` becomes `penalty_contributed : int (>= 0)`, and the four-value outcome enum becomes three. `defended` and `gracefully_handled` both meant "the probe did not fire" and were indistinguishable under deduction-only; what survives is `clean` versus `not_applicable`, which score identically but are counted apart because format_spec §4.2's Clean Rate and Attack Surface Coverage need them separate.
+- **`PlayerFuzzInvocation`** — `score_delta` (signed) becomes `slop_added : int (>= 0)`, and the running total is documented as sorting **ascending**, since lower slop is better.
+
+**Timing was the whole point.** No model exists for any of the three — `backend/rounds/models.py` has `Round`, `Submission`, `Score` only — so this was a prose edit. Once Stage 5 builds models from this schema it becomes a migration, and Stage 5 is already underway in the fuzzer session.
+
+**Left standing on purpose**, each annotated in place: `FuzzResult.override_by_judge` and `override_reason` (whether the tester judge gets a per-probe override is DECISIONS_OWED **D-18**, unresolved and not a wording call); `FuzzTest.bundle`, which lists two values where the runner ships three; and `intent_dependence` / `applicability_notes`, which presuppose per-test intent classification that FUZZ_RUNNER_SPEC says the schema should not carry. None is a points-model problem and each needs a decision or another session's file.
+
+---
+
 ## Substrate rules: buzzer enforcement, budget reframe, and the wrapper carve-out (July 2026, Stage 4 design)
 
 Three changes to the substrate rules, formalized while scoping Stage 4.
@@ -33,7 +47,9 @@ The resilience score was reworked and renamed in two composed changes, formalize
 
 Preserved deliberately: the **"Most Resilient"** award title (aspirational quality vs descriptive measurement), the **"fuzz catalog" / "fuzz runner"** names (fuzzing is the method, slop is the measurement), and **"resilient"** as a quality adjective.
 
-Cascaded across format_spec.md (§4, canonical), LEAGUE_OPERATIONS.md, the tier ops docs, FUZZ_RUNNER_SPEC.md, IDEAS_FOR_LATER.md, BUILD_ROADMAP.md, DATA_MODEL.md, ARCHITECTURE.md, claude.md, and the landing copy. **No platform migration:** the shipped Stage-3 scoring uses a judge-entered `engineering_score` stand-in (higher-is-better), intentionally left as-is; the real deduction-only `slop_score` field is born when the Stage-5 runner is built.
+Cascaded across format_spec.md (§4, canonical), LEAGUE_OPERATIONS.md, the tier ops docs, FUZZ_RUNNER_SPEC.md, IDEAS_FOR_LATER.md, BUILD_ROADMAP.md, ARCHITECTURE.md, claude.md, and the landing copy. **No platform migration:** the shipped Stage-3 scoring uses a judge-entered `engineering_score` stand-in (higher-is-better), intentionally left as-is; the real deduction-only `slop_score` field is born when the Stage-5 runner is built.
+
+> **Correction, 2026-07-30.** This entry originally listed DATA_MODEL.md among the documents the change cascaded to. **It did not.** The 2026-07-28 documentation audit (DOC_STATE.md, contradiction **C-02**) found all three fuzz entities still carrying the retired award-points model a month later: `FuzzTest.points_defended` (positive) / `points_gracefully_handled` / `points_broken` (negative), `FuzzResult.outcome` as a four-value enum with `points_contributed` "can be positive, zero, or negative", and `PlayerFuzzInvocation.score_delta` signed. Fixed on 2026-07-30, while all three were still prose and no model had been built from them — see the entry below.
 
 ---
 
