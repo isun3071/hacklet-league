@@ -54,6 +54,18 @@ _ABSOLUTE = {"access-control", "backend-exposure", "secrets-exposure", "sql-inje
              "filter-injection",   # CWE-943: the caller controls what the data query matches
              "command-injection", "template-injection", "path-traversal", "file-upload", "ssrf", "xxe",
              "data-exposure"}
+# The `exposure` category is MIXED: sec-exposure-006 serves a source map (disclosure, not exploitable), but
+# 001/002/003/004/007 serve live secret files (.env, .git, config/backups, registry + CI creds) — a leaked key
+# is the canonical "never percentile a catastrophe" case. The category cannot gate without also gating 006, so
+# these five gate by probe id.
+_ABSOLUTE_PROBES = {"sec-exposure-001", "sec-exposure-002", "sec-exposure-003", "sec-exposure-004",
+                    "sec-exposure-007"}
+
+
+def _is_gate(finding: dict) -> bool:
+    """A fired finding meaning 'exploitable now', reported whatever the rank: an absolute-gate category, or a
+    named secret-file exposure inside the mixed `exposure` category."""
+    return finding.get("category") in _ABSOLUTE or finding.get("probe_id") in _ABSOLUTE_PROBES
 
 
 def _axis_of(probe_id: str) -> str | None:
@@ -134,8 +146,8 @@ def _slop_potential(record: dict, idx: dict) -> int:
 
 
 def _has_catastrophe(record: dict) -> bool:
-    """Any fired finding in an absolute-gate class — the same set that drives certifiability."""
-    return any(f.get("category") in _ABSOLUTE for f in record.get("findings") or [])
+    """Any fired finding that gates absolutely — the same set that drives certifiability."""
+    return any(_is_gate(f) for f in record.get("findings") or [])
 
 
 def _categories_applied(record: dict) -> int:
@@ -337,8 +349,7 @@ def rank(curve: dict, score, record: dict | None = None) -> dict:
             p = _percentile_of(part, a)
             out["axes"][axis] = {"applicable": True, "slop": a, "percentile": p,
                                  "cleaner_than_pct": 100 - p, "band": _band(p)}
-        gates = sorted({f["category"] for f in record.get("findings") or []
-                        if f.get("category") in _ABSOLUTE})
+        gates = sorted({f.get("category") for f in record.get("findings") or [] if _is_gate(f)})
         if gates:
             out["absolute_gates"] = gates      # reported REGARDLESS of rank; a percentile never excuses these
         # The band stays a factual statement about where this app sits among its peers. `certifiable` is the

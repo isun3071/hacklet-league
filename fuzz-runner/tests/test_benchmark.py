@@ -153,3 +153,15 @@ def test_a_catastrophe_ranks_below_a_clean_app_at_the_very_same_score():
     leaky = _app(p50, findings=[{"probe_id": "sec-sqli-004", "category": "sql-injection"}])
     assert rank(curve, p50, leaky)["percentile"] >= rank(curve, p50, clean)["percentile"]
     assert "absolute_gates" in rank(curve, p50, leaky)      # and it is still flagged, whatever the rank
+
+
+def test_a_served_secret_file_gates_but_a_source_map_does_not():
+    # the `exposure` category is mixed: a served .env/.git/backup is a catastrophe, a source map is not, so the
+    # severe ones gate by probe id while exposure-006 (same category) stays out.
+    curve = build(_corpus(), "t", "s")
+    env = _app(12, findings=[{"probe_id": "sec-exposure-001", "category": "exposure"}])   # served .env
+    git = _app(12, findings=[{"probe_id": "sec-exposure-003", "category": "exposure"}])   # served .git
+    smap = _app(12, findings=[{"probe_id": "sec-exposure-006", "category": "exposure"}])  # source map
+    assert rank(curve, 12, env)["absolute_gates"] == ["exposure"]
+    assert rank(curve, 12, git)["absolute_gates"] == ["exposure"]
+    assert "absolute_gates" not in rank(curve, 12, smap)     # same category, not exploitable, not a gate
