@@ -93,16 +93,34 @@ a { color: var(--accent); text-decoration: none; }
 }
 .readout { color: var(--accent); font-size: clamp(0.85rem, 1.8vw, 1rem); margin: 0 0 1.3rem; letter-spacing: 0.02em; }
 .sub { color: var(--muted); font-size: clamp(0.95rem, 1.8vw, 1.1rem); max-width: 60ch; margin: 0 0 1.8rem; }
+
+/* Hero lines: ONE size and weight for all of them. The hierarchy is carried by brightness
+   (accent > text > muted), never by type size. h1 is reset to match the paragraphs. */
+.hero-line {
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  line-height: 1.55;
+  font-weight: 400;
+  letter-spacing: 0;
+  max-width: 64ch;
+  margin: 0 0 0.35rem;
+}
+.hero-tagline { color: var(--accent); margin-bottom: 1.6rem; }
+.hero-descriptor { color: var(--text); }
+.hero-pipeline { color: var(--text); margin-bottom: 1.6rem; }
+.hero-body { color: var(--muted); margin-bottom: 1.8rem; }
+/* "24 hours minutes" — the struck word sits back so the correction reads at a glance. */
+.struck { color: var(--muted); opacity: 0.65; text-decoration-thickness: 1px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2rem; }
 
 /* Hero: staggered "boot print" reveal — each line prints in just after the last. */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .hero > * { opacity: 0; animation: rise 0.5s ease-out forwards; }
 .hero > .prompt { animation-delay: 0.05s; }
-.hero > .headline { animation-delay: 0.28s; }
-.hero > .readout { animation-delay: 0.48s; }
-.hero > .sub { animation-delay: 0.64s; }
-.hero > .actions { animation-delay: 0.82s; }
+.hero > .headline, .hero > .hero-tagline { animation-delay: 0.28s; }
+.hero > .readout, .hero > .hero-descriptor { animation-delay: 0.48s; }
+.hero > .hero-pipeline { animation-delay: 0.6s; }
+.hero > .sub, .hero > .hero-body { animation-delay: 0.72s; }
+.hero > .actions { animation-delay: 0.9s; }
 @media (prefers-reduced-motion: reduce) {
   .hero > * { opacity: 1; transform: none; animation: none; }
 }

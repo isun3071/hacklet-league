@@ -4,8 +4,10 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "HackLet League — competitive AI-assisted defensive coding",
-  description: "24 minutes of competitive vibecoding. no slop survives.",
+  // One descriptor for the whole site. If this changes, change it here and nowhere else —
+  // the description reuses the same string rather than inventing a second one.
+  title: "HackLet League — a rapid app building league with automated stress testing",
+  description: "a rapid app building league with automated stress testing",
 };
 
 export default function RootLayout({

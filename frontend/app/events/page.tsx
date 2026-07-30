@@ -30,9 +30,7 @@ export default async function EventsPage() {
       {failed ? (
         <p className="note">// events directory temporarily unavailable.</p>
       ) : events.length === 0 ? (
-        <p className="note">
-          // no events scheduled yet. <Link href="/chapters">browse chapters &rarr;</Link>
-        </p>
+        <p className="note">// nothing here yet. first event fall 2026.</p>
       ) : (
         <>
           <p className="subtitle">

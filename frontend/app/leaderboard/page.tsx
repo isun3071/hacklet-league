@@ -20,11 +20,16 @@ export default async function LeaderboardPage() {
         credentialing weight. Chapter boards live on each chapter&apos;s page.
       </p>
 
-      <LeaderboardTable rows={rows} />
-
-      <p className="note">
-        <Link href="/chapters">browse chapters &rarr;</Link>
-      </p>
+      {rows.length === 0 ? (
+        <p className="note">// nothing here yet. first event fall 2026.</p>
+      ) : (
+        <>
+          <LeaderboardTable rows={rows} />
+          <p className="note">
+            <Link href="/chapters">browse chapters &rarr;</Link>
+          </p>
+        </>
+      )}
     </main>
   );
 }

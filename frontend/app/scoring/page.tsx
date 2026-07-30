@@ -90,8 +90,7 @@ export default function ScoringPage() {
       <p className="prompt">/scoring</p>
       <h1 className="page-title"># how scoring works</h1>
       <p className="subtitle">
-        // the fuzz is what separates hacklets from slop. here is exactly how we measure it, so
-        nothing is a surprise on competition day.
+        // here is exactly how we measure it, so nothing is a surprise on competition day.
       </p>
 
       <h2 className="h2"># the slop score</h2>

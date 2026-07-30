@@ -27,13 +27,17 @@ export default function Home() {
       {/* SECTION 1: HERO */}
       <section className="container hero">
         <FuzzWave />
-        <h1 className="headline">
-          24 minutes of competitive vibecoding. no slop survives.
-        </h1>
-        <p className="readout">build with AI • defend it • pitch it • under pressure</p>
-        <p className="sub">
-          We took a hackathon and messed up the units. Now we only get 24 minutes to build.
-          AI included. The winners can steer it and avoid catastrophic bugs on stage.
+        {/* One type size for all four lines. Hierarchy is brightness only: accent > text >
+            muted. Do not reintroduce a size jump here. */}
+        <h1 className="hero-line hero-tagline">no slop survives.</h1>
+        <p className="hero-line hero-descriptor">
+          a rapid app building league with automated stress testing
+        </p>
+        <p className="hero-line hero-pipeline">build with AI | defend it | pitch it</p>
+        <p className="hero-line hero-body">
+          We took a hackathon and messed up the units. You have 24{" "}
+          <s className="struck">hours</s> minutes to build, and then everything you built
+          gets put to the test.
         </p>
       </section>
 

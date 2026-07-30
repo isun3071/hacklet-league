@@ -23,9 +23,7 @@ export default async function ChaptersPage() {
       {failed ? (
         <p className="note">// directory temporarily unavailable.</p>
       ) : chapters.length === 0 ? (
-        <p className="note">
-          // no chapters listed yet. <Link href="/#signup">get notified &rarr;</Link>
-        </p>
+        <p className="note">// nothing here yet. first event fall 2026.</p>
       ) : (
         <>
           <p className="subtitle">
