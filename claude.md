@@ -13,8 +13,10 @@ document describing a mechanism is not evidence the mechanism exists.
 Four things to know before you touch anything:
 
 1. **Check the stage.** BUILD_ROADMAP.md's *Status & Deviations* block is the current truth.
-   As of 2026-07-28: Stages 0-3 shipped, **Stage 4 (AI substrate) is active and unstarted**,
-   Stage 5 (fuzz runner) is proceeding out of order as a standalone project in `fuzz-runner/`.
+   As of 2026-07-31: Stages 0-3 shipped, **Stage 4 (AI substrate) is active, unstarted, and now
+   unblocked** — its design questions were answered on 07-31 (format_spec §5.5). Stage 5 (fuzz
+   runner) is proceeding out of order as a standalone project in `fuzz-runner/`, close to done
+   but **not yet wired to the platform**.
 2. **Check the status marker.** Every section of every structural doc now carries one:
    **BUILT** (with a file:line citation), **DESIGNED**, **MIXED**, or **SUPERSEDED**. Timing
    blocks carry **ILLUSTRATIVE**. Absent a marker, assume nothing.
@@ -209,7 +211,7 @@ exists and is the Next.js default.
 - **Components**: functional components with hooks, no class components
 - **Naming**: PascalCase for components, camelCase for functions/variables, kebab-case for files
 
-Two corrections to what this section used to claim. **Prettier is not installed** — eslint (`eslint-config-next`) is the only frontend tooling, and `pnpm lint` is the only check CI runs on the frontend besides `build`. And **no state library is installed**: not TanStack Query, not SWR, not Zustand. Server data is fetched through `lib/api.ts` (server components) or `lib/http.ts` (browser) and held in component state; polling lives in the component that needs it. Add a state library only if the need is real, and say so in the PR.
+Two corrections to what this section used to claim. **Prettier is not installed** — eslint (`eslint-config-next`) is the only frontend tooling, and **CI does not run it**: the frontend job is `pnpm install --frozen-lockfile` then `pnpm build`, nothing else (`.github/workflows/ci.yml`). Lint is a local convenience, not a gate, which is why `main` currently carries ~70 eslint errors (mostly `react/jsx-no-comment-textnodes`, triggered by the site's `// ` copy convention). And **no state library is installed**: not TanStack Query, not SWR, not Zustand. Server data is fetched through `lib/api.ts` (server components) or `lib/http.ts` (browser) and held in component state; polling lives in the component that needs it. Add a state library only if the need is real, and say so in the PR.
 
 ### Git Workflow
 
@@ -222,7 +224,7 @@ Two corrections to what this section used to claim. **Prettier is not installed*
 ### Testing
 
 - **Backend**: pytest + pytest-django + factory-boy. Unit tests for business logic, integration tests for API endpoints. Tests live in each app's `tests.py`. **Run them locally on SQLite via `uv` before every backend commit** — the dev box has no Docker or Postgres, and CI runs the same suite against Postgres.
-- **Frontend**: **no test runner is installed.** vitest and playwright are aspirational; the only frontend CI check is `pnpm lint` plus the production build. Do not write frontend tests against a runner that is not there — add the runner first, in its own commit.
+- **Frontend**: **no test runner is installed.** vitest and playwright are aspirational, and the only frontend CI check is **`pnpm build`** — not lint, not tests. Do not write frontend tests against a runner that is not there; add the runner first, in its own commit, and wire it into `ci.yml` in the same one or it will not run.
 - **Coverage**: not a percentage target. Test what matters: scoring math, permissions, state transitions, and (when it exists) AI proxy budget enforcement.
 
 ## Common Pitfalls
