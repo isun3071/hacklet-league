@@ -50,7 +50,9 @@ Four permanent judge roles, each with its own rubric, each scoring 0-100, weight
 
 ## Edit 2 — format_spec §4.2 / §4.x (define the four judge roles + the intent line)
 
-The intent-dependent-vs-independent boundary is already stated (the fuzzer owns intent-independent universals; the tester judge owns intent-dependent correctness). **Keep that.** Add the full four-role definition and make explicit that the tester judge both *extends* the fuzzer (catches what it can't reach) and *checks* it (overrides intent-mismatched false positives). Add UI/UX/HCI, general, and nontech stakeholder as **permanent** roles with the ownership shown in the table above. Remove any "when the format absorbs it" hedging for the stakeholder role.
+The intent-dependent-vs-independent boundary is already stated (the fuzzer owns intent-independent universals; the tester judge owns intent-dependent correctness). **Keep that.** Add the full four-role definition and make explicit that the tester judge *extends* the fuzzer (catches what it can't reach). Add UI/UX/HCI, general, and nontech stakeholder as **permanent** roles with the ownership shown in the table above. Remove any "when the format absorbs it" hedging for the stakeholder role.
+
+> **SUPERSEDED 2026-07-31 — the override is gone.** This edit originally said the tester also *checks* the fuzzer by overriding intent-mismatched false positives. That was reversed: a human authority to void a finding makes the slop score a function of who judged it, breaking reproducibility, cross-panel comparability, intent-independence, and attribution-at-authoring-time. The tester may mark a finding **CONTESTED** instead, which changes no score and resolves into catalog changes going forward. See format_spec §4.2.
 
 ---
 
@@ -59,7 +61,7 @@ The intent-dependent-vs-independent boundary is already stated (the fuzzer owns 
 **Replace** the panel composition. Current text lists tester / UX designer / general as the panel and stakeholder as "(when format absorbs this role per IDEAS_FOR_LATER.md)". Change to:
 
 > **Judge panel composition (four permanent roles):**
-> - **Tester judge** — intent-dependent correctness; operates the portal showing automated-test applicability, with override for fuzzer false positives that are actually intended behavior. Weight 30.
+> - **Tester judge** — intent-dependent correctness; operates the portal showing automated-test applicability. No override (SUPERSEDED, see Edit 2); may mark a finding CONTESTED, which changes no score. Weight 30.
 > - **UI/UX/HCI judge** — the artifact's human-fitness and adoption gap. Weight 20.
 > - **General engineering judge** — engineering judgment revealed by the choices. Weight 20.
 > - **Nontech stakeholder judge** — translation and trust to a non-verifier; per-format posture. Weight 30.

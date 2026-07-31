@@ -13,7 +13,7 @@
 
 ## 1. What HackLet League Is
 
-> **Status: DESIGNED** — the format's identity. The 3-format matrix is aspirational: `Event.format` ships only `vibe` and `unslop`, so **Underspecified cannot currently be recorded** (see DOC_STATE C-14).
+> **Status: DESIGNED** — the format's identity. `Event.format` accepts all three values as of 2026-07-31, so the matrix is now recordable (DOC_STATE C-14 closed). Recordable is not the same as run: only **Vibe** has ever operated, and Unslop and Underspecified are introduced in that order as each predecessor stabilises.
 
 **In one sentence: hackathon, but minutes instead of hours, with a cheering audience.**
 
@@ -94,7 +94,9 @@ Specific timing per player (3.5 minutes at Tier A's standard 8-player rounds) an
 
 In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-judged evaluation of PITCH.md + README + fuzz results (which also lets the MVR scale to large cohorts human judging couldn't). See TIER_C_OPERATIONS.md §8 for LLM judging architecture.
 
-**Deliberation and Voting Phase**: judges enter explicit deliberation. They compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, score across all dimensions, finalize categorical award nominees and Best Overall composite rankings. Concurrent with judge deliberation (when audience is present), audience votes for People's Hacklet through the player portal.
+**Deliberation and Voting Phase**: judges enter explicit deliberation. All four sit together — the nontech stakeholder is in the room with the three technical judges — but the stakeholder scores on a **separate rubric**, because translation and trust to a non-verifier is a different measurement from technical defense, and running it through a technical lens loses the thing that role exists to catch. Judges compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, and score across their own rubrics.
+
+**Deliberation produces scores, not winners.** Most Resilient, the communication award, and Best Overall are all computed from the scores afterwards (§4.3, §4.4). No panel votes on an outcome. This matters behaviourally: a judge who believes they are deliberating toward a verdict argues differently from one who knows they are deliberating toward their own number. Concurrent with judge deliberation (when audience is present), audience votes for People's Hacklet through the player portal.
 
 **Award Reveal and Closing Phase**: ceremonial reveal of categorical awards followed by Best Overall reveal. At Tier A with broadcast production, the 14-min window allocates time for theatrical ceremony with audience reaction and broadcast cuts. At Tier B and Tier C, compressed ceremony fits the operational profile (~7 min at Tier C MVR).
 
@@ -102,15 +104,17 @@ In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-j
 
 ### 3.2 Round Sizing
 
-> **Status: DESIGNED** — no player cap is enforced anywhere; `Round.player_count` is a free integer. Sources disagree on whether the cap is a format or a broadcast constraint (DOC_STATE C-08).
+> **Status: DESIGNED** — no player cap is enforced anywhere; `Round.player_count` is a free integer. **Revised 2026-07-31**: the old "12 is the structural maximum" claim is retired, and DOC_STATE C-08 is resolved in favour of the broadcast reading.
 
-Standard round size is **8 players** across all tiers. This is the format's foundational unit — the size most operational templates are designed around, the size that fits broadcast overlays at Tier A, the size that balances judge cognitive load with competitive variety.
+**The unit that has a size limit is the panel, not the event.** A panel is four judges and the players they hear, and its ceiling comes from one place: pitch and cross-examination run in sequence, so the phase grows linearly with the number of players a single panel must sit through. **8 players per panel** is standard, **6-12** is the workable range, and beyond that the phase stops fitting a sensible clock.
 
-**6-12 players** is the acceptable operational range; **12 is the structural maximum** because pitch + cross-examination timing breaks beyond 12 players (28 min for 8 players at 3.5 min each scales to 42 min for 12 players, pushing the format clock substantially).
+**An event is not bounded by that.** Panels run **concurrently**, with players assigned across them, so a larger event gets *wider* rather than *longer*. Panel count is not capped by the format. What it costs is judges: four permanent roles per panel, so 24 players is three panels and twelve judges. That is the real constraint on event size, and it is an operations question for the chapter rather than a rule of the format.
 
-**At large-cohort scale**, the Tier C MVR relaxes the 8-player limit because LLM judging scales to dozens of submissions in parallel — large-cohort MVR rounds run 30-100+ players (see TIER_C_OPERATIONS.md §5). Tier A and Tier B preserve the 8-12 player range because they use human judging that doesn't scale beyond that range.
+Queue depth is the thing to watch. At a depth of 8, the last player in a panel's queue has waited through seven pitches — roughly 42 minutes of preparation against the first player's 18. That gap is a real and deliberate inequality, and it widens with depth, which is why panels get added rather than deepened.
 
-The 8-player limit at Tier A specifically is tied to broadcast and audience purposes — 8 streams on broadcast overlay manageable, 8 player faces visible to audience, dramatic ceremony works at this scale. Lower tiers without broadcast have more flexibility on round size within operational constraints.
+**The 8-player cap is a broadcast constraint, and it binds only where there are cameras.** A **televised Tier A** round caps at **8 players**: eight streams composite onto an overlay, eight faces stay visible to the audience, and the award ceremony keeps its rhythm. That is a production limit, not a scoring one. An **untelevised Tier A** event has **no maximum** — it adds panels and judges to match its field. Tier B is the same. The **Tier C MVR** scales furthest, to 30-100+ players, because LLM judging runs in parallel and has no queue at all (TIER_C_OPERATIONS.md §5).
+
+Nothing about grading changes with size. The catalog runs identically per submission no matter how many panels the event needs.
 
 ### 3.3 Broadcast Considerations
 
@@ -203,7 +207,36 @@ Speed is also measured as **boolean abandonment-threshold gates** in the perform
 
 Future format iterations may add structured intent-dependent QA testing as the format matures and operational experience reveals where this measurement value is needed. The initial catalog focuses on universal properties that produce honest measurement of engineering quality for the format's actual scope: applications built in 24 minutes by individual engineers directing AI assistance.
 
-The division is architectural, not merely sequencing. The fuzz catalog is the **intent-independent** axis — properties true regardless of what the app was meant to do (it crashed, it leaked a secret, it shipped no CSP), measured objectively and deterministically. **Intent-dependent** properties — logical correctness, business-rule fidelity, whether the build does what its brief actually asked — cannot be reduced to intent-free predicates and are the domain of a **human tester judge** who, knowing the round's intent, exercises and scores them. The two axes stay separate by design: folding subjective intent-judgment into the objective slop score would forfeit the determinism and defensibility that make the slop score worth having. Logical errors are the canonical intent-dependent case — hard to test universally precisely because they *are* intent-dependent — so they sit with the judge, not the runner. The tester judge both *extends* the fuzzer (reaching the intent-dependent correctness it cannot) and *checks* it (overriding an intent-mismatched false positive — a probe that fired on behavior that is deliberate and correct for this app). The tester is one of **four permanent judge roles** whose weighted rubrics compose the Communication axis (§4.1); the other three — UI/UX/HCI, general engineering, and nontech stakeholder — grade the human-facing and trust dimensions the fuzzer never touches.
+The division is architectural, not merely sequencing. The fuzz catalog is the **intent-independent** axis — properties true regardless of what the app was meant to do (it crashed, it leaked a secret, it shipped no CSP), measured objectively and deterministically. **Intent-dependent** properties — logical correctness, business-rule fidelity, whether the build does what its brief actually asked — cannot be reduced to intent-free predicates and are the domain of a **human tester judge** who, knowing the round's intent, exercises and scores them. The two axes stay separate by design: folding subjective intent-judgment into the objective slop score would forfeit the determinism and defensibility that make the slop score worth having. Logical errors are the canonical intent-dependent case — hard to test universally precisely because they *are* intent-dependent — so they sit with the judge, not the runner. The tester judge *extends* the fuzzer, reaching the intent-dependent correctness it cannot. The tester is one of **four permanent judge roles** whose weighted rubrics compose the Communication axis (§4.1); the other three — UI/UX/HCI, general engineering, and nontech stakeholder — grade the human-facing and trust dimensions the fuzzer never touches.
+
+**No judge can void a finding.** The tester judge has **no override** on the slop score. A human authority to strike a probe result would make the slop score a function of *who judged it*, and that breaks four properties the score is built on at once: **reproducibility** (the same submission must score the same twice, which is what lets a whole discovery profile be cached and replayed deterministically), **comparability** (a slop score from one panel in one city has to mean what a slop score from another panel in another city means), **intent-independence** (the authoring invariant that a probe's correct outcome does not depend on what the app was for — an override is exactly the intent judgment the invariant exists to keep out), and **attribution at authoring time** (a probe's penalty is decided when the probe is written and reviewed, not at the scoring table). If a probe produces intent-dependent false positives, the probe is badly authored, and the catalog is where that gets fixed.
+
+What the tester judge has instead is the **contest**. They may mark a finding CONTESTED, which records the probe, the submission, the judge, the timestamp, and a reason. It changes no score. **The round result is final** — HackLet reveals live, so there is no window between scoring and the ceremony in which a result could be revised, and there is no retroactive amendment of a completed round. Contests are reviewed between events and resolve into catalog changes going *forward*: a contest that turns out to be right improves the probe for everyone who competes after it, which is the durable fix rather than the local one.
+
+This is not a demotion of the role, because the tester was never the fuzzer's editor. **The fuzzer cannot read code.** It is a black-box HTTP grader: it sends requests to a running app and scores what comes back, and it has no idea what the source says, what the app was for, or whether a behaviour was deliberate. (The one exception proves the rule — a static scan of the submission for hardcoded secrets, which exists precisely because that class never reaches the wire. It pattern-matches files; it does not comprehend them.)
+
+That is the gap the tester fills. They *can* read the code, so they can see intent-dependent correctness the fuzzer structurally cannot reach, and they can ask a question in cross-examination that the player cannot bluff past. The tester **extends** the fuzzer into territory it cannot enter; it was never the tester's job to correct it inside its own territory.
+
+So the tester's influence on the result is real but it runs through their **own score**: weight 30 of the 100-point Communication axis (§4.1). It does not run through the slop axis, which is produced entirely by the catalog. Two axes, two sources, no crossing. The fuzzer tests the artifact; the humans test the reasoning.
+
+#### Living with false positives and false negatives
+
+The catalog will be wrong sometimes. Removing the override does not pretend otherwise; it moves where the error gets fixed. **The score stands as computed, and the correction lands in the catalog for everyone who competes after.** That is a deliberate trade of local accuracy for reproducibility and comparability, and it is only defensible on the terms below.
+
+**The two error classes are not symmetric, and only one of them is visible at an event.**
+
+A **false positive** is loud. It fires on a specific submission, the player knows their app does not do that, and the tester judge has the code access to confirm it. This is what the contest is for, and contest volume per probe is the signal: one contest is noise, the same probe contested across four events is a broken probe.
+
+A **false negative** is silent. Nobody disputes a score that came out too well. There is no contest, no complaint, and no trace at an event. **Contests structurally cannot surface false negatives**, so a quality process built only on contests fixes precision while recall quietly rots. Recall has to be measured off-event, against reference applications with known-planted flaws — anything a deliberately vulnerable reference does not score is a miss, by construction — on a schedule that does not depend on any event having happened.
+
+**Four rules keep the trade honest.**
+
+1. **The unit of correction is the catalog version, not the round.** Contests accumulate, are reviewed between events, and land as a versioned catalog change. Credentials cite the version, so "ranked 4th of 47 on the Q3 2026 catalog" stays true after Q4 repairs a probe.
+2. **Never recompute a finished round.** A quarantined or repriced probe applies to the next version forward. Retroactive correction would make a score depend on when you look at it, which is precisely the property removing the override exists to protect.
+3. **Penalty weight is bounded by oracle confidence.** A heuristic oracle may not carry a catastrophic penalty. The issued-key exposure probe is the model: an exact match against a string the league itself minted, zero false positives by construction, which is *why* it can sit at the top of the scale. A pattern-matching scan for secret-shaped strings measures the same class far less certainly and must be priced far lower. Score the probe's confidence first, then let it bound the penalty.
+4. **Publish the measured error rate.** This is the price of finality. A league that tells players "the score stands even when it is wrong" owes them a number for how often that happens, and a description of how the number was obtained. Stated tolerance is a defensible position; silence is not.
+
+**What the player is not left with is nothing.** A contested finding becomes cross-examination material: the player explains why the flagged behaviour was deliberate and correct, and doing that well earns on the Communication axis, which is exactly the axis where human judgment is allowed to operate. The aggregation dampers help too — a variant group fires once, and repeated instances within a category carry diminishing marginal penalty — so a false positive that clusters does not multiply into a ruined score.
 
 The README remains load-bearing for cross-examination and pitch context. Players describe their app's intent for judge interpretation during clickaround, but the automated test catalog does not depend on intent classifications for its initial implementation.
 
@@ -234,6 +267,10 @@ Per-round categorical awards are kept deliberately small to preserve credentiali
 - **Most Resilient**: Lowest raw Slop Score. The award title stays aspirational (it credentials the *quality* of resilience demonstrated) while the underlying measurement is descriptive (slop score 0 is what earned it) — the same way golf names a "Champion," not a "Lowest Score Holder."
 - **Best Communicator**: Highest raw Communication Score (the weighted four-rubric composite per §4.1/§4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination. *(Award name flagged for a possible rename — credit defense-under-pressure over oratory — but unsettled; left as-is here.)*
 - **People's Hacklet**: Audience vote (separate from judge evaluation entirely)
+
+**Awards are scoped to the event that produced them; leaderboards are scoped to the tier.** Every award above is decided against the field that actually competed in that event, and against nothing else. A player can take Most Resilient at a chapter event with a slop score of 20 while the global board's leader sits at 0, and both facts are correct: the award says *best in that room*, the leaderboard says *best across the tier*. They are answering different questions and are not required to agree.
+
+This follows from concurrent panels (§3.2) as much as from geography. Two panels at one event, or two events in two cities, are judged by different people, and the league is multi-city with disjoint judge corps by construction — so judge variance is a property of the institution, not something concurrent panels introduce. **There is no cross-panel score anchoring and no severity correction.** What makes a Communication score portable between panels is that the four rubrics are role-siloed and the same everywhere, not that panels are calibrated against each other. What makes a slop score portable is that no human can touch it (§4.2).
 
 This produces **3 per-round categorical awards plus Best Overall** for each round, regardless of event tier or structure. Players may win multiple awards (e.g., a dominant performer might win Most Resilient + Best Overall in the same round). A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
 
@@ -541,7 +578,7 @@ Events occur throughout the season at multiple scales:
 - **Regional events**: Cross-chapter events with broader participation, quarterly cadence, typically multi-round day events (3-5 rounds across 8-10 hours) to justify travel for visiting players.
 - **Championship events**: Season-culminating events with the strongest field, typically multi-day with multiple rounds per day.
 
-At **human-judged tiers (A/B)**, every round operates at **8 players standard**, **6-12 acceptable**, **12 structural maximum** — beyond 8 per-player narrative depth degrades and judge time tightens; beyond 12 broadcast quality and human-judging throughput break. Events with more demand add rounds rather than enlarge them. **Large-cohort MVR rounds relax this cap to 30-100+**, because LLM-judged written evaluation scales where human judging can't (see §3.2 and TIER_C_OPERATIONS.md §5).
+At **human-judged tiers (A/B)**, every **panel** operates at **8 players standard**, **6-12 acceptable** — beyond 8 per-player narrative depth degrades and judge time tightens. Events with more demand add **panels running concurrently**, not bigger panels, and pay for them in judges (four permanent roles each). The only hard event ceiling is **televised Tier A, capped at 8**, which is a camera constraint; untelevised Tier A and all of Tier B have none. **Large-cohort MVR rounds** run 30-100+ because LLM-judged written evaluation has no queue at all (see §3.2 and TIER_C_OPERATIONS.md §5).
 
 **Round size targets** (the human-judged Tier A/B profile; the full phase-by-phase breakdown lives in TIER_A_OPERATIONS.md §3, and the Tier C MVR / large-cohort profiles in TIER_C_OPERATIONS.md §4–5):
 

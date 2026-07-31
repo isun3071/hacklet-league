@@ -121,7 +121,7 @@ At T+29:00, code freeze takes effect simultaneously. The network cuts for code c
 
 *Code submission and central fuzzing*: at freeze each workstation copies its final code state to league infrastructure via SCP. League infrastructure deploys each submission in an ephemeral container with assigned port, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; local fuzz during build was intelligence-gathering only.
 
-*Judges evaluate submissions*: judges interact with each submission live in their portals while the fuzz runner completes work. The panel includes four permanent specialized roles (tester judge with override capability, UI/UX/HCI judge, general engineering judge, and nontech stakeholder judge). Because the four roles are permanent and specialized, **every judge scores every player** — the panel does not divide the field. Each judge therefore covers all 8 submissions within the 18-minute window: **about 2.25 minutes per submission**. Fuzz runner output gives quick technical baseline; clickaround surfaces what automation can't measure. *(This figure previously read "~9 minutes per submission," which is 18 × 4 ÷ 8 — the number obtained by treating the four judges as splitting the field two submissions apiece, which the permanent-role structure forbids. The phase duration is unchanged.)*
+*Judges evaluate submissions*: judges interact with each submission live in their portals while the fuzz runner completes work. The panel includes four permanent specialized roles (tester, UI/UX/HCI, general engineering, and nontech stakeholder). The tester judge has **no override** on the slop score and may only mark a finding CONTESTED, which changes nothing about the result (format_spec.md §4.2). Because the four roles are permanent and specialized, **every judge scores every player** — the panel does not divide the field. Each judge therefore covers all 8 submissions within the 18-minute window: **about 2.25 minutes per submission**. Fuzz runner output gives quick technical baseline; clickaround surfaces what automation can't measure. *(This figure previously read "~9 minutes per submission," which is 18 × 4 ÷ 8 — the number obtained by treating the four judges as splitting the field two submissions apiece, which the permanent-role structure forbids. The phase duration is unchanged.)*
 
 *Players prepare pitches*: code files become read-only at freeze; players retain access to submitted code, README, and the chat-window AI interface for pitch preparation. Agent-interface edit capabilities are disabled at freeze; chat-window AI assistance remains for pitch planning and anticipating cross-examination. Players who tokenmaxxed during build have no AI assistance for prep, because build and preparation draw on one shared pool. This is the strategic tradeoff, and it is intended. Players also author **PITCH.md** as part of pitch preparation, though at Tier A the live pitch + cross-ex is the primary credentialing dimension (see §8).
 
@@ -134,7 +134,9 @@ At 3.5 minutes per player × 8 players = 28 minutes. Same-archetype submissions 
 
 The live performance dimension of communication is the format's most distinctive credentialing element. Cross-examination tests defense under live questioning that LLM judges cannot replicate. This is why Tier A preserves live pitch + cross-ex while the Tier C MVR substitutes LLM-judged written evaluation (see TIER_C_OPERATIONS.md §8).
 
-**Deliberation + audience voting (18 min)**: judges enter explicit deliberation. They compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, read README content more carefully, score across all dimensions, finalize categorical award nominees and Best Overall composite rankings.
+**Deliberation + audience voting (18 min)**: all four judges deliberate together, the nontech stakeholder included, but the stakeholder scores on a **separate rubric** from the three technical roles (format_spec.md §3.1). They compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, read README content more carefully, and score across their own rubrics.
+
+**Deliberation produces scores, not winners.** Most Resilient, Best Communicator and Best Overall are computed from those scores afterwards; the panel does not vote on an outcome. Awards are decided against this event's field only — a chapter-event winner is not competing against the global board (format_spec.md §4.4).
 
 Concurrent with judge deliberation, **audience votes** for People's Hacklet through the player portal on their own devices. Audience voting is open during the 18-min deliberation window; closes at T+93:00.
 
@@ -144,13 +146,17 @@ Concurrent with judge deliberation, **audience votes** for People's Hacklet thro
 
 ### Round Sizing
 
-**8 players standard**. The 8-player limit serves multiple Tier A operational concerns:
+**8 players per panel, standard**, with 6-12 the workable range. Per panel, that size is set by:
+- Judge cognitive load (4 judges × 8 submissions, at ~2.25 min each in the 18-min window — see §4)
+- Pitch + cross-ex timing (28 min at 3.5 min per player fits the phase clock)
 - Workstation capacity (8 controlled workstations is tractable infrastructure investment)
-- Audience visual coherence (8 streams on broadcast overlay manageable)
-- Judge cognitive load (4 judges × 8 submissions = bounded eval workload)
-- Pitch + cross-ex timing (28 min fits the format clock with 3.5 min per player)
 
-6-12 is the acceptable operational range; 12 is the structural maximum. Tier A events typically run at exactly 8 because broadcast production assumes it.
+**Whether the event has a maximum depends on one thing: cameras.**
+
+- **Televised Tier A caps at 8 players, full stop.** Eight streams composite onto a broadcast overlay, eight faces stay visible to the audience, and the ceremony keeps its rhythm. This is the broadcast sweet spot and it is a production constraint, not a scoring one.
+- **Untelevised Tier A has no maximum.** Add panels, run them concurrently, and staff each with its own four permanent roles. A 24-player untelevised Tier A event is three panels and twelve judges. The binding constraint is judge corps depth, which is the chapter's operations problem rather than a limit the format imposes.
+
+Grading is unaffected either way: the catalog runs per submission and does not know how many panels the event needed. See format_spec.md §3.2 for the panel-versus-event distinction and the queue-depth caveat.
 
 ## 5. Submission Mechanism
 
@@ -255,7 +261,7 @@ See §10 for multi-day tournament structure.
 Tier A uses **human judge corps** with calibrated panel roles. LLM judging is not used at Tier A because the live performance dimension (pitch + cross-ex) requires human evaluators capable of real-time question generation, body-language reading, follow-up probing.
 
 **Judge panel composition (four permanent roles):**
-- **Tester judge** — intent-dependent correctness; operates the portal showing automated-test applicability, with override for fuzzer false positives that are actually intended behavior. Weight 30.
+- **Tester judge** — intent-dependent correctness; operates the portal showing automated-test applicability. **No override**: a finding may be marked CONTESTED, which records probe, submission, judge, timestamp and reason, changes no score, and is reviewed between events into catalog changes going forward (format_spec.md §4.2). Weight 30, on the Communication axis, never on slop.
 - **UI/UX/HCI judge** — the artifact's human-fitness and adoption gap (legibility, actionable error states, workflow match). Weight 20.
 - **General engineering judge** — engineering judgment revealed by the choices: tradeoffs, scoping, which corners got cut, mostly recovered via cross-ex. Weight 20.
 - **Nontech stakeholder judge** — translation and trust to a non-verifier; per-format posture (CES attendee / anxious incumbent / the vague-brief author). Weight 30.

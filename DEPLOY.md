@@ -94,7 +94,7 @@ docker compose build && docker compose up -d
 
 - [ ] `https://hackletleague.com` loads the landing page
 - [ ] Valid padlock / no TLS warnings
-- [ ] Email signup works (after the Buttondown username is set in `landing/index.html`)
+- [ ] Email signup works (needs `BUTTONDOWN_API_KEY` in `.env`; the form posts to the backend proxy, never to Buttondown directly)
 - [ ] Loads fast on mobile + desktop
 
 > NAT hairpin: some routers won't let you reach your own public IP from inside the

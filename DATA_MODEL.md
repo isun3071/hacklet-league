@@ -276,7 +276,7 @@ Tests are split into bundles reflecting their different correctness models. Secu
 
 ### FuzzResult
 
-> **Status: DESIGNED** — no model exists. The signed `points_contributed` and the four-value `outcome` enum **were replaced 2026-07-30** with a non-negative `penalty_contributed` and the three deduction-only outcomes, closing DOC_STATE **C-02**. The two `override_*` fields were deliberately left in place — whether the tester judge gets a per-probe override is **D-18**, still open.
+> **Status: DESIGNED** — no model exists. Two changes since the audit: the signed `points_contributed` and four-value `outcome` enum **were replaced 2026-07-30** with a non-negative `penalty_contributed` and the three deduction-only outcomes (DOC_STATE **C-02**); and the `override_*` fields **were replaced 2026-07-31** with the `contested_*` trio, because **D-18 resolved against the override** — no judge can void a finding (format_spec §4.2).
 
 The outcome of one fuzz test against one submission. Records only **authoritative results** from central fuzz infrastructure at code freeze. Local fuzz runner results during build are informational only and not stored in this table.
 
@@ -286,8 +286,9 @@ submission_id       : FK Submission
 fuzz_test_id        : FK FuzzTest
 outcome             : enum (slop_detected, clean, not_applicable)
 penalty_contributed : int (>= 0) — the probe's penalty if it fired, else 0
-override_by_judge   : FK EventParticipant, nullable   # D-18 OPEN — see status note
-override_reason     : text, nullable                  # D-18 OPEN
+contested_by        : FK EventParticipant, nullable (a tester judge disputing this finding)
+contested_reason    : text, nullable
+contested_at        : timestamp, nullable
 ran_at              : timestamp
 
 unique constraint: (submission_id, fuzz_test_id)

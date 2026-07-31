@@ -118,7 +118,7 @@ T+107:00 → T+135:00 (28 min)  — Zamboni Period (workstation reset if applica
 
 ### Round Sizing
 
-**8-12 players per round** at Tier B. The 8-player default holds (matches Tier A operational template), but Tier B's flexibility on broadcast and audience requirements allows chapters to scale to 12 if local capacity supports it. 12 is the structural maximum across all tiers.
+**8 players per panel** at Tier B, 6-12 workable, matching the Tier A template. **There is no event maximum** — Tier B does not broadcast, so the 8-player cap that binds televised Tier A does not apply here at all. A larger field runs concurrent panels, each staffed with its own four permanent roles, and the limit is how deep the chapter's judge corps goes (format_spec.md §3.2).
 
 ## 5. Submission Mechanism
 

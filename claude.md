@@ -171,7 +171,6 @@ hacklet-league/
 │   └── Dockerfile
 ├── scripts/                    # deploy.sh, db-backup.sh, db-restore.sh
 ├── fuzz-runner/                # standalone grader — OWNED BY ANOTHER SESSION, do not edit
-├── landing/                    # superseded static landing (Stage 0), kept but dead
 ├── docker-compose.yml  docker-compose.dev.yml  Caddyfile
 └── .github/workflows/
 ```

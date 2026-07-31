@@ -119,7 +119,7 @@ The AI chat interface remains available during pitch preparation even after file
 > **Status: MIXED** — judge scoring and the scoring engine are BUILT, but this description is inaccurate in two ways: the route is `/api/scores/`, not `/api/scoring/submit`; and results are computed on demand from whatever scores exist rather than after all judges complete (`backend/rounds/scoring.py:57-72`).
 
 1. Judge in `/judge/event-[id]` portal sees their queue of submissions
-2. Judge interacts with submission (fuzz override for tester, scorecard for others)
+2. Judge interacts with submission (scorecard for all four roles; the tester may additionally mark a finding CONTESTED, which records a reason and changes no score — format_spec.md §4.2)
 3. Judge submits scores via `/api/scoring/submit`
 4. Django validates: user is assigned judge for this event, scores in valid ranges
 5. Django writes Score records

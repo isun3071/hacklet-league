@@ -321,7 +321,7 @@ AI integration is core to what HackLet League is, but it depends on round mechan
 - Central fuzz runner deployment in league infrastructure
 - Fuzz runner targets deployed submission subdomains (reusable input mechanism — see Stage 7 note)
 - FuzzResult and PlayerFuzzInvocation entities per DATA_MODEL.md
-- Tester judge override interface for fuzz applicability decisions
+- Tester judge **contest** interface — mark a finding CONTESTED with a reason. Records only; changes no score, and never amends a completed round (format_spec.md §4.2)
 - Fuzz result integration with scoring engine
 - Player portal updates to show fuzz triggers, budget, accumulated score, deployment success/failure feedback
 - Surface coverage metadata in result reporting
@@ -356,7 +356,7 @@ AI integration is core to what HackLet League is, but it depends on round mechan
 
 ### Why This Stage Is Big
 
-Fuzz runner is genuinely new infrastructure with several interconnected components: test format, runner engine, discovery system, applicability resolution, central and local deployment, judge override interface, scoring integration. Each is non-trivial. Combined they require substantial focused work.
+Fuzz runner is genuinely new infrastructure with several interconnected components: test format, runner engine, discovery system, applicability resolution, central and local deployment, the judge contest interface, scoring integration. Each is non-trivial. Combined they require substantial focused work.
 
 ---
 

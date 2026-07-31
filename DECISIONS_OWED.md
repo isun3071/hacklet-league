@@ -21,6 +21,10 @@ contradiction list in [DOC_STATE.md](DOC_STATE.md).*
 > | **D-21** | **DECIDED** | The league does **not** provision a database. SQLite committed to the submission, in-memory, or browser storage. The scoring page no longer claims otherwise. |
 > | **C-20** | **DECIDED + BUILT** | The 3-minute upload grace is implemented, not just promised. |
 > | **D-11** | **PARTLY** | `judge_specialization` now has all four values. The 30/20/20/30 weighting is **still not implemented**, and is now waiting on the fuzzer being wired rather than on a decision. |
+> | **D-13** | **DECIDED** | The size limit is the **panel's**, not the event's. 8 per panel (6-12 workable); events add concurrent panels and judges. Televised Tier A caps at 8 as a camera constraint; untelevised Tier A and Tier B have no maximum. |
+> | **D-18** | **DECIDED** | **No override.** The tester marks a finding CONTESTED, which changes no score and resolves into catalog changes going forward. The round result is final. |
+>
+> Also settled alongside these: awards are scoped to the event and leaderboards to the tier, with **no cross-panel anchoring** (bears on **D-04**); and the nontech stakeholder deliberates **in the same room on a separate rubric** (bears on **D-17**, though whether the three technical judges share one rubric is still open).
 >
 > **Everything else in this file is still open.**
 
