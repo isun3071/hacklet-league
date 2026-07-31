@@ -66,7 +66,7 @@ Public pages are SEO-friendly through SSR. Cache-control headers allow CDN cachi
 1. Player at workstation browser is on `/play/event-[id]` (authenticated as player, enrolled in active event)
 2. Player types prompt into chat interface
 3. Frontend posts to `/api/ai/chat` with prompt
-4. Django validates: user is player in this round, round is in build OR evaluation phase (chat retained during prep, files become read-only), budget not exhausted — *the "OR evaluation" clause is **contested**; step 10's gate cuts at build end. See the OPEN note in format_spec.md §5.5*
+4. Django validates: user is player in this round, round is in build OR evaluation phase (chat is retained through pitch prep on the same budget), budget not exhausted
 5. Django retrieves player's running token total for this round
 6. Django constructs OpenRouter request with the season's model
 7. Django streams response from OpenRouter
@@ -112,7 +112,7 @@ The local fuzz runner contains the public test pool only. The hidden pool exists
 
 At Tier A/B, SCP-based capture (rather than git push from the workstation) reflects the per-player account lifecycle on workstations. The player's ephemeral, non-sudo Unix account doesn't accumulate git credentials, doesn't maintain long-lived repository state, and is deleted via `userdel -r` at the Zamboni Period. The submission daemon runs as a service account with pre-configured SCP credentials targeting the central path; the player's account is just the source filesystem to copy *from*. The chapter's firewall must allow workstation outbound SCP to the league submission endpoint. At Tier C there is no league-controlled workstation, so the player uploads to the league portal themselves within the grace period; the downstream deploy → container → fuzz → score pipeline is unchanged.
 
-The AI chat interface remains available during pitch preparation even after files become read-only — players who saved budget can use AI for pitch prep; players who tokenmaxxed get no prep assistance. This is consistent with the no-coddling design principle. *(**Contested** — this contradicts the chat flow's step 10 above, which cuts substrate access at build end. The buzzer-enforcement commit rewrote step 10 and left this paragraph untouched. See the OPEN note in format_spec.md §5.5.)*
+The AI chat interface remains available during pitch preparation even after files become read-only — players who saved budget can use AI for pitch prep; players who tokenmaxxed get no prep assistance, because build and prep draw on one shared pool. This is consistent with the no-coddling design principle. It is safe because the submission was captured and deployed at build end and grading reads the deployed copy, so post-freeze assistance cannot reach the graded artifact (format_spec.md §5.5).
 
 ### Scoring Flow
 

@@ -5,7 +5,7 @@ from rest_framework import serializers
 from events.models import Event
 
 from .models import Round, Score, Submission
-from .services import PROMPT_VISIBLE_PHASES, current_phase
+from .services import PROMPT_VISIBLE_PHASES, current_phase, submission_deadline
 
 
 class RoundEventRefSerializer(serializers.Serializer):
@@ -34,14 +34,15 @@ class RoundSerializer(serializers.ModelSerializer):
     server_time = serializers.SerializerMethodField()
     prompt_revealed = serializers.SerializerMethodField()
     checked_in_count = serializers.SerializerMethodField()
+    submission_deadline = serializers.SerializerMethodField()
 
     class Meta:
         model = Round
         fields = [
             "id", "event", "round_number", "timing_profile", "status", "phase",
             "server_time", "opening_at", "build_start_at", "build_end_at",
-            "phase_schedule", "player_count", "checked_in_count", "prompt_revealed",
-            "created_at",
+            "submission_deadline", "phase_schedule", "player_count", "checked_in_count",
+            "prompt_revealed", "created_at",
         ]
 
     def _now(self):
@@ -55,6 +56,12 @@ class RoundSerializer(serializers.ModelSerializer):
 
     def get_checked_in_count(self, obj):
         return obj.submissions.count()
+
+    def get_submission_deadline(self, obj):
+        """build_end_at + the grace window. The client renders the upload form against THIS,
+        not against the phase — the build phase ends before the upload window does."""
+        deadline = submission_deadline(obj)
+        return deadline.isoformat() if deadline else None
 
     def get_prompt_revealed(self, obj):
         if current_phase(obj, self._now()) in PROMPT_VISIBLE_PHASES:

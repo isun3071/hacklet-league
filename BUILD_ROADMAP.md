@@ -261,7 +261,8 @@ The format's central mechanic (round execution) needs to exist before AI integra
 - AI chat interface in player portal (created in this stage)
 - Player portal as new route in Next.js frontend
 - Token counting per player per round (input + output, server-side)
-- Substrate cutoff as one server-side gate with two conditions — budget exhausted or build time up (build end, *not* round end) — returning 403 (not 429) with player-facing text, and terminating in-flight streams rather than only refusing new requests (format_spec.md §5.5)
+- Substrate cutoff as one server-side gate with two conditions — budget exhausted, or the pitch-preparation window has closed — returning 403 (not 429) with player-facing text, and terminating in-flight streams rather than only refusing new requests. **The gate does not fire at build end**: the substrate stays live through pitch prep on the same budget, because the submission is already captured and grading reads the deployed copy (format_spec.md §5.5)
+- One token pool per player per round, shared across build and pitch preparation, so spending it all building leaves nothing for prep
 - Streaming responses from OpenRouter to player via WebSocket
 - Prompt history per player per round
 - Comprehensive audit log of all AI interactions

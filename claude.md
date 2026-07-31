@@ -238,7 +238,9 @@ Frontend may display token budget remaining, but the budget is enforced server-s
 
 **None of this exists yet — it is the Stage 4 design, stated here so it gets built correctly.** When the AI proxy lands, it is a Django endpoint: the frontend sends chat messages to `/api/ai/chat`, Django adds the API key and calls OpenRouter, and returns the response. The key never appears in frontend code, never in JavaScript, never in any client-accessible location. Today there is no `ai_proxy` app, no endpoint, and nothing reads `OPENROUTER_API_KEY`.
 
-Two substrate rules to build against, both settled: the cutoff is **one server-side gate with two conditions** — budget exhausted, or **build time is up** (build end, *not* round end; those are roughly a hundred minutes apart) — returning **403, not 429**, with a player-facing body, cutting in-flight streams rather than only refusing new requests. See format_spec.md §5.5, which also carries an open question about whether pitch preparation gets a carve-out. Do not implement the carve-out either way until that is decided.
+Two substrate rules to build against, both settled: the cutoff is **one server-side gate with two conditions** — budget exhausted, or **the pitch-preparation window has closed** — returning **403, not 429**, with a player-facing body, cutting in-flight streams rather than only refusing new requests. And the budget is **one pool per player per round**, shared across build and pitch prep.
+
+The gate deliberately does **not** fire at build end. The substrate stays live through pitch preparation, because the submission is captured and deployed at the buzzer and the fuzzer grades the deployed copy — so post-freeze inference cannot reach the graded artifact. The freeze is enforced by where grading reads from, not by switching the model off. See format_spec.md §5.5.
 
 ### Always Scope Permissions to Chapter Context
 

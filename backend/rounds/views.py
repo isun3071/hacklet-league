@@ -24,7 +24,7 @@ from .serializers import (
     SubmissionSerializer,
     SubmitSerializer,
 )
-from .services import build_phase_schedule, current_phase
+from .services import build_phase_schedule, current_phase, submission_deadline
 
 
 def _is_registered_player(user, event):
@@ -215,9 +215,13 @@ class RoundViewSet(
         parser_classes=[MultiPartParser, FormParser],
     )
     def submit(self, request, pk=None):
-        """A registered player uploads their zip. SERVER-AUTHORITATIVE FREEZE: the server
-        compares its own clock to build_end_at and rejects anything past it — the client's
-        clock/timezone is never consulted. Re-uploading before freeze overwrites."""
+        """A registered player uploads their zip. SERVER-AUTHORITATIVE: the server compares its
+        own clock to the submission deadline and rejects anything past it — the client's
+        clock/timezone is never consulted. Re-uploading before the deadline overwrites.
+
+        The deadline is build end PLUS a grace window (services.SUBMISSION_GRACE), not build
+        end itself. The buzzer ends the build; the grace exists so a slow or failed upload
+        doesn't cost a player work they finished in time."""
         rnd = self.get_object()
         if not _is_registered_player(request.user, rnd.event):
             raise PermissionDenied("You're not a registered player for this event.")
@@ -225,8 +229,8 @@ class RoundViewSet(
             raise ValidationError("This round is closed.")
         if not rnd.build_end_at:
             raise ValidationError("This round hasn't been scheduled yet.")
-        if timezone.now() > rnd.build_end_at:
-            raise ValidationError("Code freeze has passed — submissions are closed.")
+        if timezone.now() > submission_deadline(rnd):
+            raise ValidationError("The upload window has closed — submissions are closed.")
 
         ser = SubmitSerializer(data=request.data)
         ser.is_valid(raise_exception=True)

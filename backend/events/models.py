@@ -18,6 +18,7 @@ class Event(models.Model):
     class Format(models.TextChoices):
         VIBE = "vibe", "Vibe"
         UNSLOP = "unslop", "Unslop"
+        UNDERSPECIFIED = "underspecified", "Underspecified"
 
     class Timer(models.TextChoices):
         XP = "xp", "XP (12 min)"
@@ -97,9 +98,14 @@ class EventParticipant(models.Model):
         AUDIENCE = "audience", "Audience"
 
     class JudgeSpecialization(models.TextChoices):
+        # Three technical roles plus one nontechnical. `ux_designer` keeps its value to avoid
+        # a rename migration; its scope is UI/UX/HCI. NOTE: having all four values does NOT
+        # implement the 30/20/20/30 role weighting — rounds/scoring.py still averages the six
+        # facet score_types and never reads this field. See DATA_MODEL.md's warning and D-11.
         TESTER = "tester", "Tester"
-        UX_DESIGNER = "ux_designer", "UX Designer"
-        GENERAL = "general", "General"
+        UX_DESIGNER = "ux_designer", "UI/UX/HCI"
+        GENERAL = "general", "General engineering"
+        STAKEHOLDER = "stakeholder", "Nontech stakeholder"
 
     class Source(models.TextChoices):
         INVITED = "invited", "Invited"

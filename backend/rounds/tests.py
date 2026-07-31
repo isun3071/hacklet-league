@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 from chapters.models import Chapter, ChapterStaff
 from events.models import Event, EventParticipant
 from rounds.models import Round, Score, Submission
+from rounds.services import SUBMISSION_GRACE
 
 User = get_user_model()
 
@@ -288,20 +289,51 @@ def test_player_submits_zip_before_freeze(mgr_event, settings, tmp_path):
 
 
 @pytest.mark.django_db
-def test_submit_rejected_after_freeze(mgr_event, settings, tmp_path):
+def test_submit_accepted_inside_the_grace_window(mgr_event, settings, tmp_path):
+    """Build time is up but the upload window is not. The buzzer ends the build; the grace
+    exists so a slow upload doesn't cost a player work they finished in time."""
+    settings.MEDIA_ROOT = str(tmp_path)
+    now = timezone.now()
+    rnd = Round.objects.create(
+        event=mgr_event["event"], round_number=1, timing_profile="tier_c_mvr",
+        opening_at=now - timedelta(minutes=30),
+        build_start_at=now - timedelta(minutes=25),
+        build_end_at=now - timedelta(minutes=1),  # past build end, inside the 3-min grace
+    )
+    player = _registered_player(mgr_event["event"], "grace@example.com")
+    r = _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/", {"archive": _zip()}, format="multipart",
+    )
+    assert r.status_code == 200
+    assert Submission.objects.get(round=rnd, player=player).submitted_at is not None
+
+
+@pytest.mark.django_db
+def test_submit_rejected_after_the_grace_window(mgr_event, settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     now = timezone.now()
     rnd = Round.objects.create(
         event=mgr_event["event"], round_number=1, timing_profile="tier_c_mvr",
         opening_at=now - timedelta(minutes=40),
         build_start_at=now - timedelta(minutes=35),
-        build_end_at=now - timedelta(minutes=11),  # freeze passed
+        build_end_at=now - timedelta(minutes=11),  # well past build end + grace
     )
     player = _registered_player(mgr_event["event"], "late@example.com")
     r = _client(player).post(
         f"/api/rounds/{rnd.id}/submit/", {"archive": _zip()}, format="multipart",
     )
     assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_round_payload_exposes_the_submission_deadline(mgr_event):
+    """The client gates its upload form on this, not on the phase — the phase flips to
+    evaluation at the buzzer while uploads stay open."""
+    rnd = _live_round(mgr_event["event"])
+    r = APIClient().get(f"/api/rounds/{rnd.id}/")
+    assert r.status_code == 200
+    deadline = parse_datetime(r.data["submission_deadline"])
+    assert deadline == rnd.build_end_at + SUBMISSION_GRACE
 
 
 @pytest.mark.django_db

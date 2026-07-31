@@ -11,7 +11,9 @@ import {
 } from "@/lib/rounds";
 import type { EventFormat } from "@/lib/api";
 
-const PROFILES: TimingProfile[] = ["tier_c_mvr", "tier_c_extended", "tier_a"];
+// tier_c_extended is retired (its phase durations were never decided) — not offerable. The
+// type and label survive so a round already carrying the value still renders.
+const PROFILES: TimingProfile[] = ["tier_c_mvr", "tier_a"];
 
 /** Chapter-manager controls for an event's rounds: create, schedule, start, complete, cancel.
  * Embedded in the event manage page. All actions are server-authoritative (the server owns the

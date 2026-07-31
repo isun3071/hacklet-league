@@ -9,6 +9,12 @@ from datetime import timedelta
 
 from django.utils.dateparse import parse_datetime
 
+# Upload grace after build end. The buzzer stops the *build*; this window exists so a slow
+# or flaky upload does not cost a player their submission (TIER_C §6, TIER_B §5, PITCH.md).
+# Nothing may be edited during it — at Tier A/B the network cut enforces that; at Tier C the
+# honour system does, the same as every other Tier C rule.
+SUBMISSION_GRACE = timedelta(minutes=3)
+
 # Offsets in minutes from opening_at (T+0). `schedule` entries are (phase_schedule key,
 # minutes) for the boundaries after code-freeze; keys match DATA_MODEL's phase_schedule.
 PHASE_PROFILES = {
@@ -60,6 +66,15 @@ KEY_PHASE = {
 PROMPT_VISIBLE_PHASES = {
     "build", "evaluation", "pitching", "deliberation", "judging", "awards", "completed",
 }
+
+
+def submission_deadline(rnd):
+    """The last instant an upload is accepted: build end plus the grace window. Returns None
+    for an unscheduled round. This is the server's only submission clock — `build_end_at`
+    ends the build, this ends the upload."""
+    if not rnd.build_end_at:
+        return None
+    return rnd.build_end_at + SUBMISSION_GRACE
 
 
 def build_phase_schedule(timing_profile, opening_at):

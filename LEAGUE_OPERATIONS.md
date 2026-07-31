@@ -273,7 +273,7 @@ The league supplies a single OpenRouter integration that all chapters use. This 
 
 Cost controls are enforced through:
 
-- Per-player token budgets (100,000 per round, server-enforced) — **ASSUMED** figure, and *not currently enforced anywhere*: no proxy exists (format_spec.md §5.5)
+- Per-player token budgets (**10,000,000** per round, one pool shared across build and pitch preparation, server-enforced) — a ceiling set above the single 7.2M observation rather than a calibrated figure, and *not currently enforced anywhere*: no proxy exists (format_spec.md §5.5)
 - Per-event bounded total based on player count
 - Per-chapter monthly limits with anomaly detection
 - Emergency shutoff for usage anomalies

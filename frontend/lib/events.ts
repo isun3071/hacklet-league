@@ -18,6 +18,7 @@ import type {
 export const FORMAT_LABEL: Record<EventFormat, string> = {
   vibe: "Vibe",
   unslop: "Unslop",
+  underspecified: "Underspecified",
 };
 
 export const TIMER_LABEL: Record<EventTimer, string> = {
@@ -87,10 +88,13 @@ export const PARTICIPANT_STATUS_LABEL: Record<ParticipantStatus, string> = {
   withdrawn: "Withdrawn",
 };
 
+// Three technical roles plus one nontechnical. Presence of all four here does NOT mean the
+// 30/20/20/30 weighting is implemented; scoring.py still averages facet score_types.
 export const SPECIALIZATION_LABEL: Record<JudgeSpecialization, string> = {
   tester: "Tester",
-  ux_designer: "UX Designer",
-  general: "General",
+  ux_designer: "UI/UX/HCI",
+  general: "General engineering",
+  stakeholder: "Nontech stakeholder",
   "": "—",
 };
 

@@ -50,6 +50,9 @@ export type Round = {
   opening_at: string | null;
   build_start_at: string | null;
   build_end_at: string | null;
+  /** build_end_at + the upload grace window. The upload form is gated on THIS, not on the
+   *  phase: the build phase ends before the upload window does. Server-authoritative. */
+  submission_deadline: string | null;
   phase_schedule: Record<string, string>;
   player_count: number;
   checked_in_count: number;
@@ -184,9 +187,16 @@ export const SCORE_LABEL: Record<ScoreType, string> = Object.fromEntries(
   SCORE_DIMENSIONS.map((d) => [d.key, d.label]),
 ) as Record<ScoreType, string>;
 
-/** Phases where a player may still upload (build window, before freeze). */
-export function canSubmit(phase: RoundPhase): boolean {
-  return phase === "build";
+/** Whether the upload window is still open: during build, and through the grace period after
+ *  build end. Deadline-based rather than phase-based, because the phase flips to `evaluation`
+ *  at the buzzer while uploads stay open for a few more minutes. UX only — the server checks
+ *  the same deadline against its own clock and is the authority. */
+export function canSubmit(round: Round, nowMs: number): boolean {
+  if (round.status === "cancelled" || round.status === "completed") return false;
+  if (!round.submission_deadline) return false;
+  const buildStart = round.build_start_at ? Date.parse(round.build_start_at) : NaN;
+  if (!Number.isNaN(buildStart) && nowMs < buildStart) return false;
+  return nowMs <= Date.parse(round.submission_deadline);
 }
 
 /** Phases where check-in is still open. */

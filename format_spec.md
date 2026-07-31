@@ -79,11 +79,11 @@ Every HackLet round operates the following phase sequence:
 
 **Opening / Round Introduction**: host welcomes the room, frames the round (which variant, what's at stake, where this fits in the season), introduces players. Workstations or laptops remain locked or unprepared. This phase establishes orientation and (at Tier A) production rhythm.
 
-**Build Phase**: the central system simultaneously unlocks all workstations and reveals the round prompt. Players have the variant's timer (24 minutes for Sprint, 12 for XP, 48 for Agile, etc.) to construct a web application. No required features, no mandated architectures. Players direct AI substrate however they choose within tier constraints. At freeze (build phase end), the network cuts for code changes, all build activity ceases — no further coding, no agent-interface edits, no fuzz invocations. The league proxy stops serving the round at the buzzer: new requests are refused and in-flight responses are cut mid-generation (§5.5).
+**Build Phase**: the central system simultaneously unlocks all workstations and reveals the round prompt. Players have the variant's timer (24 minutes for Sprint, 12 for XP, 48 for Agile, etc.) to construct a web application. No required features, no mandated architectures. Players direct AI substrate however they choose within tier constraints. At freeze (build phase end), the network cuts for code changes, all build activity ceases — no further coding, no agent-interface edits, no fuzz invocations. The submission is captured and deployed at this instant, and grading reads the deployed copy from here on, so later edits reach nothing that is scored. The AI substrate stays available into pitch preparation on the same budget (§5.5).
 
 **Evaluation Phase**: at freeze, submissions move to scoring infrastructure. Submission mechanism varies by tier — SCP from controlled workstations at Tier A/B, portal upload with grace period at Tier C (see tier docs for specifics). League infrastructure receives each submission, deploys in an ephemeral container, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; any local fuzz invocations during build were intelligence-gathering only. Post-competition, submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
 
-**Pitch Preparation Phase**: code files become read-only at freeze. Players retain access to submitted code, README, and (per tier specifics) AI assistance for pitch preparation. *(AI assistance here is **contested** — the §5.5 gate cuts substrate access at build end, which is before this phase. See the OPEN note in §5.5.)* Players digest what they built, plan their articulation, anticipate cross-examination questions. Players also author **PITCH.md** documenting defensive choices, design rationale, and strategic decisions — this artifact is the canonical written communication artifact in the Tier C MVR (LLM-judged) and serves as pitch prep material at Tier A/B and Tier C Extended (where live pitch is the primary credentialing dimension). See PITCH.md template per TIER_C_OPERATIONS.md §7.
+**Pitch Preparation Phase**: code files become read-only at freeze. Players retain access to submitted code, README, and AI assistance for pitch preparation, drawing on the same token budget they built with (§5.5) — reading your own code is most of what preparing a pitch is, and the graded artifact is already captured, so the assistance cannot change it. Players digest what they built, plan their articulation, anticipate cross-examination questions. Players also author **PITCH.md** documenting defensive choices, design rationale, and strategic decisions — this artifact is the canonical written communication artifact in the Tier C MVR (LLM-judged) and serves as pitch prep material at Tier A/B and Tier C Extended (where live pitch is the primary credentialing dimension). See PITCH.md template per TIER_C_OPERATIONS.md §7.
 
 **Pitch and Cross-Examination Phase**: human judges evaluate live performance at Tier A, Tier B, and Tier C Extended. Each player presents in sequence:
 - Pitch — what they built, key choices, distinctiveness
@@ -358,45 +358,51 @@ and score accordingly.
 
 Each player receives per round:
 
-- **100,000 tokens** total (input + output + chain-of-thought) — **ASSUMED**; no derivation is
-  recorded anywhere in this repository, and the figure has never been measured against a real
-  round on the season substrate
+- **10,000,000 tokens** total (input + output + chain-of-thought), **shared across the build
+  phase and the pitch-preparation window** — a single pool, not two. Spend it all building and
+  you prepare your pitch unassisted; that consequence is the point, not a side effect
 - **50 fuzz budget points** for player-triggered self-testing during build — **ASSUMED**; same,
   and additionally untestable until a fuzz-trigger path exists
 
-*(The per-timer ladder in IDEAS_FOR_LATER.md — 50k/100k/150k/200k/300-500k — is a linear
-extrapolation from the 100k assumption and inherits its status.)*
+*(The per-timer ladder in IDEAS_FOR_LATER.md — 50k/100k/150k/200k/300-500k — was extrapolated
+from the retired 100k figure and does not survive the rebase below. It needs re-deriving from
+10M before it means anything.)*
 
 **What the token budget is for.** The budget is **cost control first and an efficiency signal second**. It is a ceiling that stops a runaway loop from burning a chapter's month in one round, not a number calibrated to bind on a normal round and force triage. Earlier drafts leaned on the second function — resource calibration as a credentialed skill — as though the cap were tight enough to make every prompt a real allocation decision. It is not, and the format should not claim it is.
 
-**The one measurement we have.** A live 24-minute Underspecified round consumed roughly **7.2 million tokens** against the documented cap of 100,000, with approximately 85,000 resident in context at any moment. The gap is not overuse; it is the difference between *cumulative* consumption and *instantaneous* context — an agentic client re-sends its working context on every step, so the same 85,000 tokens are billed dozens of times over. The corollary is that the **25,000 per-prompt cap is non-functional for agentic use**, because a single agentic step already carries more than that in resident context.
+**The measurement that moved the number.** A live 24-minute Underspecified round consumed roughly **7.2 million tokens**, with approximately 85,000 resident in context at any moment. The gap is not overuse; it is the difference between *cumulative* consumption and *instantaneous* context — an agentic client re-sends its working context on every step, so the same 85,000 tokens are billed dozens of times over. Against that, the previous documented cap of 100,000 was not a constraint a player could work within; it was a number an agentic client would exceed before finishing its first task.
 
-**This does not yet justify a new number.** There is exactly one measurement, n=1, and it was taken off-substrate on DeepSeek V4-Pro rather than the season-one V4-Flash. It is recorded here as a bound on how far the documented figures are from observed behavior, not as a basis for setting a replacement cap. The numbers above stand until there is enough on-substrate data to move them.
+**Where 10M comes from, honestly.** It is a **ceiling set above the one observation**, not a figure derived from it. 7.2M is a single round, n=1, measured off-substrate on DeepSeek V4-Pro rather than season-one V4-Flash. 10M leaves headroom over that observation while still stopping a runaway loop, which is the job the budget actually has (above). It is not a claim about what a round costs, and it should be re-derived once rounds run on the season model. Treat it as **ASSUMED with a measured floor** rather than as calibrated.
 
 **Run identification (outstanding).** The figures above are **MEASURED**, but the producing run is not identified — no date, no event, no operator, no log reference, and the platform stores nothing that would let it be reconstructed (`Submission.token_budget_used` exists but is never written). Until the run is named, this paragraph is a recollection with a number in it. Name the run or downgrade the figures.
 
 **Two boundaries, two names.** These are distinct instants and the documents must not use one word for both. **Build end** is when build time is up — the freeze boundary, where the proxy cuts off, the submission is captured, and code files go read-only. **Round end** is when the round is over — awards complete, zamboni finished. On the illustrative Tier A itinerary these fall at T+29 and T+135 respectively, roughly a hundred minutes apart. "The round has ended" never means build end.
 
-**Substrate access ends at a single server-side gate with two conditions: the budget is exhausted, or build time is up.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
+**The substrate does not switch off at build end.** It stays available through the
+pitch-preparation window, on the same budget. Build end stops the *build*, not the AI: the
+submission has already been captured and deployed by then, so nothing the player does with the
+model afterwards can change the artifact being graded. Preparing a pitch well means reading
+your own code, and a player should be able to do that with the same assistance they built with.
+
+What makes this safe is the capture, not a rule. At build end the archive is uploaded and
+deployed server-side, and the fuzzer grades **the deployed copy**, not the player's working
+directory. Edits made after that point apply to nothing that is scored. The freeze is therefore
+enforced by *where grading reads from*, which needs no client cooperation at all, rather than by
+switching off a tool the player still has legitimate use for.
+
+**Substrate access ends at a single server-side gate with two conditions: the budget is exhausted, or the pitch-preparation window has closed.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
 
 - The proxy refuses the request with **403, not 429**. A 429 signals retry-later, and agentic clients have backoff wired to it, so an agent would sit in a retry loop while the player watches a spinner. 403 is terminal and surfaces immediately.
-- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or build time is up. It must not say the round is over, which is a different and much later instant.
-- **In-flight requests are cut, not allowed to finish.** A request issued at 23:59 would otherwise return usable code after the buzzer, so open connections are terminated rather than merely refusing new ones.
-- The player may continue working in the IDE without AI assistance.
+- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or the preparation window has closed. It must not say the round is over, which is a different and later instant, and it must not say build time is up, which no longer ends substrate access.
+- **In-flight requests are cut, not allowed to finish** when the gate closes.
+- The player may continue working without AI assistance.
 
-> **OPEN — does the gate admit a pitch-preparation carve-out?** Naming the boundary precisely
-> (above) resolves the vocabulary but exposes a policy question the buzzer-enforcement decision
-> did not settle. This clause cuts substrate access at **build end**. Six passages elsewhere
-> grant chat-window AI during the pitch-preparation window, which runs *after* build end
-> (§3.1 Pitch Preparation; TIER_A §3 and §4; ARCHITECTURE's chat flow, state machine, and
-> submission flow). Those passages carry an independent design rationale — players who
-> tokenmaxxed during build get no prep assistance, framed as a strategic tradeoff and an
-> instance of the no-coddling principle — so they are not merely stale wording that can be
-> deleted. Either the gate has a third clause (inference for prep, no file writes), or the
-> tradeoff is retired. **Not decided here.** Every affected passage is marked and points back
-> to this note.
+**The tradeoff this preserves.** Because the budget is one pool spanning build and preparation,
+a player who spends everything building has nothing left to prepare with. That is the intended
+consequence and an instance of the no-coddling principle: pacing across the whole round is part
+of what is being measured, not a trap to be softened.
 
-Human edits at freeze are a separate rule and remain tier-dependent: inspector-enforced at Tier A, honor system at Tier B (see the tier operations documents).
+Human edits at freeze are a separate rule and remain tier-dependent: inspector-enforced at Tier A, honor system at Tier B (see the tier operations documents). Under the capture model above this rule protects the *player's own* working copy and the integrity story around it, not the graded artifact, which is already out of their hands.
 
 Edited or regenerated prompts do not refund tokens. Each prompt submission costs against the budget regardless of subsequent edits.
 
@@ -467,11 +473,12 @@ So neither play dominates: take the key for a better pitch, a worse clock, and a
 **Why this is the thesis as a mechanic.** HackLet's claim (§10) is that AI collapsed the cost of *producing* and left the cost of *understanding* intact. The key decision is exactly that: the model makes an ambitious build possible in 24 minutes (collapsed production cost), but it does not make the player understand what shipping the key *means*, and that stays as expensive as it ever was. The format is not asking whether you can use AI; it is asking whether you can use it without hurting yourself.
 
 **Settled decisions.**
+- **The firewall sits above the container, not around it (2026-07-31).** The grading container is *not* network-isolated. It gets egress, and a firewall one layer up allows **`hackletleague.com` and `*.hackletleague.com` only** — which is where the league serves keys and the proxy. Everything else is blocked. This is what makes the mechanic work at all: the app can reach the proxy at runtime, and the allowlist keeps attribution airtight, because the league proxy remains the only inference endpoint any submission can reach. It also means "no internet access" is the wrong description of the sandbox and must not be restated; the correct one is "one allowed destination." (Egress restriction in FUZZ_RUNNER_SPEC's threat model should be read as *allowlisted*, not *absent*.)
 - **Purely scored, not drainable.** An exposed key is scored (via the secrets finding), not made live-drainable by rivals — draining reintroduces PvP chaos and non-determinism, contradicting the design where the attacking half is handed to a *deterministic* catalog, not to opponents. The **budget cap is the containment**: an exposed key is technically drainable-until-revoked, but the blast radius is the player's own capped budget, and detection triggers immediate revocation.
 - **The key stays valid through the grading window.** Revocation is at the buzzer *for the player's ability to spend*, but the issued key must remain valid for the central runner's grading pass — otherwise the app's inference route 500s during grading and the app is scored broken for the league's own revocation. Grading uses a **separate grading allowance** (the fuzzer's own probing must not drain the player's budget), and inference-backed routes are excluded from the amplifying load/DoS probes (FUZZ_RUNNER_SPEC).
 - **Tier-A-scoped.** The mechanic depends on the firewall making the league proxy the *only* reachable inference endpoint, which is what makes attribution airtight. At Tier B/C there is no such firewall, players bring their own real keys, and secrets-checking is already live on real credentials — but the clean attribution and the controlled tradeoff are lost, so the Tier B/C version is **genuinely open** and not specified here.
 
-**Open (deliberately undecided).** The exact token-budget number; whether the app inference budget is shared with or separate from the build token budget (§5.5); whether Tier B/C gets any league-key analogue.
+**Open (deliberately undecided).** The app inference budget's size, and whether it is shared with or separate from the round token budget (§5.5); whether Tier B/C gets any league-key analogue; and **who pays for judge-driven inference** — a judge exercising a wrapper app during the clickaround window generates real cost that no allowance currently covers, distinct from the grading allowance above.
 
 **New surface, new probes (roadmap).** Making AI-wrapper apps *exist* at Tier A opens vulnerability classes the catalog does not yet cover and which are dead-on-thesis for an AI-substrate league: **prompt injection** (user input reaching the model, able to override the system prompt or exfiltrate it — the flagship AI-app flaw), **cost-DoS on the inference route** (unbounded user-triggered model calls, which ties straight back to the budget), and **SSRF/abuse of the app's proxy route**. See FUZZ_RUNNER_SPEC for the concrete, immediately-buildable change: the exact-match issued-key exposure probe.
 

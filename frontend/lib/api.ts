@@ -75,7 +75,7 @@ export async function getChapter(slug: string): Promise<Chapter | null> {
 // Named LeagueEvent (not Event) to avoid shadowing the DOM Event type in client code.
 
 export type EventTier = "chapter" | "regional" | "championship";
-export type EventFormat = "vibe" | "unslop";
+export type EventFormat = "vibe" | "unslop" | "underspecified";
 export type EventTimer = "xp" | "sprint" | "scrum" | "agile" | "waterfall";
 export type AccessMode = "invite_only" | "application";
 export type EventStatus =
@@ -114,7 +114,7 @@ export type LeagueEvent = {
 };
 
 export type ParticipantRole = "player" | "judge" | "audience";
-export type JudgeSpecialization = "tester" | "ux_designer" | "general" | "";
+export type JudgeSpecialization = "tester" | "ux_designer" | "general" | "stakeholder" | "";
 export type ParticipantSource = "invited" | "applied" | "corps";
 export type ParticipantStatus =
   | "pending"

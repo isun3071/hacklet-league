@@ -160,7 +160,7 @@ export function RoundLive({
         </div>
       )}
 
-      {role === "player" && <PlayerPanel round={round} onChanged={poll} />}
+      {role === "player" && <PlayerPanel round={round} nowMs={nowMs} onChanged={poll} />}
       {role === "judge" && <JudgeConsole roundId={roundId} />}
 
       {/* Self-gates server-side: staff get a preview anytime, the public only after reveal. */}
@@ -176,7 +176,15 @@ const COVERAGE_OPTIONS = [
   { value: "broad", label: "Broad" },
 ];
 
-function PlayerPanel({ round, onChanged }: { round: Round; onChanged: () => void }) {
+function PlayerPanel({
+  round,
+  nowMs,
+  onChanged,
+}: {
+  round: Round;
+  nowMs: number;
+  onChanged: () => void;
+}) {
   const [mine, setMine] = useState<Submission | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -186,6 +194,17 @@ function PlayerPanel({ round, onChanged }: { round: Round; onChanged: () => void
   const [readme, setReadme] = useState("");
   const [deployed, setDeployed] = useState("");
   const [coverage, setCoverage] = useState("");
+
+  // The grace window: build time is over but the upload is still accepted. Worth calling out
+  // loudly, because the phase readout above already says "evaluation" and a player who trusts
+  // that would think they had missed their chance.
+  const deadlineMs = round.submission_deadline ? Date.parse(round.submission_deadline) : NaN;
+  const buildEndMs = round.build_end_at ? Date.parse(round.build_end_at) : NaN;
+  const inGrace =
+    !Number.isNaN(deadlineMs) &&
+    !Number.isNaN(buildEndMs) &&
+    nowMs > buildEndMs &&
+    nowMs <= deadlineMs;
 
   const loadMine = useCallback(async () => {
     const res = await request<Submission[]>("/api/submissions/mine/", "GET");
@@ -271,9 +290,17 @@ function PlayerPanel({ round, onChanged }: { round: Round; onChanged: () => void
         </p>
       )}
 
-      {checkedIn && canSubmit(round.phase) && (
+      {checkedIn && canSubmit(round, nowMs) && (
         <form className="form" onSubmit={submit}>
-          <p className="subtitle">// upload your work as a single .zip — re-upload overwrites until freeze.</p>
+          <p className="subtitle">
+            // upload your work as a single .zip — re-upload overwrites until the window closes.
+          </p>
+          {inGrace && (
+            <p className="readout accent-strong">
+              ⏱ build time is up. upload window closes in{" "}
+              <span className="countdown">{fmtCountdown(deadlineMs - nowMs)}</span>
+            </p>
+          )}
           <label className="field">
             <span>archive (.zip) *</span>
             <input
@@ -311,8 +338,8 @@ function PlayerPanel({ round, onChanged }: { round: Round; onChanged: () => void
         </form>
       )}
 
-      {checkedIn && !canSubmit(round.phase) && !submitted && (
-        <p className="note">// the build window isn&apos;t open for uploads right now.</p>
+      {checkedIn && !canSubmit(round, nowMs) && !submitted && (
+        <p className="note">// the upload window isn&apos;t open right now.</p>
       )}
 
       {ok && <p className="ok-msg">{ok}</p>}

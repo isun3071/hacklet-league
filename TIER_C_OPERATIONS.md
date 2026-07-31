@@ -23,7 +23,7 @@ The freedom-integrity tradeoff (LEAGUE_OPERATIONS.md §4) sits at the freedom-ma
 
 ## 2. Three Operational Profiles
 
-> **Status: DESIGNED** — of the three, only the MVR has a shipped timing profile. Tier C Extended's stated '~135-180 minutes' disagrees with the shipped `tier_c_extended` profile, which ends at T+107 (DOC_STATE C-12).
+> **Status: DESIGNED, and Tier C Extended is RETIRED (2026-07-31).** Its phase durations were never decided: the doc claimed ~135-180 minutes and the shipped profile ended at T+107 (DOC_STATE C-12). Rather than pick a number to make the two agree, the profile is withdrawn — `tier_c_extended` is gone from the selectable timing profiles (`backend/rounds/models.py`), so no new round can choose it. Only the **MVR** profile is offerable today. The Extended design below is kept for when the durations are decided; it is not currently runnable.
 
 Tier C operates under three distinct profiles serving different chapter goals. All three share core HackLet DNA — BYOD substrate, deterministic fuzz catalog, time compression, AI-native design — and differ only in cohort scale, judging method, and ceremony, never in format fundamentals.
 

@@ -12,6 +12,26 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## Six blocked decisions resolved (2026-07-31)
+
+Answers to six of the calls in DECISIONS_OWED, and what each changed.
+
+**The substrate stays on through pitch preparation (D-09).** The gate's second condition is no longer "build time is up" — it is "the pitch-preparation window has closed." What makes this safe is not a rule but the capture: at build end the archive is uploaded and deployed, and the fuzzer grades **the deployed copy**, so edits made afterwards reach nothing that is scored. Preparing a pitch means reading your own code, and a player should be able to do that with the same assistance they built with. The **token budget is one pool** spanning build and prep, so a player who spends it all building prepares unassisted — the tradeoff is preserved, and it now sits on a real mechanism rather than on switching a tool off. Cascaded through format_spec §3.1 and §5.5, TIER_A §3 and §4, ARCHITECTURE, BUILD_ROADMAP, and claude.md, clearing every `contested` marker the audit had placed on those passages.
+
+**The token budget is 10,000,000, not 100,000 (D-02).** Recorded honestly as a **ceiling set above the single 7.2M observation**, not a figure derived from it: n=1, off-substrate, on V4-Pro rather than season-one V4-Flash. It leaves headroom over the one thing we have measured while still stopping a runaway loop, which is the job the budget actually has. The per-timer ladder in IDEAS_FOR_LATER was extrapolated from the retired 100k and needs re-deriving. **The 25k per-prompt cap was not restated anywhere** — §5.5 records it as non-functional for agentic use, and whether any per-prompt ceiling survives the rebase is still undecided.
+
+**The container gets egress, allowlisted to one destination (D-01).** The sandbox is not network-isolated. It has internet access, and a firewall **above** the container permits `hackletleague.com` and `*.hackletleague.com` only. That is what lets a player's app call the proxy at runtime, and the allowlist is what keeps attribution airtight, since the league proxy stays the only reachable inference endpoint. "No internet access" was the wrong description and is corrected on the player-facing scoring page. Still open: who pays for judge-driven inference during clickaround.
+
+**The three-minute upload grace is real now (C-20).** It was promised by four documents and implemented by none — the code rejected everything one second past build end. `backend/rounds/views.py` now accepts uploads until `build_end_at + 3 minutes`, the round payload exposes `submission_deadline`, and the player UI gates its upload form on that deadline rather than on the phase (the phase flips to `evaluation` at the buzzer, which would have hidden the form during the very window the grace exists for). Two tests cover the boundary. The buzzer still ends the *build*; the grace only protects the upload.
+
+**Rust stays supported (D-06).** The catalog is black box and language agnostic, with no Rust-specific probes, so nothing about Rust is harder to grade. IDEAS_FOR_LATER's proposed exclusion is superseded. What that does *not* settle is whether the league maintains mirrored Rust web frameworks (§5.4 Tier 2) or ships compiler-only (Tier 3) — a recurring-work question, still open.
+
+**Tier C Extended is retired (D-15).** Its durations were never decided, and the doc's "~135-180 minutes" disagreed with a shipped profile that ended at T+107. Rather than invent a number to reconcile them, the profile is withdrawn from the selectable choices so no new round can pick it. The phase profile stays in `services.PHASE_PROFILES` so any round already carrying the value still resolves, and the design stays in TIER_C_OPERATIONS for when the durations are settled.
+
+**Two schema gaps closed.** `Event.format` accepts `underspecified`, so the third sanctioned format can finally be recorded — notable because the one token measurement above came from an Underspecified round. `EventParticipant.judge_specialization` accepts `stakeholder`, completing three technical roles plus one nontechnical. **Neither implements the 30/20/20/30 role weighting**: `rounds/scoring.py` still averages six facet score-types and never reads `judge_specialization`. That remains D-11, and it is still blocked on what feeds the second axis before the fuzzer is wired.
+
+---
+
 ## Deduction-only reaches the fuzz schema at last (2026-07-30, DOC_STATE C-02)
 
 DATA_MODEL's three fuzz entities were still written in the award-points model retired a month earlier. Now they are not.

@@ -22,9 +22,12 @@ const STEPS: { n: string; title: string; body: React.ReactNode }[] = [
     title: "deploy",
     body: (
       <>
-        we build your <code>Dockerfile</code> and run your app in an isolated container with{" "}
-        <span className="hl">no internet access</span>. we check it answers on <code>$PORT</code>{" "}
-        within ~60 seconds. if it never responds, that is a <span className="chip chip-dnf">DNF</span>.
+        we build your <code>Dockerfile</code> and run your app in an isolated container. the only
+        thing it can reach on the network is{" "}
+        <span className="hl">hackletleague.com</span>, which is where we hand out keys if your app
+        needs to call the AI at runtime. everything else is blocked. we check it answers on{" "}
+        <code>$PORT</code> within ~60 seconds. if it never responds, that is a{" "}
+        <span className="chip chip-dnf">DNF</span>.
       </>
     ),
   },
@@ -162,11 +165,11 @@ performance  speed gates (ttfb/fcp/inp) · load · dos resistance`}</pre>
 
       <h2 className="h2"># you can study the catalog</h2>
       <p className="body">
-        about 75% of the catalog is public. study it, and self-test against it while you build. the
-        other 25% is hidden, so defending only the published probes by name still leaves you exposed.
-        genuine defense (parameterized queries, output encoding, real access control) clears the
-        public and hidden probes alike, because it fixes the actual flaw rather than the specific
-        payload.
+        the catalog is public. study it, and self-test against it while you build. beating it
+        payload by payload is still the wrong way to use it, though. genuine defense
+        (parameterized queries, output encoding, real access control) fixes the actual flaw
+        instead of the specific payload, and that is what keeps holding up as the catalog
+        grows.
       </p>
 
       <h2 className="h2"># tested the same way, whatever your stack</h2>

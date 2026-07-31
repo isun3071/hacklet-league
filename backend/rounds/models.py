@@ -17,9 +17,12 @@ class Round(models.Model):
     """
 
     class TimingProfile(models.TextChoices):
+        # tier_c_extended is RETIRED (2026-07-31) — its phase durations were never decided,
+        # and the shipped profile ran 107 min against a doc claiming 135-180. It is gone from
+        # the selectable choices so no new round can pick it. The phase profile itself is kept
+        # in services.PHASE_PROFILES so any round already carrying the value still resolves.
         TIER_A = "tier_a", "Tier A (135 min)"
         TIER_C_MVR = "tier_c_mvr", "Tier C MVR (60 min)"
-        TIER_C_EXTENDED = "tier_c_extended", "Tier C Extended"
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Scheduled"
