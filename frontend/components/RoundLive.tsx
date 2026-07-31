@@ -169,12 +169,11 @@ export function RoundLive({
   );
 }
 
-const COVERAGE_OPTIONS = [
-  { value: "", label: "— not specified —" },
-  { value: "narrow", label: "Narrow" },
-  { value: "moderate", label: "Moderate" },
-  { value: "broad", label: "Broad" },
-];
+// Note: the submit form deliberately collects ONLY the archive and a README. `deployed_url`
+// and `attack_surface_coverage` are grading-pipeline outputs, not player input — the league
+// builds and deploys the container (so the player has no URL to give), and coverage is derived
+// from the probe-applicability count (format_spec §4.2). Both were collected here until
+// 2026-07-31 and read by nothing.
 
 function PlayerPanel({
   round,
@@ -192,8 +191,6 @@ function PlayerPanel({
   const [ok, setOk] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [readme, setReadme] = useState("");
-  const [deployed, setDeployed] = useState("");
-  const [coverage, setCoverage] = useState("");
 
   // The grace window: build time is over but the upload is still accepted. Worth calling out
   // loudly, because the phase readout above already says "evaluation" and a player who trusts
@@ -239,8 +236,6 @@ function PlayerPanel({
     const fd = new FormData();
     fd.append("archive", file);
     fd.append("readme_content", readme);
-    if (deployed) fd.append("deployed_url", deployed);
-    if (coverage) fd.append("attack_surface_coverage", coverage);
     const res = await fetch(`/api/rounds/${round.id}/submit/`, {
       method: "POST",
       credentials: "include",
@@ -312,25 +307,6 @@ function PlayerPanel({
           <label className="field">
             <span>README / notes</span>
             <textarea value={readme} onChange={(e) => setReadme(e.target.value)} rows={4} />
-          </label>
-          <label className="field">
-            <span>deployed URL (optional)</span>
-            <input
-              type="url"
-              value={deployed}
-              onChange={(e) => setDeployed(e.target.value)}
-              placeholder="https://…"
-            />
-          </label>
-          <label className="field">
-            <span>attack-surface coverage (optional)</span>
-            <select value={coverage} onChange={(e) => setCoverage(e.target.value)}>
-              {COVERAGE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
           </label>
           <button type="submit" className="btn" disabled={busy}>
             [ {busy ? "uploading…" : submitted ? "re-upload" : "submit"} ]

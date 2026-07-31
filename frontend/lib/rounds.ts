@@ -119,7 +119,7 @@ export type RoundResults = {
   revealed: boolean;
   standings: Standing[];
   awards: {
-    most_resilient: string[];
+    slopless_builder: string[];
     best_communicator: string[];
     best_overall: string[];
   };
@@ -164,8 +164,11 @@ export const PHASE_LABEL: Record<RoundPhase, string> = {
 export const PHASE_BLURB: Record<RoundPhase, string> = {
   scheduled: "not started yet — check in and wait for opening.",
   opening: "round is opening; the prompt drops when build begins.",
-  build: "build window is live — code, then upload before freeze.",
-  evaluation: "code freeze — submissions are locked and being evaluated.",
+  build: "build window is live — code, then upload before the buzzer.",
+  // Build time is up, but uploads stay open through the grace window and the AI stays
+  // available for pitch prep on the same budget (format_spec §5.5). Do not say "locked" here:
+  // the phase flips to evaluation at the buzzer, minutes before the upload window closes.
+  evaluation: "build time is up — finish your upload, then prep your pitch.",
   pitching: "players are pitching their work to the judges.",
   deliberation: "judges are deliberating.",
   judging: "judges are scoring.",

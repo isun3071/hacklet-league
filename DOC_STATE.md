@@ -19,8 +19,13 @@
 > (**C-01** / D-11) is **still real**, and is now waiting on the fuzzer being wired rather than
 > on a decision.
 >
-> [DECISIONS_OWED.md](DECISIONS_OWED.md) carries the current open list; [CHANGELOG.md](CHANGELOG.md)
-> carries the reasoning. Where they disagree with the snapshot below, they win.
+> Also closed: **C-17** (the award is **Slopless Builder**, in docs and in the `slopless_builder`
+> award key).
+>
+> DECISIONS_OWED.md, which this file referred to for the open list, was **deleted on
+> 2026-07-31**: its resolutions had landed in format_spec, and its still-open items are now
+> marked `OPEN —` in the sections that own them. Search for that string. [CHANGELOG.md](CHANGELOG.md)
+> carries the reasoning. Where either disagrees with the snapshot below, they win.
 
 **Purpose.** The docs are written in present indicative throughout, so a reader cannot tell
 shipped from designed from superseded. This file assigns a status to every section of every

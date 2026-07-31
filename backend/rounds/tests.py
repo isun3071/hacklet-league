@@ -289,6 +289,31 @@ def test_player_submits_zip_before_freeze(mgr_event, settings, tmp_path):
 
 
 @pytest.mark.django_db
+def test_submit_ignores_grading_pipeline_fields_if_a_client_sends_them(
+    mgr_event, settings, tmp_path
+):
+    """deployed_url and attack_surface_coverage are pipeline outputs, not player input. The
+    model fields still exist for the Stage 5 pass to write, so a client posting them must not
+    be able to set its own attack surface — that metric exists to check the submitter."""
+    settings.MEDIA_ROOT = str(tmp_path)
+    rnd = _live_round(mgr_event["event"])
+    player = _registered_player(mgr_event["event"], "liar@example.com")
+    r = _client(player).post(
+        f"/api/rounds/{rnd.id}/submit/",
+        {
+            "archive": _zip(),
+            "deployed_url": "https://evil.example.com",
+            "attack_surface_coverage": "broad",
+        },
+        format="multipart",
+    )
+    assert r.status_code == 200
+    sub = Submission.objects.get(round=rnd, player=player)
+    assert sub.deployed_url == ""
+    assert sub.attack_surface_coverage == ""
+
+
+@pytest.mark.django_db
 def test_submit_accepted_inside_the_grace_window(mgr_event, settings, tmp_path):
     """Build time is up but the upload window is not. The buzzer ends the build; the grace
     exists so a slow upload doesn't cost a player work they finished in time."""
@@ -521,7 +546,7 @@ def test_results_composite_and_awards(mgr_event):
     # rank-sum ties 3-3; tiebreak (|diff| equal, then best engineering rank) -> A overall #1
     assert standings[str(a.id)]["overall_rank"] == 1
     assert standings[str(b.id)]["overall_rank"] == 2
-    assert r.data["awards"]["most_resilient"] == [str(a.id)]
+    assert r.data["awards"]["slopless_builder"] == [str(a.id)]
     assert r.data["awards"]["best_communicator"] == [str(b.id)]
     assert r.data["awards"]["best_overall"] == [str(a.id)]
 

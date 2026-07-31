@@ -12,6 +12,16 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## Slopless Builder, a provisional allowlist, and one fewer source of truth (2026-07-31)
+
+**The award is Slopless Builder.** The metric had landed (lowest raw Slop Score); the name had not, and it had grown a rationale for staying — that the title should be aspirational while the score stayed descriptive, on the analogy of golf naming a Champion rather than a Lowest Score Holder. **That rationale is superseded and should not be reintroduced.** Recorded once, in format_spec §4.4, so it stops drifting: "slop" descends from *AI slop* and *workslop* (BetterUp Labs + Stanford Social Media Lab, HBR 2025), meaning AI-generated output that masquerades as good work while lacking the substance to advance the task. That is an absolute property rather than a rate, which is why the score is deduction-only and unbounded, and why **"Slopless"** names the metric exactly. **"Builder" is carried by the Communication axis, not the metric** — a minimal app has nothing to defend under cross-examination and sinks on the rank-sum, so the name does not need to smuggle in a substance requirement the composite already enforces. Renamed in eight documents and in code: the award key is now `slopless_builder`.
+
+**The container allowlist is PROVISIONAL, not settled.** §5.8 records `hackletleague.com` plus the wildcard as a placeholder that **narrows to the proxy hostname once a proxy exists**, with the reason written down so it is not inherited as final: that host also serves the platform API, the judge portal and the Django admin, so a wildcard hands untrusted contestant code a reachable target inside league infrastructure and turns every SSRF probe in the catalog into a live pivot aimed at us. Tolerable only while there is nothing narrower to point at.
+
+**DECISIONS_OWED.md is deleted.** Its resolutions live in format_spec and here, and its body still described the pre-resolution world — D-01 as three open shapes, D-02 at 100k with the 25k cap, D-04 arguing over a denominator that no longer exists. A second source of truth for decisions is exactly how the drift started. Its five genuinely-open items were first marked **`OPEN —` in the section that owns them**, which is the convention going forward: a decision and its context stay together. Three of the five had no home anywhere and were newly written — the rubric count (§4.1), contest review cadence (§4.2), and whether the per-round award cut retires the tournament set (§4.4, which also gates Most Efficient).
+
+---
+
 ## The judge panel: no override, panels not events, local awards (2026-07-31)
 
 Four decisions that had been sitting decided-but-unapplied.
@@ -26,7 +36,7 @@ Replaced by the **contest**: the tester may mark a finding CONTESTED, recording 
 
 **The 8-player cap is a camera constraint and binds only where there are cameras.** Televised Tier A caps at 8: eight streams on the overlay, eight faces to the audience, ceremony rhythm intact. **Untelevised Tier A has no maximum**, and neither does Tier B. Grading is identical regardless of how many panels an event needed.
 
-**Awards are scoped to the event, leaderboards to the tier (D-04 adjacent).** An award is decided against the field that actually competed and nothing else. Winning Most Resilient at a chapter event with a slop score of 20 while the global board's leader sits at 0 is not a contradiction — the award says *best in that room*, the board says *best across the tier*. Consequently there is **no cross-panel anchoring and no severity correction**: the league is multi-city with disjoint judge corps by construction, so judge variance is a property of the institution rather than something concurrent panels introduce. Communication scores travel between panels because the four rubrics are role-siloed and identical everywhere; slop scores travel because no human can touch them.
+**Awards are scoped to the event, leaderboards to the tier (D-04 adjacent).** An award is decided against the field that actually competed and nothing else. Winning Slopless Builder at a chapter event with a slop score of 20 while the global board's leader sits at 0 is not a contradiction — the award says *best in that room*, the board says *best across the tier*. Consequently there is **no cross-panel anchoring and no severity correction**: the league is multi-city with disjoint judge corps by construction, so judge variance is a property of the institution rather than something concurrent panels introduce. Communication scores travel between panels because the four rubrics are role-siloed and identical everywhere; slop scores travel because no human can touch them.
 
 **The nontech stakeholder deliberates in the same room, on a separate rubric.** All four judges sit together; the stakeholder scores translation and trust on its own rubric rather than through a technical lens, which is what keeps that role measuring the thing it exists to measure. Also recorded, because it changes how judges behave: **deliberation produces scores, not winners.** Every award is computed from the scores afterwards by `compute_round_results`. A judge who thinks they are deliberating toward a verdict argues differently from one who knows they are deliberating toward their own number.
 
@@ -90,6 +100,8 @@ The resilience score was reworked and renamed in two composed changes, formalize
 - **Renamed Resilience Score → Slop Score, sign flipped.** Was `(-∞, 0]`, higher-is-better; now `[0, +∞)`, **lower-is-better, 0 = perfect** (golf-style). Presentation-equivalent, but it closes the loop with the slogans ("no slop survives"; "the fuzz is what separates hacklets from slop"), reads as universally-legible lower-is-better, and coheres with the Vibe Mill → HackLet thesis.
 
 Preserved deliberately: the **"Most Resilient"** award title (aspirational quality vs descriptive measurement), the **"fuzz catalog" / "fuzz runner"** names (fuzzing is the method, slop is the measurement), and **"resilient"** as a quality adjective.
+
+> **Reversed 2026-07-31.** The award is **Slopless Builder**, and the aspirational-title argument recorded above is superseded — it should not be reintroduced. The "fuzz catalog" / "fuzz runner" names and "resilient" as a plain adjective still stand. See the rename entry below and format_spec §4.4.
 
 Cascaded across format_spec.md (§4, canonical), LEAGUE_OPERATIONS.md, the tier ops docs, FUZZ_RUNNER_SPEC.md, IDEAS_FOR_LATER.md, BUILD_ROADMAP.md, ARCHITECTURE.md, claude.md, and the landing copy. **No platform migration:** the shipped Stage-3 scoring uses a judge-entered `engineering_score` stand-in (higher-is-better), intentionally left as-is; the real deduction-only `slop_score` field is born when the Stage-5 runner is built.
 

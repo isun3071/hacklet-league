@@ -131,7 +131,9 @@ def compute_round_results(rnd):
         "standings": standings,
         "awards": {
             # People's Hacklet (audience vote) is out of scope until broadcast features.
-            "most_resilient": [r["player_id"] for r in standings if r["engineering_rank"] == 1],
+            # Slopless Builder — lowest raw Slop Score. (Runs on the judge-entered engineering
+            # stand-in until the Stage 5 runner supplies the real slop axis.)
+            "slopless_builder": [r["player_id"] for r in standings if r["engineering_rank"] == 1],
             "best_communicator": [r["player_id"] for r in standings if r["communication_rank"] == 1],
             "best_overall": [r["player_id"] for r in standings if r["overall_rank"] == 1],
         },

@@ -96,7 +96,7 @@ In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-j
 
 **Deliberation and Voting Phase**: judges enter explicit deliberation. All four sit together — the nontech stakeholder is in the room with the three technical judges — but the stakeholder scores on a **separate rubric**, because translation and trust to a non-verifier is a different measurement from technical defense, and running it through a technical lens loses the thing that role exists to catch. Judges compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, and score across their own rubrics.
 
-**Deliberation produces scores, not winners.** Most Resilient, the communication award, and Best Overall are all computed from the scores afterwards (§4.3, §4.4). No panel votes on an outcome. This matters behaviourally: a judge who believes they are deliberating toward a verdict argues differently from one who knows they are deliberating toward their own number. Concurrent with judge deliberation (when audience is present), audience votes for People's Hacklet through the player portal.
+**Deliberation produces scores, not winners.** Slopless Builder, the communication award, and Best Overall are all computed from the scores afterwards (§4.3, §4.4). No panel votes on an outcome. This matters behaviourally: a judge who believes they are deliberating toward a verdict argues differently from one who knows they are deliberating toward their own number. Concurrent with judge deliberation (when audience is present), audience votes for People's Hacklet through the player portal.
 
 **Award Reveal and Closing Phase**: ceremonial reveal of categorical awards followed by Best Overall reveal. At Tier A with broadcast production, the 14-min window allocates time for theatrical ceremony with audience reaction and broadcast cuts. At Tier B and Tier C, compressed ceremony fits the operational profile (~7 min at Tier C MVR).
 
@@ -142,6 +142,16 @@ A player's performance is measured on **two independent axes**:
 The two axes are **never summed into one number** — they differ in direction (slop lower-is-better, communication higher-is-better), scale (slop unbounded, communication ranged), and epistemics (the fuzzer is pure objectivity; cross-ex is where subjectivity is allowed to live). Each is reported as a raw score and used in categorical awards; Best Overall is the rank-based composition of the two axes (§4.3). The four judge rubrics live entirely inside the Communication axis; the Slop axis is untouched by the judging structure.
 
 The old model split communication into separate Pitch Quality and Cross-Examination Performance components; under the four-rubric model each judge scores across *both* pitch and cross-ex on their own rubric, so pitch-vs-cross-ex is at most an internal sub-structure of a rubric — the axis-level weighting is by judge role (30/20/20/30). Rubric internals are written separately.
+
+> **OPEN — four rubrics, or two?** The weighting above is settled at 30/20/20/30 by judge role,
+> and it is settled that the **nontech stakeholder scores on a rubric of its own** (§3.1). What
+> is *not* settled is whether the three technical judges each hold a separate rubric or share
+> one. NONTECH_JUDGE_NOTES §1 argues they should share: they measure a single trait — can this
+> person defend technical decisions under informed adversarial pressure — through three entry
+> angles, and three separate rubrics would pretend to measure three traits while producing
+> incoherent scores that mostly record which judge pressed hardest. Adopting that would collapse
+> the axis to **70/30** and reopen the locked weighting, which is why it has not been adopted.
+> Decide before rubric internals are written; the internals depend on it.
 
 ### 4.2 Slop Scoring Philosophy
 
@@ -232,6 +242,17 @@ A **false negative** is silent. Nobody disputes a score that came out too well. 
 **Four rules keep the trade honest.**
 
 1. **The unit of correction is the catalog version, not the round.** Contests accumulate, are reviewed between events, and land as a versioned catalog change. Credentials cite the version, so "ranked 4th of 47 on the Q3 2026 catalog" stays true after Q4 repairs a probe.
+
+   > **OPEN — the review itself is unspecified.** "Reviewed between events" names no reviewer,
+   > no schedule, and no resolution states. Nothing in the doc set defines a cadence for
+   > reviewing the format or the catalog; the nearest neighbours are §9's 30-day change-notice
+   > rule, LEAGUE_OPERATIONS §11's 14-day appeal window, and the quarterly catalog versioning
+   > sketched in IDEAS_FOR_LATER. The candidates are per-season (matches substrate rotation,
+   > slowest to fix a mid-season defect), quarterly (moves with the catalog, more governance
+   > than a one-chapter league can absorb), or event-triggered (cheapest now, but provides no
+   > forcing function, which is how the current drift accumulated). Also undecided: who holds
+   > the authority — today that is the superadmin by default, since no catalog-maintainer role
+   > exists. Nothing is blocked on this until events run.
 2. **Never recompute a finished round.** A quarantined or repriced probe applies to the next version forward. Retroactive correction would make a score depend on when you look at it, which is precisely the property removing the override exists to protect.
 3. **Penalty weight is bounded by oracle confidence.** A heuristic oracle may not carry a catastrophic penalty. The issued-key exposure probe is the model: an exact match against a string the league itself minted, zero false positives by construction, which is *why* it can sit at the top of the scale. A pattern-matching scan for secret-shaped strings measures the same class far less certainly and must be priced far lower. Score the probe's confidence first, then let it bound the penalty.
 4. **Publish the measured error rate.** This is the price of finality. A league that tells players "the score stands even when it is wrong" owes them a number for how often that happens, and a description of how the number was obtained. Stated tolerance is a defensible position; silence is not.
@@ -260,19 +281,25 @@ This produces the right kind of Best Overall winner: the most balanced player am
 
 ### 4.4 Categorical Awards
 
-> **Status: MIXED** — Most Resilient, Best Communicator and Best Overall are BUILT (`backend/rounds/scoring.py:132-137`). People's Hacklet is DESIGNED and deferred. Most Efficient is retired here but listed as live in TIER_A §8 and TIER_B §8 (DOC_STATE C-06).
+> **Status: MIXED** — Slopless Builder, Best Communicator and Best Overall are BUILT (`backend/rounds/scoring.py:132-137`). People's Hacklet is DESIGNED and deferred. Most Efficient is retired here but listed as live in TIER_A §8 and TIER_B §8 (DOC_STATE C-06).
 
 Per-round categorical awards are kept deliberately small to preserve credentialing signal at 8-player round size. Per-round awards alongside Best Overall (§4.3):
 
-- **Most Resilient**: Lowest raw Slop Score. The award title stays aspirational (it credentials the *quality* of resilience demonstrated) while the underlying measurement is descriptive (slop score 0 is what earned it) — the same way golf names a "Champion," not a "Lowest Score Holder."
+- **Slopless Builder**: Lowest raw Slop Score.
+
+  **Why this name, recorded once so it stops drifting.** "Slop" descends from *AI slop* and *workslop* — the BetterUp Labs and Stanford Social Media Lab work published in HBR in 2025 — defined as AI-generated output that masquerades as good work while lacking the substance to advance the task. That is an **absolute property, not a rate**: work either carries slop or it does not, which is exactly why the score is deduction-only and unbounded rather than a percentage. **"Slopless"** names the metric directly: raw slop, low, ideally zero.
+
+  **"Builder" is carried by the other axis, not by this one.** The obvious objection to rewarding an absence is that a player could win by shipping almost nothing. They cannot, because a minimal app has nothing to defend under cross-examination and sinks on the Communication axis, and Best Overall is the rank-sum of both (§4.3). The name says what the metric measures and lets the composite handle the rest.
+
+  *(This replaces "Slopless Builder," which was kept on an aspirational-title argument — that the award should credential the quality while the score described the measurement, on the analogy of golf naming a "Champion" rather than a "Lowest Score Holder." That rationale is superseded and should not be reintroduced.)*
 - **Best Communicator**: Highest raw Communication Score (the weighted four-rubric composite per §4.1/§4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination. *(Award name flagged for a possible rename — credit defense-under-pressure over oratory — but unsettled; left as-is here.)*
 - **People's Hacklet**: Audience vote (separate from judge evaluation entirely)
 
-**Awards are scoped to the event that produced them; leaderboards are scoped to the tier.** Every award above is decided against the field that actually competed in that event, and against nothing else. A player can take Most Resilient at a chapter event with a slop score of 20 while the global board's leader sits at 0, and both facts are correct: the award says *best in that room*, the leaderboard says *best across the tier*. They are answering different questions and are not required to agree.
+**Awards are scoped to the event that produced them; leaderboards are scoped to the tier.** Every award above is decided against the field that actually competed in that event, and against nothing else. A player can take Slopless Builder at a chapter event with a slop score of 20 while the global board's leader sits at 0, and both facts are correct: the award says *best in that room*, the leaderboard says *best across the tier*. They are answering different questions and are not required to agree.
 
 This follows from concurrent panels (§3.2) as much as from geography. Two panels at one event, or two events in two cities, are judged by different people, and the league is multi-city with disjoint judge corps by construction — so judge variance is a property of the institution, not something concurrent panels introduce. **There is no cross-panel score anchoring and no severity correction.** What makes a Communication score portable between panels is that the four rubrics are role-siloed and the same everywhere, not that panels are calibrated against each other. What makes a slop score portable is that no human can touch it (§4.2).
 
-This produces **3 per-round categorical awards plus Best Overall** for each round, regardless of event tier or structure. Players may win multiple awards (e.g., a dominant performer might win Most Resilient + Best Overall in the same round). A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
+This produces **3 per-round categorical awards plus Best Overall** for each round, regardless of event tier or structure. Players may win multiple awards (e.g., a dominant performer might win Slopless Builder + Best Overall in the same round). A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
 
 **Awards explicitly retired at per-round level**:
 
@@ -281,6 +308,20 @@ This produces **3 per-round categorical awards plus Best Overall** for each roun
 - *Most Efficient*: requires enforced token measurement, only meaningful at Tier A with league-hosted AI substrate (drops at Tier C; available at Tier A tournament-level)
 
 **Tournament-level expanded categorical awards** are deployed at multi-day Tier A tournaments where judges observe each player across multiple rounds, making subtle categorical distinctions meaningful through aggregated evidence. See IDEAS_FOR_LATER.md "Multi-day Tier A tournament template" for the expanded set (Best UX/UI, Most Novel, Most Efficient, Iron Player, Comeback Player) and their allocation across qualifier-leaderboard vs finals-leaderboard.
+
+> **OPEN — does the per-round cut also retire the tournament set?** The three-award per-round
+> cut above is settled. What was never resolved is whether it applies only per-round, leaving
+> the tournament-level set intact as written here, or whether the anti-award-sprawl argument
+> should retire that set too. Keeping both is the status quo and preserves the
+> specialisation-recognition case that sponsor-facing material leans on; retiring the
+> tournament set maximises signal density but discards the IDEAS tournament design wholesale.
+>
+> **This gates Most Efficient**, which is currently listed as retired per-round here and as a
+> live per-round award in TIER_A §8 and TIER_B §8 — including at Tier B, where budgets are
+> honour-system and the enforced measurement it requires does not exist. Its rationale is
+> weakened either way: an efficiency award measures little against a budget the docs describe
+> as a runaway-loop ceiling rather than a binding constraint (§5.5). Decidable now; nothing
+> blocks it.
 
 The design principle is anti-award-sprawl: too many per-round categoricals at 8-player events means almost every player wins something, which destroys the *non-winning* signal that makes awards meaningful. Per-round awards stay tight; tournament-level awards expand because the field and round count justify richer categorical distribution.
 
@@ -526,7 +567,18 @@ So neither play dominates: take the key for a better pitch, a worse clock, and a
 **Why this is the thesis as a mechanic.** HackLet's claim (§10) is that AI collapsed the cost of *producing* and left the cost of *understanding* intact. The key decision is exactly that: the model makes an ambitious build possible in 24 minutes (collapsed production cost), but it does not make the player understand what shipping the key *means*, and that stays as expensive as it ever was. The format is not asking whether you can use AI; it is asking whether you can use it without hurting yourself.
 
 **Settled decisions.**
-- **The firewall sits above the container, not around it (2026-07-31).** The grading container is *not* network-isolated. It gets egress, and a firewall one layer up allows **`hackletleague.com` and `*.hackletleague.com` only** — which is where the league serves keys and the proxy. Everything else is blocked. This is what makes the mechanic work at all: the app can reach the proxy at runtime, and the allowlist keeps attribution airtight, because the league proxy remains the only inference endpoint any submission can reach. It also means "no internet access" is the wrong description of the sandbox and must not be restated; the correct one is "one allowed destination." (Egress restriction in FUZZ_RUNNER_SPEC's threat model should be read as *allowlisted*, not *absent*.)
+- **The firewall sits above the container, not around it (2026-07-31).** The grading container is *not* network-isolated. It gets egress, and a firewall one layer up allows a league-controlled destination only. Everything else is blocked. This is what makes the mechanic work at all: the app can reach the proxy at runtime, and the allowlist keeps attribution airtight, because the league proxy remains the only inference endpoint any submission can reach. It also means "no internet access" is the wrong description of the sandbox and must not be restated; the correct one is "one allowed destination." (Egress restriction in FUZZ_RUNNER_SPEC's threat model should be read as *allowlisted*, not *absent*.)
+
+  > **The allowlist itself is PROVISIONAL, not settled.** It currently reads
+  > `hackletleague.com` and `*.hackletleague.com`. The wildcard is a placeholder because the
+  > proxy has no address yet, and it **narrows to the proxy hostname the moment one exists.**
+  >
+  > Why it must not be inherited as final: `hackletleague.com` serves the platform API, the
+  > judge portal, and the Django admin alongside the proxy. A wildcard therefore hands
+  > untrusted contestant code a reachable target *inside league infrastructure*, and gives
+  > every SSRF probe in the catalog a live pivot rather than a dead one — the runner would be
+  > aiming submissions at the league's own surface. That is tolerable only while the proxy is
+  > unbuilt and there is nothing narrower to point at. It must not survive the proxy landing.
 - **Purely scored, not drainable.** An exposed key is scored (via the secrets finding), not made live-drainable by rivals — draining reintroduces PvP chaos and non-determinism, contradicting the design where the attacking half is handed to a *deterministic* catalog, not to opponents. The **budget cap is the containment**: an exposed key is technically drainable-until-revoked, but the blast radius is the player's own capped budget, and detection triggers immediate revocation.
 - **The key stays valid through the grading window.** Revocation is at the buzzer *for the player's ability to spend*, but the issued key must remain valid for the central runner's grading pass — otherwise the app's inference route 500s during grading and the app is scored broken for the league's own revocation. Grading uses a **separate grading allowance** (the fuzzer's own probing must not drain the player's budget), and inference-backed routes are excluded from the amplifying load/DoS probes (FUZZ_RUNNER_SPEC).
 - **Tier-A-scoped.** The mechanic depends on the firewall making the league proxy the *only* reachable inference endpoint, which is what makes attribution airtight. At Tier B/C there is no such firewall, players bring their own real keys, and secrets-checking is already live on real credentials — but the clean attribution and the controlled tradeoff are lost, so the Tier B/C version is **genuinely open** and not specified here.

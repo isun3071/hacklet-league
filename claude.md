@@ -28,8 +28,10 @@ Four things to know before you touch anything:
    fuzzer session. `backend/` and `frontend/` are frequently held by the platform session.
    Check `git status` and recent commits before editing shared files.
 
-Not-yet-decided questions are collected in DECISIONS_OWED.md. If a task needs one resolved,
-ask rather than choosing — several of them look like small wording calls and are not.
+Not-yet-decided questions are marked **OPEN in place**, in the section they belong to — there is
+no separate decisions file, deliberately (a second source of truth for decisions is how the last
+round of drift started). Search for `OPEN —` to find them. If a task needs one resolved, ask
+rather than choosing; several look like small wording calls and are not.
 
 ---
 
@@ -280,7 +282,7 @@ For operations that affect credentialing integrity (score changes, verification 
 - **CHANGELOG.md** — What changed and why, by stage. The decision record for anything that looks arbitrary.
 - **IDEAS_FOR_LATER.md** — The parking lot. Per BUILD_ROADMAP Rule 2, out-of-scope ideas go here instead of getting built.
 - **DOC_STATE.md** — Audit of every document's status (BUILT / DESIGNED / MEASURED / ASSUMED / SUPERSEDED) plus every known cross-document contradiction, `C-01`…`C-22`, each cited to file and line.
-- **DECISIONS_OWED.md** — The 23 open calls that need Ian, with options and costs. **If a task requires resolving one of these, stop and ask rather than picking.**
+- Open calls have **no dedicated file**. They are marked `OPEN —` inline in the doc that owns them, so a decision and its context stay together. **If a task requires resolving one, stop and ask rather than picking.**
 - **FUZZ_RUNNER_SPEC.md** and **fuzz-runner/** — owned by a separate session. Do not edit either. The two copies of the spec have already drifted.
 - **DEPLOY.md** — Deployment, backups, and the host migration runbook.
 - **AGENTS.md** — Agent-facing notes.
@@ -335,8 +337,8 @@ Canonical doc voice (format_spec, LEAGUE_OPERATIONS, tier ops) is more formal th
 The fuzz catalog produces a **Slop Score**: deduction-only, range [0, +∞), **lower is better, 0 is perfect** (golf-style — you accumulate slop, you never earn points). Use "slop score" in all copy, UI labels, and docs for the measurement.
 
 - The score is **Slop Score** — not "Resilience Score" or "Fuzz Score" (both retired names). But **"fuzz catalog" and "fuzz runner" keep the "fuzz" name**: fuzzing is the *method*, slop is what it *measures*.
-- **"Most Resilient"** stays as the award title — it credentials the *quality* (aspirational), while the slop score is the *measurement* (descriptive). Golf names a "Champion," not a "Lowest Score Holder."
-- **"resilient" / "resilience"** as an adjective or property ("build a resilient app," "resilience is what the catalog measures") is fine. Only the *score name* changed.
+- The award for the lowest raw slop score is **Slopless Builder** (award key `slopless_builder`). It was called "Most Resilient" until 2026-07-31, on the argument that the title should be aspirational while the score stayed descriptive. **That argument is superseded — do not reintroduce it.** "Slop" descends from *AI slop* / *workslop* (BetterUp Labs + Stanford Social Media Lab, HBR 2025) and names an absolute property rather than a rate, so "Slopless" names the metric exactly. "Builder" is carried by the Communication axis, not the metric: a minimal app has nothing to defend under cross-examination and sinks on the rank-sum. See format_spec §4.4.
+- **"resilient" / "resilience"** as an adjective or property ("build a resilient app") is still fine in prose. It is no longer an award name.
 - Direction matters: lower slop is better. Never write "high slop score" as praise.
 
 ## What This Document Is Not

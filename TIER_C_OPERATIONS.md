@@ -248,7 +248,7 @@ LLM judging is real recurring cost. At large-cohort MVR (30 submissions × 3 Fus
 The full award set and scoring math are defined once in **format_spec.md §4**; this section only notes which awards Tier C offers and how the Communication Score is produced per profile.
 
 Tier C offers the **per-round award set** (format_spec §4):
-- **Most Resilient** — lowest Slop Score (the deterministic catalog applies identically at every tier).
+- **Slopless Builder** — lowest Slop Score (the deterministic catalog applies identically at every tier).
 - **Best Communicator** — highest Communication Score. The score is **LLM-judged** in the MVR profile (PITCH.md, §8) and **human-judged** in the Tier C Extended profile (live pitch + cross-examination); the award honors the same skill dimension either way.
 - **People's Hacklet** — audience-contingent: applies when a chapter hosts an in-person audience, skipped for audience-free events.
 - **Best Overall** — composite ranking per format_spec §4.3.

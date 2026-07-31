@@ -130,15 +130,17 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
 class SubmitSerializer(serializers.Serializer):
     """Upload body (multipart). The archive is validated cheaply (size + zip magic) but NOT
-    extracted — at rest it's an opaque blob; unpacking happens only in the Stage 5 sandbox."""
+    extracted — at rest it's an opaque blob; unpacking happens only in the Stage 5 sandbox.
+
+    A player supplies the archive and a README, and nothing else. `deployed_url` and
+    `attack_surface_coverage` are **grading-pipeline outputs** and are deliberately not accepted
+    here: the league builds and deploys the container, so the player has no URL to give, and
+    coverage is derived from the probe-applicability count (format_spec §4.2). Letting the
+    submitter declare their own attack surface would invert a metric that exists to check them.
+    """
 
     archive = serializers.FileField()
     readme_content = serializers.CharField(required=False, allow_blank=True, default="")
-    deployed_url = serializers.URLField(required=False, allow_blank=True, default="")
-    attack_surface_coverage = serializers.ChoiceField(
-        choices=Submission.AttackSurfaceCoverage.choices,
-        required=False, allow_blank=True, default="",
-    )
 
     def validate_archive(self, f):
         if f.size > settings.MAX_SUBMISSION_BYTES:

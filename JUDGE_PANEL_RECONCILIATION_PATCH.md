@@ -5,8 +5,9 @@
 > only** — the code still ships three `judge_specialization` values, not four). Edit 3's
 > instruction *not* to overwrite cross-examination timing was correctly honoured; the clock is
 > now settled at 60s + 120s and the **mechanism** remains open (DOC_STATE C-11). The
-> "Slopless Builder" name used below does not match "Most Resilient" as used everywhere else
-> (C-17). Retained as the decision record; do not re-apply.
+> "Slopless Builder" name used below **was correct and the rest of the repo has caught up**
+> (2026-07-31): the award is Slopless Builder everywhere, including the `slopless_builder`
+> award key in code. C-17 is closed. Retained as the decision record; do not re-apply.
 
 *Fixes the three-vs-four-judge contradiction. Right now the docs disagree with each other: format_spec §4 and IDEAS treat the stakeholder judge as a real role, but TIER_A §9's panel and the DATA_MODEL `judge_specialization` enum only list three (tester, ux_designer, general) with stakeholder as a "when the format absorbs it" maybe. This locks the four-judge structure decided in session: four permanent roles, four separate rubrics, weighted 30/20/20/30, all feeding the single 0-100 communication axis. Apply these edits to the canonical docs.*
 

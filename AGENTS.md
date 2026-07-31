@@ -21,7 +21,7 @@ Supporting documents (referenced from `claude.md`):
 - `ARCHITECTURE.md` — service relationships and request flows
 - `FUZZ_RUNNER_SPEC.md` — runner architecture (relevant in Stage 5). Owned by a separate session; do not edit it or `fuzz-runner/`.
 - `DOC_STATE.md` — per-section status of every doc (BUILT / DESIGNED / MEASURED / ASSUMED / SUPERSEDED) plus the cross-document contradictions `C-01`…`C-22`
-- `DECISIONS_OWED.md` — the open calls that need Ian. If a task requires resolving one, stop and ask rather than choosing.
+- Open calls live **inline**, marked `OPEN —` in the section that owns them. There is no decisions file. If a task requires resolving one, stop and ask rather than choosing.
 
 **There is no root `README.md`.** This line previously said one existed and carried getting-started instructions for human developers; it never did. `DEPLOY.md` covers running and deploying the stack, and `frontend/README.md` is the unmodified Next.js default.
 

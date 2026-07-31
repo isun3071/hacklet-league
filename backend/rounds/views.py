@@ -246,8 +246,9 @@ class RoundViewSet(
         submission.archive_filename = (getattr(upload, "name", "") or "submission.zip")[:255]
         submission.archive.save("submission.zip", upload, save=False)
         submission.readme_content = data.get("readme_content", "")
-        submission.deployed_url = data.get("deployed_url", "")
-        submission.attack_surface_coverage = data.get("attack_surface_coverage", "")
+        # deployed_url and attack_surface_coverage are intentionally NOT set from the request —
+        # both are grading-pipeline outputs (see SubmitSerializer). They stay blank until the
+        # Stage 5 deploy + fuzz pass writes them.
         submission.status = Submission.Status.SUBMITTED
         submission.submitted_at = timezone.now()
         submission.save()

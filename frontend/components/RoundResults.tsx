@@ -61,8 +61,8 @@ export function RoundResults({ roundId, refreshKey = 0 }: { roundId: string; ref
                 <dd>{byPlayer(data.awards.best_overall)}</dd>
               </div>
               <div>
-                <dt>most resilient</dt>
-                <dd>{byPlayer(data.awards.most_resilient)}</dd>
+                <dt>slopless builder</dt>
+                <dd>{byPlayer(data.awards.slopless_builder)}</dd>
               </div>
               <div>
                 <dt>best communicator</dt>

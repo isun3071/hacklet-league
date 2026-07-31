@@ -136,11 +136,11 @@ The live performance dimension of communication is the format's most distinctive
 
 **Deliberation + audience voting (18 min)**: all four judges deliberate together, the nontech stakeholder included, but the stakeholder scores on a **separate rubric** from the three technical roles (format_spec.md §3.1). They compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, read README content more carefully, and score across their own rubrics.
 
-**Deliberation produces scores, not winners.** Most Resilient, Best Communicator and Best Overall are computed from those scores afterwards; the panel does not vote on an outcome. Awards are decided against this event's field only — a chapter-event winner is not competing against the global board (format_spec.md §4.4).
+**Deliberation produces scores, not winners.** Slopless Builder, Best Communicator and Best Overall are computed from those scores afterwards; the panel does not vote on an outcome. Awards are decided against this event's field only — a chapter-event winner is not competing against the global board (format_spec.md §4.4).
 
 Concurrent with judge deliberation, **audience votes** for People's Hacklet through the player portal on their own devices. Audience voting is open during the 18-min deliberation window; closes at T+93:00.
 
-**Award reveal + closing ceremony (14 min)**: ceremonial reveal of categorical awards (Most Resilient, Best Communicator, People's Hacklet) followed by Best Overall reveal. Production rhythm supports audience reaction, brief player commentary, broadcast cuts. Award reveal is theatrical content that audience-design philosophy requires; the 14-min window allocates time for ceremony rather than just announcement.
+**Award reveal + closing ceremony (14 min)**: ceremonial reveal of categorical awards (Slopless Builder, Best Communicator, People's Hacklet) followed by Best Overall reveal. Production rhythm supports audience reaction, brief player commentary, broadcast cuts. Award reveal is theatrical content that audience-design philosophy requires; the 14-min window allocates time for ceremony rather than just announcement.
 
 **Zamboni Period (28 min)**: workstation reset for next round. League daemon executes `userdel -r` for each player's ephemeral account, removing all home directory content. Workstations rebooted to master image. Network state reset. Per-player accounts re-provisioned for next round. Audience break period; production cuts to commentary or pre-recorded content.
 
@@ -236,7 +236,7 @@ The fuzz catalog operates at **full strength** at Tier A (and at every tier — 
 Per format_spec.md §4, Tier A operates the full scoring framework:
 
 **Available per-round awards** at Tier A:
-- **Most Resilient**: lowest Slop Score
+- **Slopless Builder**: lowest Slop Score
 - **Best Communicator**: highest Communication Score (live pitch + cross-ex evaluation, human judges)
 - **People's Hacklet**: highest audience vote
 - **Best Overall**: composite rank with progressive tiebreakers (lowest rank sum → smallest differential → best Fuzz Rank → best Communication Rank → co-Champions)
@@ -245,7 +245,7 @@ Per format_spec.md §4, Tier A operates the full scoring framework:
 **Communication Score** at Tier A captures **live performance** including pitch quality and cross-examination defense under live questioning. This is the format's most distinctive credentialing dimension. PITCH.md may be authored during pitch prep as preparation material; the live performance is what judges evaluate.
 
 **Tournament-level categoricals** at multi-day Tier A tournaments include:
-- Tournament Best Overall, Tournament Most Resilient, Tournament Best Communicator (cumulative across rounds)
+- Tournament Best Overall, Tournament Slopless Builder, Tournament Best Communicator (cumulative across rounds)
 - Best UX/UI (judge-aggregated across rounds)
 - Most Novel (judge-aggregated across rounds, "consistently novel approach across tournament")
 - Most Efficient (Tier A only, cumulative token discipline)
