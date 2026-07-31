@@ -2,6 +2,26 @@
 
 *Produced 2026-07-28. Read-only audit. No document other than this one was modified.*
 
+> ## ⚠ Nine contradictions have been closed since this audit ran
+>
+> This file is a **snapshot of 2026-07-28** and has not been re-audited. Its status columns and
+> `C-nn` entries below still describe the repository as it was then. Closed since:
+>
+> **C-02** (fuzz schema rewritten deduction-only, 07-30) · **C-04** and **C-05** (token budget
+> reframed, then rebased to 10M with the per-prompt cap retired) · **C-07** (the substrate gate:
+> two windows with a cut at build end) · **C-09** (language tiers retired, so the §5.4-vs-IDEAS
+> disagreement dissolves) · **C-10** (no league-provided database; the scoring page corrected) ·
+> **C-12** (Tier C Extended retired) · **C-14** (`Event.format` accepts `underspecified`) ·
+> **C-20** (the 3-minute upload grace is implemented).
+>
+> Also changed: `judge_specialization` now ships all four values, so the "BUILT with a known gap"
+> row for EventParticipant is stale — but the scoring-math divergence that row points at
+> (**C-01** / D-11) is **still real**, and is now waiting on the fuzzer being wired rather than
+> on a decision.
+>
+> [DECISIONS_OWED.md](DECISIONS_OWED.md) carries the current open list; [CHANGELOG.md](CHANGELOG.md)
+> carries the reasoning. Where they disagree with the snapshot below, they win.
+
 **Purpose.** The docs are written in present indicative throughout, so a reader cannot tell
 shipped from designed from superseded. This file assigns a status to every section of every
 doc in scope, lists every cross-document contradiction found, and identifies which of them

@@ -11,9 +11,10 @@ const STEPS: { n: string; title: string; body: React.ReactNode }[] = [
     title: "submit",
     body: (
       <>
-        at the 24-minute freeze your code is captured with its <code>Dockerfile</code> and queued
-        for testing. Tier C uploads through the portal (3-minute grace for latency); Tier A captures
-        straight from your workstation.
+        at the 24-minute freeze you upload your code with its <code>Dockerfile</code> through the
+        portal and it is queued for testing. you get a 3-minute grace window after the buzzer, so
+        a slow upload does not cost you work you finished in time. the buzzer still ends the
+        build.
       </>
     ),
   },
@@ -154,8 +155,9 @@ performance  speed gates (ttfb/fcp/inp) · load · dos resistance`}</pre>
       <p className="body">
         your submission includes a <code>Dockerfile</code> (we ship starter templates for every
         common stack, so you barely touch it). your app listens on the port we hand it via{" "}
-        <code>$PORT</code>. if you need a database, connect to the one we provide at{" "}
-        <code>$DATABASE_URL</code>. that is the whole contract.
+        <code>$PORT</code>. that is the whole contract. if you need to store data, ship a SQLite
+        file in your repo, or keep it in memory, or use the browser. we do not hand you a
+        database.
       </p>
       <p className="callout callout-warn">
         if your app does not deploy and answer HTTP, it is a DNF, the worst possible outcome, ranked

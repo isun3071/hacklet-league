@@ -1,8 +1,28 @@
 # Decisions Owed
 
 *Phase 3 of the 2026-07-28 documentation reconciliation. Every contradiction that needs a call
-from Ian, with options and costs. **Nothing here is resolved.** Evidence cited to file and line;
-`C-nn` refers to the contradiction list in [DOC_STATE.md](DOC_STATE.md).*
+from Ian, with options and costs. Evidence cited to file and line; `C-nn` refers to the
+contradiction list in [DOC_STATE.md](DOC_STATE.md).*
+
+> ## ⚠ Read this first — eight of these were decided on 2026-07-31
+>
+> The entries below are **as written on 2026-07-28** and were accurate then. They have not been
+> rewritten. Where this file and the list here disagree, **this list wins**, and
+> [CHANGELOG.md](CHANGELOG.md) carries the reasoning.
+>
+> | ID | Status | Outcome |
+> |---|---|---|
+> | **D-01** | **DECIDED** | The container is not isolated. It gets egress, firewalled one layer up to `hackletleague.com` and `*.hackletleague.com` only. *Still open:* who pays for judge-driven inference during clickaround. |
+> | **D-02** | **DECIDED** | Budget is **10M**, one pool across build and pitch prep. The 25k per-prompt cap is **retired**, replaced by a rate-limit throttle. |
+> | **D-06** | **DISSOLVED** | The language-tier ladder is retired, so "which tier is Rust in" stops being a question. Support means *provisioned at Tier A*, not gradeable. Rust stays. |
+> | **D-09** | **DECIDED** | Two substrate windows (build, pitch prep) with a real cut at build end that kills in-flight generation. Tier A/B only. |
+> | **D-15** | **DECIDED** | Tier C Extended is **retired** — durations undecided, so the profile is withdrawn rather than guessed. |
+> | **D-16** | **DECIDED** | `Event.format` accepts `underspecified`. Migrated. |
+> | **D-21** | **DECIDED** | The league does **not** provision a database. SQLite committed to the submission, in-memory, or browser storage. The scoring page no longer claims otherwise. |
+> | **C-20** | **DECIDED + BUILT** | The 3-minute upload grace is implemented, not just promised. |
+> | **D-11** | **PARTLY** | `judge_specialization` now has all four values. The 30/20/20/30 weighting is **still not implemented**, and is now waiting on the fuzzer being wired rather than on a decision. |
+>
+> **Everything else in this file is still open.**
 
 ---
 

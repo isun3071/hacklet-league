@@ -146,7 +146,7 @@ slug                    : varchar (chapter-scoped unique)
 name                    : varchar
 description             : text
 event_tier              : enum (chapter, regional, championship)
-format                  : enum (vibe, unslop) — what the player does; foundational format is 'vibe'; 'unslop' added Stage 11
+format                  : enum (vibe, unslop, underspecified) — what the player does; foundational format is 'vibe'; 'unslop' added Stage 11
 timer                   : enum (xp, sprint, scrum, agile, waterfall) — build-phase duration; foundational timer is 'sprint' (24 min)
 access_mode             : enum (invite_only, application) — invite-only vs open application form, set per event
 status                  : enum (scheduled, registration_open, registration_closed, in_progress, completed, cancelled)
@@ -175,7 +175,10 @@ The atomic competitive unit within an event. Multi-round events have multiple Ro
 id                  : UUID primary key
 event_id            : FK Event
 round_number        : int (1, 2, 3... within event)
-timing_profile      : enum (tier_a, tier_c_mvr, tier_c_extended) — selects the phase set + clock
+timing_profile      : enum (tier_a, tier_c_mvr) — selects the phase set + clock
+                      (tier_c_extended RETIRED 2026-07-31: durations undecided. Not selectable;
+                       its phase profile survives in services.PHASE_PROFILES so any existing
+                       row still resolves.)
 status              : enum (scheduled, opening, build, evaluation, judging, awards, completed)
 opening_at          : timestamp   ── universal anchors (present in every profile):
 build_start_at      : timestamp      opening → build → freeze
