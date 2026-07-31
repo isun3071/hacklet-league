@@ -326,34 +326,35 @@ Mid-tier model choice is deliberate. Frontier models would mask the verification
 
 ## 5.4 Substrate Languages and Package Mirror
 
-> **Status: DESIGNED** — and **contested**: IDEAS_FOR_LATER.md's Season 1 selection puts Java, C# and PHP in Tier 1 and *excludes* Rust and Ruby, which are Tier 2 here (DOC_STATE C-09). No mirror exists.
+> **Status: DESIGNED** — no mirror exists yet. The **language-tier framing was retired 2026-07-31**; what replaces it is below. This also closes DOC_STATE C-09 and D-06, which were a disagreement about which languages sat in which tier — a question that stops existing once the tiers do.
 
-The substrate supports a tiered set of languages calibrated to the
-target population — junior software engineers. The Union-Of-Resumes
-heuristic governs inclusion: a language is in the substrate if it
-appears commonly on junior SWE resumes in the league's target market.
+**Language support is a provisioning problem, not a grading one.** The catalog cannot tell what
+a submission is written in and does not try. Every probe applies on observed HTTP surface alone
+— whether an endpoint exists, whether it takes text input, whether there is a login form — and
+the runner's discovery builds a stack-agnostic map by crawling the live app. A Flask app, a Go
+service, and a hand-rolled C HTTP server are graded by the identical catalog, and no probe in it
+branches on language or framework. The earlier Tier 1 / Tier 2 / Tier 3 ladder implied the
+league's *measurement* got weaker down the list. It does not. Nothing about grading varies.
 
-**Tier 1 — Full substrate parity**:
-Python, JavaScript, TypeScript, Go
-Mirrored starter kits cover web frameworks, ORMs, validation,
-testing, and common utilities. Quality of substrate is equal across
-these languages.
+**What "supported" actually means, and it only means it at Tier A.** Tier A workstations are
+firewalled to `hackletleague.com` and `*.hackletleague.com` (§5.2, §5.8), so a player cannot
+reach npm, PyPI, crates.io, or anything else. A language is *supported* when the league has
+preinstalled its toolchain on the workstation image and mirrors its packages. That is the whole
+claim: **we are the mirror, because nothing else is reachable.** Support is a statement about
+what the league has provisioned, not about what the catalog can see.
 
-**Tier 2 — Maintained substrate parity**:
-Java, C#, Rust, Ruby
-Mirrored starter kits cover web frameworks and core utilities.
-Substrate is maintained but with smaller catalogs than Tier 1.
+The mirror is operated by the league at `packages.hackletleague.com`, firewall-allowed alongside
+the main domain. It updates between seasons, and the package set is published with season
+documentation. A submission needing something outside the mirror fails to deploy and scores
+accordingly — the ordinary consequence, not a special rule.
 
-**Tier 3 — Compiler-only**:
-C, C++
-Toolchain available. No mirrored framework ecosystem. Players using
-Tier 3 languages bring their own infrastructure within the round time.
+**At Tier B and Tier C this section does not apply.** Neither runs a locked workstation, so
+players install what they like from the open internet and the mirror is irrelevant. The catalog
+grades them the same way regardless, which is exactly the point.
 
-The mirror is operated by the league at packages.hackletleague.com,
-firewall-allowed alongside the main domain. Mirror updates between
-seasons; package availability is published with season documentation.
-Submissions requiring packages outside the mirror will fail to deploy
-and score accordingly.
+The published language set for a season is therefore an operations decision, driven by what the
+league can keep mirrored and imaged, and by what the target population actually writes. It is
+not a ranking, and no language is second-class at grading time.
 ### 5.5 Resource Budgets
 
 Each player receives per round:
@@ -378,24 +379,39 @@ from the retired 100k figure and does not survive the rebase below. It needs re-
 
 **Two boundaries, two names.** These are distinct instants and the documents must not use one word for both. **Build end** is when build time is up — the freeze boundary, where the proxy cuts off, the submission is captured, and code files go read-only. **Round end** is when the round is over — awards complete, zamboni finished. On the illustrative Tier A itinerary these fall at T+29 and T+135 respectively, roughly a hundred minutes apart. "The round has ended" never means build end.
 
-**The substrate does not switch off at build end.** It stays available through the
-pitch-preparation window, on the same budget. Build end stops the *build*, not the AI: the
-submission has already been captured and deployed by then, so nothing the player does with the
-model afterwards can change the artifact being graded. Preparing a pitch well means reading
-your own code, and a player should be able to do that with the same assistance they built with.
+**Two open windows, one hard cut between them.** Substrate access is granted during the **build
+phase** and again during the **pitch-preparation window**, and refused at every other time. The
+boundary between them is a real interruption, not a seam: at build end the league disables the
+player's key server-side, which kills any generation in flight. Access is restored when
+preparation begins. A build-phase request issued at 23:59 therefore never delivers, which is the
+whole point of cutting rather than draining — it must not be possible to receive usable code
+after the buzzer.
 
-What makes this safe is the capture, not a rule. At build end the archive is uploaded and
-deployed server-side, and the fuzzer grades **the deployed copy**, not the player's working
-directory. Edits made after that point apply to nothing that is scored. The freeze is therefore
-enforced by *where grading reads from*, which needs no client cooperation at all, rather than by
-switching off a tool the player still has legitimate use for.
+**Why prep gets the substrate back.** Preparing a pitch well means reading your own code, and a
+player should be able to do that with the assistance they built with. It is safe because of the
+capture, not because of a rule: at build end the archive is uploaded and deployed server-side,
+and the fuzzer grades **the deployed copy**, never the player's working directory. Anything the
+model helps them change afterwards reaches nothing that is scored. The freeze is enforced by
+*where grading reads from*, which needs no client cooperation at all.
 
-**Substrate access ends at a single server-side gate with two conditions: the budget is exhausted, or the pitch-preparation window has closed.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
+**The gate has two conditions: the budget is exhausted, or the request falls outside an open window.** Both are enforced the same way a commercial provider cuts an account off at a usage limit — server-side, immediate, and requiring no cooperation from the client:
 
 - The proxy refuses the request with **403, not 429**. A 429 signals retry-later, and agentic clients have backoff wired to it, so an agent would sit in a retry loop while the player watches a spinner. 403 is terminal and surfaces immediately.
-- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or the preparation window has closed. It must not say the round is over, which is a different and later instant, and it must not say build time is up, which no longer ends substrate access.
-- **In-flight requests are cut, not allowed to finish** when the gate closes.
+- The response body is **player-facing text**, because it reaches the player through whatever client they are using. It states which condition fired: the budget is spent, or the substrate is closed right now. It must not say the round is over, which is a different and much later instant.
+- **In-flight requests are cut, not allowed to finish** at every window close, including the one at build end.
 - The player may continue working without AI assistance.
+
+**Rate limiting replaces the per-prompt cap.** The former 25,000-token per-prompt ceiling is
+retired: at a 10M budget it constrains nothing a player would notice, and it was already
+non-functional for agentic clients, which carry more than that in resident context on a single
+step. What the substrate enforces instead is an ordinary **throttle** — a rate limit on request
+volume, the same shape any commercial API applies. It protects the proxy from a runaway loop
+without pretending to be a strategic constraint on the player.
+
+**Tier scope.** All of the above applies where the league hosts the substrate: **Tier A and
+Tier B**. It does not apply at Tier C, which is BYOD — there is no league key to disable, no
+budget to enforce, and no reason to serve league inference when neither is true (LEAGUE_OPERATIONS
+§7). Tier C players keep their own tooling throughout, including during pitch preparation.
 
 **The tradeoff this preserves.** Because the budget is one pool spanning build and preparation,
 a player who spends everything building has nothing left to prepare with. That is the intended
