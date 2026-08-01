@@ -61,12 +61,24 @@ Flow: issue token bound to (user, origin) with expiry → show instructions → 
 fetch/resolve (egress-sandboxed) → on match persist a `(user, verified_origin, method, verified_at)` grant →
 unlock active probes scoped to that origin.
 
-Three rules that keep it safe:
+Four rules that keep it safe:
+- **The grant is ACCOUNT-BOUND, and a verified origin is NEVER globally open.** This is the load-bearing
+  control. Active grading checks whether the REQUESTING account holds a grant for the origin. Alice verifying
+  `alice.com` writes a grant for Alice; Mallory submitting `alice.com` has no grant and gets PASSIVE only.
+  Verification authorizes the verifying ACCOUNT, not the URL, so scraping the web for Sloptic-tokened sites
+  and turning the grader loose on them does not work. Do NOT model verification as "this origin is now
+  active-gradable"; model it as "this account may actively grade this origin." Consequently: active grades
+  REQUIRE an authenticated account (also gives quota + ban); passive grades can be anonymous with IP limits.
+  The token file is world-readable and that is fine, reading it confers nothing; an attacker would have to
+  serve THEIR OWN issued token on the origin, which needs real control, and even then the grant is only theirs.
 - **Scope to the verified origin** (scheme + host + port). A verified origin authorizes only URLs under
   itself; never a different origin; do not let a redirect carry authorization off the verified origin.
 - **Egress-sandbox the verification fetch** too (block internal/metadata IPs).
 - **Time-box + re-check.** A grant lasts e.g. 90 days and re-verifies before an active grade (or require the
-  token stay in place), so a domain that changes hands cannot retain stale authorization.
+  token stay in place), so a domain that changes hands cannot retain stale authorization. DNS TXT is the
+  strongest method (proves zone control); file/meta prove control-of-served-content, normally the same thing.
+  The only residual abuse is an attacker who can plant the token on an origin they already have write access
+  to (subdomain takeover / open upload), who therefore gains nothing Sloptic did not already let them do.
 
 ## Grader-side change this depends on (lands in sloptic-main)
 
@@ -105,8 +117,12 @@ breakdown, report card, and percentile against the frozen 2026.1 population. The
 ## The security model is the product (do not weaken it)
 - PASSIVE BY DEFAULT. An unverified target gets only observational probes (headers/TLS/a11y/perf/soft-404).
   Active/injection probes NEVER run on an unverified target. This is legal-safety, not a feature flag.
-- ACTIVE probing requires DOMAIN-OWNERSHIP VERIFICATION (file token / DNS TXT / meta tag), scoped to the
-  verified origin (scheme+host+port). A redirect must not carry authorization off the verified origin.
+- ACTIVE probing requires DOMAIN-OWNERSHIP VERIFICATION (file token / DNS TXT / meta tag). The grant is
+  ACCOUNT-BOUND: active grading checks whether the REQUESTING account holds a grant for the origin, so a
+  verified origin is never globally open (a different user gets passive only). Model it as "this account may
+  actively grade this origin," never "this origin is active-gradable." Active grades require sign-in; passive
+  can be anonymous. Scope to the verified origin (scheme+host+port); a redirect must not carry authorization
+  off it.
 - EGRESS SANDBOX every outbound fetch (grade AND verification): block loopback / RFC1918 / link-local /
   169.254.169.254. The grader must never reach internal infrastructure.
 - Rate-limit + quota every grade. Respect robots and bot-challenges; never build anything that defeats them.
