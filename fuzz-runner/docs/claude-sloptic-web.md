@@ -42,9 +42,10 @@ Read `sloptic-main`'s `sloptic/cli.py` and `sloptic/pipeline.py` for exact signa
 - **Percentile:** `scripts/benchmark.py rank --results <record.jsonl>` against `validation/benchmark-curve.json`
   (curve 2026.1). Use its logic to place a single grade on the frozen population.
 - **Passive vs full:** the worker runs the full pipeline only for a verified origin; for everything else it
-  needs `--passive-only` (a per-probe passive/active tag + run mode to be added in `sloptic-main`, this repo's
-  one upstream dependency). Until it exists, either add it there first or the public product is passive-only
-  by construction.
+  runs `--passive-only` (SHIPPED in `sloptic-main` v1.1: `sloptic/safety.py` classifies every probe, 37 passive
+  / 54 active; use the flag or `safety.passive_catalog()`). PASSIVE = changes no state AND fetches nothing
+  hidden (reads only what the app serves every visitor, even if that reveals a leak). ACTIVE = mutates / sends
+  a payload / needs multiple identities / goes fetching hidden data (/.env, backend queries, bulk pulls).
 
 ## The security model IS the product (do not weaken it)
 
@@ -93,8 +94,8 @@ Prove control of the origin to be actively tested by serving a token we issue. T
 ## Conventions
 
 - **The grader is a dependency.** Pin `sloptic`; call it in `--passive-only` mode for unverified targets and
-  the full run only for a verified origin. Do not copy or re-implement probe logic here. (`--passive-only` and
-  the per-probe passive/active tag are a small change that lands in `sloptic-main`; this repo depends on it.)
+  the full run only for a verified origin. Do not copy or re-implement probe logic here. (`--passive-only` +
+  `sloptic/safety.py` are shipped in `sloptic-main` v1.1; this repo just uses them.)
 - **A passive grade is a DIFFERENT measurement from a full grade** (fewer probes apply). Label it clearly and
   rank it against a passive-subset curve, or show raw passive slop + axes. Never mix a passive grade onto the
   full-grade percentile.

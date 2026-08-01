@@ -96,14 +96,16 @@ it hard and keep the passive floor easy:
   is a traceable, bannable act, not an anonymous one), (4) egress sandbox + rate limits + re-check of both
   factors at grade time. No single failure opens the active tier.
 
-## Grader-side change this depends on (lands in sloptic-main)
+## Grader-side change this depends on (SHIPPED in sloptic-main v1.1)
 
-The catalog currently runs all probes. The web product needs:
-- a **`passive` vs `active` classification per probe** (active = sends an attack payload: the cmdi/sqli/xss/
-  ssti/lfi/xxe/upload family; passive = observes: headers/TLS/a11y/perf/soft-404/CWV/exposure-by-fetch), and
-- a **`--passive-only` run mode** (CLI + pipeline) so the worker can grade unverified targets safely.
-This is the clean interface between the two repos, and it is CI-lockable (assert no active probe fires under
-passive-only). Score comparability note: a passive-only grade is a DIFFERENT measurement from a full grade
+DONE 2026-08-01. `sloptic/safety.py` classifies all 91 probes **37 passive / 54 active**, and `--passive-only`
+(CLI) + `safety.passive_catalog()` (programmatic) drop the active ones. The definition (two gates): PASSIVE =
+changes no state AND fetches nothing hidden, it reads only what the app serves every visitor (page / assets /
+bundle / headers / normal responses) and reports leaks found there ("public anyway, nobody looked"), including
+a served source map and a secret sitting in the bundle. ACTIVE = mutates / sends a payload / needs multiple
+identities / OR goes fetching hidden data (guessing /.env or /.git, querying the backend, pulling bulk data).
+FAIL-CLOSED: an unclassified probe is treated active. CI-locked (`test_safety.py`): the two sets partition the
+live catalog, the dangerous families can never be passive, and `passive_catalog` excludes every active probe. Score comparability note: a passive-only grade is a DIFFERENT measurement from a full grade
 (fewer applicable probes); surface that to the user and rank passive grades against a passive curve or label
 them clearly, do not mix them on the full-grade percentile.
 
