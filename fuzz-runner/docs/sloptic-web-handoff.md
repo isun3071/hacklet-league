@@ -75,10 +75,26 @@ Four rules that keep it safe:
   itself; never a different origin; do not let a redirect carry authorization off the verified origin.
 - **Egress-sandbox the verification fetch** too (block internal/metadata IPs).
 - **Time-box + re-check.** A grant lasts e.g. 90 days and re-verifies before an active grade (or require the
-  token stay in place), so a domain that changes hands cannot retain stale authorization. DNS TXT is the
-  strongest method (proves zone control); file/meta prove control-of-served-content, normally the same thing.
-  The only residual abuse is an attacker who can plant the token on an origin they already have write access
-  to (subdomain takeover / open upload), who therefore gains nothing Sloptic did not already let them do.
+  token stay in place), so a domain that changes hands cannot retain stale authorization.
+
+### Verification tiers (defense in depth)
+
+Active grading is the legally-loaded, low-marginal-value tier (injection is ~0% of the slop signal), so gate
+it hard and keep the passive floor easy:
+
+- **Active grade = a custom domain + TWO independent control proofs: file token AND DNS TXT.** They prove
+  DIFFERENT surfaces (control of what is served vs control of the DNS zone), so an attacker who can plant a
+  file (open upload / subdomain takeover) still fails the DNS factor. Two files at two paths do NOT count as
+  two factors (same surface); DNS is the independent axis. Require both to be present and re-checked at grade
+  time.
+- **Platform subdomains (`*.vercel.app`, `*.netlify.app`, ...) get the passive floor.** They cannot edit the
+  platform's DNS zone, so the DNS factor is structurally unavailable; rather than substitute a weak
+  same-surface proof, give them single-factor-or-anonymous PASSIVE grading (which is ~all the value). The path
+  to an active grade is "attach a custom domain." This also keeps the model simple for the 65%-Vercel corpus.
+- **Depth is layered, not just two files.** Every active grade carries: (1) the two control proofs, (2) the
+  account-bound grant, (3) a logged "I own this and authorize active testing" attestation (ToS-bound, so abuse
+  is a traceable, bannable act, not an anonymous one), (4) egress sandbox + rate limits + re-check of both
+  factors at grade time. No single failure opens the active tier.
 
 ## Grader-side change this depends on (lands in sloptic-main)
 
@@ -100,38 +116,7 @@ them clearly, do not mix them on the full-grade percentile.
 - Persistence (results store, verification grants, quotas).
 - Whether to expose the platform_id / builder finding in the public report (nice differentiator).
 
-## Appendix: proposed `sloptic-web/claude.md`
+## The new repo's claude.md
 
-```markdown
-# claude.md: Sloptic web (sloptic.org)
-
-The public web product for Sloptic. Users submit a deployed web app URL and get its slop score, per-axis
-breakdown, report card, and percentile against the frozen 2026.1 population. The GRADER lives in the separate
-`sloptic/sloptic-main` repo and is consumed as the engine, never forked here.
-
-## Architecture
-- Frontend (sloptic.org UI) + thin API (enqueues grade jobs) + worker (imports `sloptic`, runs the pipeline).
-- Grading is ASYNC (minutes per grade): submit -> poll status -> results. Never block a request on a grade.
-- Percentile comes from `sloptic`'s frozen curve (2026.1) + benchmark ranking.
-
-## The security model is the product (do not weaken it)
-- PASSIVE BY DEFAULT. An unverified target gets only observational probes (headers/TLS/a11y/perf/soft-404).
-  Active/injection probes NEVER run on an unverified target. This is legal-safety, not a feature flag.
-- ACTIVE probing requires DOMAIN-OWNERSHIP VERIFICATION (file token / DNS TXT / meta tag). The grant is
-  ACCOUNT-BOUND: active grading checks whether the REQUESTING account holds a grant for the origin, so a
-  verified origin is never globally open (a different user gets passive only). Model it as "this account may
-  actively grade this origin," never "this origin is active-gradable." Active grades require sign-in; passive
-  can be anonymous. Scope to the verified origin (scheme+host+port); a redirect must not carry authorization
-  off it.
-- EGRESS SANDBOX every outbound fetch (grade AND verification): block loopback / RFC1918 / link-local /
-  169.254.169.254. The grader must never reach internal infrastructure.
-- Rate-limit + quota every grade. Respect robots and bot-challenges; never build anything that defeats them.
-- Only test targets the user owns or is authorized to test. Full stop.
-
-## Conventions
-- The grader is a dependency: pin `sloptic`, call `--passive-only` for unverified targets, full run only for
-  verified origins. Do not copy probe logic into this repo.
-- A passive grade is a different measurement from a full grade; label it, do not mix it on the full curve.
-- Secrets (LLM key, DB, queue creds) are server-side only; never ship them to the client bundle (Sloptic
-  itself grades for exactly this leak).
-```
+Written as a standalone file: `docs/claude-sloptic-web.md`. Copy it into `sloptic/sloptic-web` and rename it
+to `claude.md`. It is kept as its own file (not inline here) so the two do not drift.
