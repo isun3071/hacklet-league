@@ -434,7 +434,7 @@ one differently. It does not get a different score.
 
 ## 14. Operational
 
-- `uv sync --group browser` — `browser` is a dependency **group**, not an extra. `--extra browser` fails.
+- `uv sync --extra browser` — `browser` is an optional **extra** (published, so `pip install sloptic[browser]` works too), then `playwright install chromium`.
 - `uv run playwright install chromium`. **Playwright floor is 1.61**, the release that added Ubuntu 26.04;
   1.60 cannot fetch a browser there at all. A machine with a system Chrome hides this via
   `_LAUNCH_ORDER`'s channel fallback, so a fresh clone is the real test.
