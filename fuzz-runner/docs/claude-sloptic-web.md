@@ -5,6 +5,18 @@ is better), the per-axis breakdown (security / qa / performance), the report car
 against the frozen 2026.1 population**. The GRADER lives in the separate `sloptic/sloptic-main` repo and is
 consumed here as the engine. Never fork probe logic into this repo.
 
+## What Sloptic is (if you have never seen it)
+
+Sloptic (the grader, `sloptic-main`) is a **black-box HTTP resilience grader**: it points at a deployed web
+app, probes it over HTTP with **no source and no spec**, and emits a **deduction-only slop score** (unbounded,
+lower is better, `0` means nothing found) across three axes, security, qa (accessibility + correctness), and
+performance. It scores only the **intent-independent floor** every app should have regardless of purpose
+(missing security headers, no rate limiting, inaccessible controls, a shipped dev build, a leaked source map),
+never whether a feature is good. On a corpus of ~1,500 hackathon apps the slop is overwhelmingly *chronic*
+(missing hygiene), not *acute* (exploitable holes). **Clone `sloptic-main` alongside this repo and read its
+`README.md`, `claude.md`, `CONTRIBUTING.md`, and `CORPUS_REPORT.md`, that repo is the full, authoritative
+account of what the grade means; this repo only wraps it in a web product.**
+
 ## Architecture
 
 - **Frontend** (sloptic.org UI) + **thin API** (enqueues grade jobs) + **worker** (imports `sloptic`, runs the
@@ -15,6 +27,24 @@ consumed here as the engine. Never fork probe logic into this repo.
   benchmark-ranking logic.
 - Start with a worker in the backend; split the grader into its own hardened, network-isolated service when
   the egress sandbox needs its own context.
+
+## Integration surface (how to call the grader)
+
+Read `sloptic-main`'s `sloptic/cli.py` and `sloptic/pipeline.py` for exact signatures; the shape is stable:
+
+- **Programmatic:** `sloptic.pipeline.run(deployer, catalog, ...)` returns a `Report`. For a live URL the
+  deployer is `sloptic.deploy.RemoteDeployer(url)`; the catalog comes from `sloptic.catalog.load_catalog(...)`.
+- **Report fields:** `slop_score` (int), `axis_slop` ({security, qa, performance} summing to slop_score),
+  `outcomes` (per-probe results), `coverage` (how much of the battery applied), `platform` (the off-score
+  host/builder identifier), `surface` (what discovery saw). The rank-consumable record and its `findings[]`
+  (each: `probe_id, bundle, category, penalty, group, reason, target, evidence`) are built by
+  `sloptic.cli._grade_record(report, source)`, reuse that helper rather than re-deriving it.
+- **Percentile:** `scripts/benchmark.py rank --results <record.jsonl>` against `validation/benchmark-curve.json`
+  (curve 2026.1). Use its logic to place a single grade on the frozen population.
+- **Passive vs full:** the worker runs the full pipeline only for a verified origin; for everything else it
+  needs `--passive-only` (a per-probe passive/active tag + run mode to be added in `sloptic-main`, this repo's
+  one upstream dependency). Until it exists, either add it there first or the public product is passive-only
+  by construction.
 
 ## The security model IS the product (do not weaken it)
 
