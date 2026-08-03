@@ -321,7 +321,7 @@ This produces **3 per-round categorical awards plus Best Overall** for each roun
 
 - *Best UX/UI*: per-round UX evaluation is too contextual; the award is meaningful only when judges have observed multiple submissions across rounds (moves to tournament-level)
 - *Most Novel*: per-round novelty is too prompt-dependent; the award is meaningful only as "consistently novel approach across the tournament" (moves to tournament-level)
-- *Most Efficient*: requires enforced token measurement, only meaningful at Tier A with league-hosted AI substrate (drops at Tier C; available at Tier A tournament-level)
+- *Most Efficient*: requires enforced token measurement across every player, which needs the firewall that makes league substrate exclusive. **Tier A only**, and at tournament level. Below Tier A a player can spend outside the proxy, so the measurement means nothing even where the league hosts
 
 **Tournament-level expanded categorical awards** are deployed at multi-day Tier A tournaments where judges observe each player across multiple rounds, making subtle categorical distinctions meaningful through aggregated evidence. See IDEAS_FOR_LATER.md "Multi-day Tier A tournament template" for the expanded set (Best UX/UI, Most Novel, Most Efficient, Iron Player, Comeback Player) and their allocation across qualifier-leaderboard vs finals-leaderboard.
 
@@ -332,12 +332,12 @@ This produces **3 per-round categorical awards plus Best Overall** for each roun
 > specialisation-recognition case that sponsor-facing material leans on; retiring the
 > tournament set maximises signal density but discards the IDEAS tournament design wholesale.
 >
-> **This gates Most Efficient**, which is currently listed as retired per-round here and as a
-> live per-round award in TIER_A §8 and TIER_B §8 — including at Tier B, where budgets are
-> honour-system and the enforced measurement it requires does not exist. Its rationale is
-> weakened either way: an efficiency award measures little against a budget the docs describe
-> as a runaway-loop ceiling rather than a binding constraint (§5.5). Decidable now; nothing
-> blocks it.
+> **Most Efficient is no longer part of this question** — it resolved separately on 2026-07-31
+> to **Tier A only**, because it needs total token usage and below Tier A a player can spend
+> outside the proxy. What remains open here is only whether the tournament-level set survives at
+> all. Note its rationale is weak regardless: an efficiency award measures little against a
+> budget the docs describe as a runaway-loop ceiling rather than a binding constraint (§5.5).
+> Decidable now; nothing blocks it.
 
 The design principle is anti-award-sprawl: too many per-round categoricals at 8-player events means almost every player wins something, which destroys the *non-winning* signal that makes awards meaningful. Per-round awards stay tight; tournament-level awards expand because the field and round count justify richer categorical distribution.
 
@@ -691,6 +691,26 @@ Two parallel ranking systems operate:
 - **Persistent Rankings**: All-time accumulated performance, providing long-term credentialing signal
 
 Both rankings are publicly visible. Players accumulate rank points through event placement, weighted by event tier.
+
+> **OPEN — one board per tier, and what to call them.** Agreed in principle on 2026-07-31: each
+> tier gets its **own** global board rather than Tier A alone carrying a single "global"
+> ranking. The reasoning is that separate boards solve the comparability problem by
+> construction — you never compare across them — and that the tier restructure gave each tier
+> exactly **one judging instrument** (C: LLM-judged; B: human-judged, self-selected substrate;
+> A: human-judged, enforced substrate), so each board is internally coherent while a merged one
+> would not be.
+>
+> **Not settled:** whether that is three boards or two, and what they are called. "Global" stops
+> referring to anything once there is more than one, so the names have to say what they measure
+> rather than which letter produced them — an employer reading "3rd globally" should not have
+> to ask which board.
+>
+> **Nothing is built.** `Ranking.Scope` ships `global / chapter / regional` and
+> `recompute_global_rankings()` filters to Tier A chapters only
+> (`backend/rankings/services.py:116-123`), so today there is exactly one global board and it is
+> Tier A's. LEAGUE_OPERATIONS §4 already refers to "the Tier B leaderboard" and "the Tier C
+> leaderboard" in anticipation; those do not exist yet. Implementation is small — add scope
+> values rather than widening `scope_reference_id`, which is a UUID and cannot hold a tier.
 
 ### 7.3 Qualification Flow
 

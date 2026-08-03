@@ -111,22 +111,26 @@ The honest framing is "the league supplied a model" rather than "every player us
 
 > **Status: DESIGNED** — **no `tier_b` value exists** in the shipped `timing_profile` enum (`backend/rounds/models.py:19-22`); a Tier B round must currently be scheduled as `tier_a`. Timestamps are ILLUSTRATIVE (see below).
 
-Tier B uses the **same 135-min round timing as Tier A** (see TIER_A_OPERATIONS.md §4 for phase details). The format clock is unchanged because the round phase structure is tier-agnostic:
+Tier B runs **Tier A's phase shape minus the Zamboni Period** — BYOD means there are no
+ephemeral accounts to tear down and no workstations to re-image, so the reset block does not
+exist (see TIER_A_OPERATIONS.md §4 for phase contents).
 
-> **ILLUSTRATIVE** — a suggested itinerary, not a normative schedule. Durations are the design
-> commitment; timestamps are a worked example. Enforced rules key off round *state*
-> (format_spec.md §3).
+> **Only two things here are fixed.** The **24-minute build clock** is server-enforced and is
+> the format's defining constraint. The **per-player pitch slot** (60s pitch + 120s
+> cross-examination + 30s transition) is a fairness constraint and identical for every player.
+> Everything else below is a *planning estimate*, and the pitch block scales with field size —
+> 8 players is 28 minutes, 12 is 42. An afternoon that starts late ends late.
 
 ```
-T+0:00   → T+5:00    (5 min)  — Opening ceremony
-T+5:00   → T+29:00  (24 min)  — Build phase
-T+29:00  → T+47:00  (18 min)  — Concurrent evaluation + pitch preparation
-T+47:00  → T+75:00  (28 min)  — Pitch + cross-examination (8 players × 3.5 min)
-T+75:00  → T+93:00  (18 min)  — Deliberation + audience voting (if audience present)
-T+93:00  → T+107:00 (14 min)  — Award reveal + closing
-T+107:00 → T+135:00 (28 min)  — Zamboni Period (workstation reset if applicable)
+  5 min   — Opening
+ 24 min   — Build phase                        (fixed)
+ 18 min   — Evaluation + pitch preparation
+ 28 min   — Pitch + cross-examination          (8 players x 3.5 min; scales with field)
+ 18 min   — Deliberation
+ 14 min   — Award reveal + closing
 ─────────────────────────────────────────────────
-135 minutes per round
+~107 minutes at 8 players. No Zamboni: nothing to reset
+```
 ```
 
 ### Differences from Tier A Phase Operations
@@ -185,7 +189,7 @@ The submission infrastructure may differ (SCP from chapter workstations vs porta
 
 > **Status: DESIGNED** — Most Efficient's availability here contradicts format_spec §4.4, which retires it per-round and ties it to enforced measurement Tier B does not have (DOC_STATE C-06).
 
-Per format_spec.md §4, Tier B operates the scoring framework with **modified Most Efficient availability**:
+Per format_spec.md §4, Tier B operates the scoring framework with two exclusions — Most Efficient and People's Hacklet, both of which need something Tier B does not have:
 
 **Available per-round awards**:
 - **Slopless Builder**: lowest Slop Score
@@ -239,7 +243,7 @@ Tier B credentialing sits between Tier C-bounded and Tier A-credentialing-grade:
 **Credential interpretation for employers**:
 - *Hiring for engineering capability signal*: Tier B credentials demonstrate real capability with policy-grade integrity
 - *Hiring for elite signal*: Tier A credentials are the appropriate level; Tier B carries reduced signal
-- *Hiring with risk tolerance for integrity assumptions*: Tier B credentials are honest signal at policy-enforced grade
+- *Hiring that values demonstrated live defence*: Tier B credentials evidence a player defending their own work under adversarial questioning, on self-selected substrate
 
 The honest framing: Tier B credentials carry **real but bounded** market signal, sitting between the Tier C local-only signal and the Tier A credentialing-grade signal.
 

@@ -414,6 +414,23 @@ The Stage 5 scope can be calibrated for Tier C launch — a minimal universal ar
 
 **Practical implication**: the first real HackLet event at BU can happen after Stage 5 ships with minimal Stage 4. Earliest realistic timing depends on whether Stage 4 is deferred (faster) or built in parallel (more substrate options).
 
+### Tier B Events Viable at the Same Point as Tier C
+
+**Added 2026-07-31 with the tier restructure.** Tier B is no longer "league-hosted substrate" —
+it is **live human judging on BYOD substrate** (LEAGUE_OPERATIONS §4). That changes its platform
+requirements to exactly Tier C's: Stages 1-3 for event support, Stage 5 for the catalog, and
+**nothing else**. No Stage 4, because BYOD needs no proxy. No Stage 7, because there are no
+workstations to control.
+
+**The step from Tier C to Tier B costs no engineering at all.** It is a four-role judge corps
+and an afternoon. That makes Tier B the realistic second rung and, notably, something a chapter
+could run in the same season as its first Tier C event rather than years later.
+
+What the platform still owes Tier B: judge scoring for the four permanent roles under the
+30/20/20/30 weighting, which is the D-11 work waiting on the fuzzer being wired. Tier C's
+LLM-judged path needs the same scoring engine, so neither tier is blocked by anything the other
+is not.
+
 ### After Stage 7: Tier A Events Viable (Credentialing-Grade)
 
 Tier A events require the full infrastructure stack:
