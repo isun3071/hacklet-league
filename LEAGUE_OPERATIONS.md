@@ -133,6 +133,8 @@ Each tier articulates a deliberate choice about where to sit on this spectrum:
 
 **The ladder grades on what each rung can honestly claim, and each step buys exactly one thing.** C is the accessible floor. C→B adds live human cross-examination. B→A adds parity you can prove. Note what is *not* on that ladder: **who pays for the AI**. League-hosted substrate is available at any tier as an opt-in, and only becomes an integrity claim at Tier A, where the firewall makes it exclusive. Supplying a model and guaranteeing everyone used it are different things, and only the second is worth a credential.
 
+The deeper axis under "judging rigour" is **accountability** — who is answerable for a result. At Tier C the work is graded by an LLM and no one is answerable for the grade; at Tier B named humans are answerable for it; at Tier A named humans are answerable for the grade *and* a named inspector is answerable for the conditions. This is why LLM judging sits at the floor, and the reason is worth stating precisely because it does not decay: LLMs are not merely nondeterministic (that is partly engineerable, via temperature-0 and multi-model consensus), they are **unaccountable** — an appeal against an LLM score bottoms out in weights, whereas an appeal against a human panel is a coherent act (§11). "Models got better" never reopens this, because capability was never the claim.
+
 The tier choice isn't about prestige — it's about operational match between chapter capability and tier requirements, and about which credentialing claim authentically reflects the integrity infrastructure available. A chapter running excellent Tier C events serves its community well; a chapter that claims Tier A without infrastructure capacity damages the credential. Players choose tier based on what they value (freedom or credentialing); both are valid preferences. The format ecosystem respects both.
 
 ### Tier Overview
@@ -159,11 +161,17 @@ What the firewall adds is **exclusivity**, and that is a different property. Wit
 
 Verification scope scales with credentialing weight. Each tier's audit work matches what its credentials claim.
 
-**Tier C (legitimacy check only)**: chapters are created with light superadmin review (name uniqueness, basic legitimacy). The league does not audit how Tier C chapters run their events. Tier C credentials are chapter-local engagement signal; the league doesn't verify operational integrity because Tier C credentials don't claim it.
+**Tier C (legitimacy check + feeder auditability)**: chapters are created with light superadmin review (name uniqueness, basic legitimacy). For a Tier C event that stays *chapter-local*, that is the whole of it — the league doesn't audit how a purely local event runs, because a local credential claims nothing beyond engagement.
 
-**Tier B (judge corps attestation, no per-event inspection)**: what Tier B claims is *live human judging*, so that is what verification checks. A chapter seeking Tier B submits an attestation naming its judge corps and how it covers all four permanent roles (tester, UI/UX/HCI, general engineering, nontech stakeholder), plus its calibration practice. The league reviews it before granting Tier B. No on-site inspection per event.
+But Tier C **feeds Tier B** (see §7.3 qualification), and a feeder needs auditability a terminal tier does not: a Tier C error now costs a real player a scarce Tier B slot rather than costing nothing. So Tier C events whose results feed qualification carry a minimum: the LLM judging pipeline runs with a **named human sign-off**, and that human personally reviews the submissions at the qualifying boundary (the top N who would advance) plus anything the pipeline flagged. The signer attests to *process, not judgment* — that the pipeline ran, everyone was scored, and the boundary cases were looked at by a person. This is the cheapest thing that restores accountability to an otherwise unaccountable (LLM-only) result, and it is why LLM-plus-sign-off sits below live human judging on the ladder rather than beside it.
 
-Notably, Tier B verification does **not** audit anti-cheating or substrate control, because Tier B claims neither — players are on their own machines with their own AI and the credential says so. Auditing an integrity property the tier does not assert would be theatre.
+**Tier B (written attestation, no per-event inspection)**: Tier B verification is a signed written attestation covering two things.
+
+First, the **judge corps**: the chapter names its four permanent roles (tester, UI/UX/HCI, general engineering, nontech stakeholder) and its calibration practice, since live human judging is Tier B's headline claim.
+
+Second, **anti-cheating policy**: the chapter signs a written document stating the anti-cheating measures it runs. Tier B is unsupervised — own machine, own AI, no firewall — so the league does not mandate a *specific* mechanism the way Tier A does with RMM and network control. It requires only that the chapter has policies, has stated them, and stands behind them in writing. A chapter runs anti-cheating however it likes; the attestation is the accountable record that it runs *something*.
+
+The league reviews both before granting Tier B; no on-site inspection per event. What makes this sufficient rather than honor-system theatre is that Tier B's live cross-examination is itself an anti-cheating mechanism — defending architecture you did not build, under a tester judge who has read the code, is hard to fake. Attested policy plus live verification is a real two-layer defence for an unsupervised tier.
 
 **Tier A (chapter verification + per-event on-site inspection)**: Tier A involves two verification layers.
 
