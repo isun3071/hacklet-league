@@ -19,6 +19,11 @@
 > (**C-01** / D-11) is **still real**, and is now waiting on the fuzzer being wired rather than
 > on a decision.
 >
+> The **7.2M-token measurement is withdrawn** (2026-07-31). It could never be identified —
+> no date, event, operator or log — so it is treated as never having happened rather than
+> cited as evidence. The 10M budget stands as an **ASSUMED** figure sized to survive
+> agentic context re-sending. Rows below that mark it MEASURED are stale.
+>
 > Also closed: **C-17** (the award is **Slopless Builder**, in docs and in the `slopless_builder`
 > award key).
 >
