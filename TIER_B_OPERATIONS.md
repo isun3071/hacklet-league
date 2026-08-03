@@ -35,7 +35,7 @@ Tier B infrastructure is **substantially lighter** than Tier A:
 - League-hosted AI substrate access (same OpenAI-compatible endpoint as Tier A) — see §3
 - Chapter-determined workstation policy (chapter-hosted hardware OR BYOD with chapter-determined policy)
 - Chapter admin oversight in place of firewall enforcement
-- Judge corps as available (minimum 3 members, calibration relaxed from Tier A)
+- Judge corps covering all four permanent roles (calibration relaxed from Tier A, but the roles are not optional — see §9)
 - Documented venue with appropriate setup
 - Chapter admin team familiar with league operations
 
@@ -110,7 +110,7 @@ T+107:00 → T+135:00 (28 min)  — Zamboni Period (workstation reset if applica
 
 **Pitch + cross-examination**: identical 28-min structure for 8 players. Live performance with human judges is the primary credentialing dimension. Tier B preserves this dimension that the Tier C MVR's LLM judging cannot replicate.
 
-**Deliberation + audience voting**: 18-min judge deliberation. Audience voting for People's Hacklet contingent on audience presence (see §6). When audience is absent, People's Hacklet drops from the round's awards.
+**Deliberation**: 18-min judge deliberation. There is no audience vote at Tier B — People's Hacklet is a broadcast element and Tier B does not broadcast (see §6).
 
 **Award reveal + closing**: 14-min ceremony without broadcast production. Still ceremonial, still has audience reaction when audience is present, but lighter production overhead.
 
@@ -138,7 +138,7 @@ Chapters running Tier B at BYOD substrate produce credentials closer to Tier C c
 
 **No broadcast at Tier B**. Broadcast production is Tier A only (see TIER_A_OPERATIONS.md §6). Tier B chapters typically don't have broadcast infrastructure capacity; the operational burden of broadcast production doesn't fit Tier B's operational scope.
 
-**Audience optional at Tier B**. Chapters may invite in-person audience when local capacity supports it. People's Hacklet award is **contingent on audience presence** — available at events with audience, skipped at events without.
+**Audience optional at Tier B**. Chapters may invite in-person audience when local capacity supports it. **People's Hacklet is not offered at Tier B**, with or without an audience: it is gated on broadcast, not on attendance, and belongs to televised Tier A only (format_spec.md §4.4).
 
 The format runs primarily for **competitive purposes** at Tier B without strong audience-design philosophy applying. Lower production overhead than Tier A; lighter operational burden than full broadcast events.
 
@@ -161,7 +161,6 @@ Per format_spec.md §4, Tier B operates the scoring framework with **modified Mo
 **Available per-round awards**:
 - **Slopless Builder**: lowest Slop Score
 - **Best Communicator**: highest Communication Score (live pitch + cross-ex with human judges)
-- **People's Hacklet**: highest audience vote *contingent on audience presence*
 - **Best Overall**: composite rank with progressive tiebreakers
 - **Most Efficient**: available with honor-system budget reporting caveat — measurement reliability is reduced from Tier A because budgets aren't enforced; the award still operates but credentialing weight is correspondingly reduced
 
@@ -173,7 +172,7 @@ Per format_spec.md §4, Tier B operates the scoring framework with **modified Mo
 
 Tier B uses **human judge corps** identical to Tier A judging protocol (see TIER_A_OPERATIONS.md §9). Same judge panel composition — the four permanent roles (tester, UI/UX/HCI, general engineering, nontech stakeholder), weighted 30/20/20/30 into the 0-100 Communication axis (format_spec.md §4.1) — same cross-examination structure, same calibration discipline.
 
-**Judge corps may drop to 3** at Tier B chapters where senior corps is thin (vs Tier A's 4 standard panel). When it does, name which of the four roles is dropped and how the 30/20/20/30 weights re-normalize across the remaining three — a dropped judge silently re-weights the Communication axis, so make it explicit. Cross-examination structure adjusts: 3 judges produce 3 questions, 30 seconds per question (90 sec cross-ex window instead of 120 sec). The reduced cross-ex window slightly compresses the pitch phase but preserves the live performance dimension.
+**All four roles are required at Tier B too.** An earlier draft let thin-corps chapters drop to three and re-normalize the weights; that is retired. Dropping a role does not merely rescale the axis, it deletes a dimension — a round with no nontech stakeholder has measured nothing about translation to a non-verifier, and no re-weighting recovers that. A chapter that cannot field four judges runs the round without the Communication axis, or does not run it. The cross-examination window is **120 seconds, the same as Tier A** — it is not shortened for a smaller panel, because questions are not rationed per judge and the window is not a function of panel size (format_spec.md §3.1).
 
 > **UNCORROBORATED — the 90-second window appears in this sentence and nowhere else.** Every
 > other document in the set carries 60s pitch + 120s cross-ex as the settled clock

@@ -58,7 +58,7 @@ Tier A chapters must demonstrate the following infrastructure to qualify for ver
 
 **Judge corps**:
 - Four permanent judge roles per round — tester, UI/UX/HCI, general engineering, and nontech stakeholder — weighted 30/20/20/30 into the 0-100 Communication axis (see format_spec.md §4.1)
-- May drop to 3 where senior corps is thin; when it does, name which role is dropped and how the 30/20/20/30 weights re-normalize across the remaining three
+- All four roles are **required**; a panel does not run short. A round with three judges is a round with an unweighted Communication axis
 - Judge corps calibration through training events
 - Judge availability for full round duration (135-min commitment per round)
 
@@ -127,7 +127,7 @@ At T+29:00, code freeze takes effect simultaneously. The network cuts for code c
 
 **Pitch + cross-examination (28 min for 8 players)**: each player presents in sequence:
 - 60 seconds of pitch — what they built, key choices, what makes their submission distinctive
-- 120 seconds of cross-examination — judges ask questions in turn, each judge limited to one substantive question per player (four judges, four questions, ~30 seconds per question including answer); verbose answers cost remaining slots
+- 120 seconds of cross-examination — the four judges work the window as a panel, not on allotted turns. The player is scored on responsiveness and concision: answer what was asked, then yield the floor (format_spec.md §3.1)
 - 30 seconds of transition — next player gets situated, audience and judges briefly reset
 
 At 3.5 minutes per player × 8 players = 28 minutes. Same-archetype submissions (multiple players who built similar applications) pitch back-to-back to enable direct comparison and require explicit differentiation arguments.
@@ -238,7 +238,7 @@ Per format_spec.md §4, Tier A operates the full scoring framework:
 **Available per-round awards** at Tier A:
 - **Slopless Builder**: lowest Slop Score
 - **Best Communicator**: highest Communication Score (live pitch + cross-ex evaluation, human judges)
-- **People's Hacklet**: highest audience vote
+- **People's Hacklet**: highest audience vote — **televised rounds only** (a broadcast element; the larger untelevised Tier A fields do not offer it)
 - **Best Overall**: composite rank with progressive tiebreakers (lowest rank sum → smallest differential → best Fuzz Rank → best Communication Rank → co-Champions)
 - **Most Efficient**: lowest token usage among top half Best Overall standings (Tier A only — requires enforced token budget measurement)
 
@@ -270,22 +270,14 @@ Four judges, four rubrics, weighted 30/20/20/30 into the 0-100 Communication axi
 
 **Judge calibration**: judge corps participates in pre-event calibration sessions reviewing exemplar submissions across scoring dimensions. Calibration produces shared evaluation standards reducing inter-judge variance. Calibration discipline is part of Tier A chapter operational maturity.
 
-**Cross-examination structure**: each judge limited to one substantive question per player during the 120-sec cross-ex window. Four judges produce four questions. Players manage answer length strategically — verbose answers cost remaining question slots. Cross-examination tests defense under live pressure, which is the dimension human judging captures that LLM judging cannot.
-
-> **Clock: SETTLED. Mechanism: OPEN.** The *timing* — 60s pitch + 120s cross-ex — is settled;
-> both candidate models use it, so JUDGE_PANEL_RECONCILIATION_PATCH.md's instruction not to
-> overwrite the timing has been satisfied by leaving it alone, and it can now be treated as
-> fixed. What remains unresolved is the **anti-filibuster mechanism**, and the two candidates
-> are different rubrics, not different clocks:
->
-> - **Ration the judges' questions** (this paragraph): one substantive question each; a verbose
->   answer consumes a later judge's slot. Makes the player liable for the panel's clock
->   management.
-> - **Score the player's concision** (NONTECH_JUDGE_NOTES.md §8): no rationing; the rubric
->   scores "did the player answer what was asked and yield the floor, or filibuster / dodge /
->   over-explain." A rational player then answers tight, so the panel gets *more* questions in.
->
-> Picking one changes what the rubrics measure. **Not decided here.**
+**Cross-examination structure**: the panel works the 120-sec window; questions are not rationed one per judge. **Anti-filibuster is handled on the player's rubric**, not by the clock — responsiveness and concision are scored, so eating the window to dodge a hard question costs the player directly (format_spec.md §3.1). A rational player therefore answers tight and yields, which gets more questions asked than rationing did. Cross-examination tests defense under live pressure, the dimension human judging captures that LLM judging cannot.
+>  **RESOLVED 2026-07-31.** The clock is settled at 60s pitch + 120s cross-ex, and the
+> anti-filibuster mechanism is settled too: **score the player's concision**, per
+> NONTECH_JUDGE_NOTES.md §8. Questions are not rationed. The panel works the window, and
+> the player's rubric scores whether they answered what was asked and yielded the floor.
+> The rejected alternative was rationing one question per judge, which made the player
+> liable for the panel's clock management and let one long answer silently cost a
+> colleague their turn. See format_spec.md §3.1.
 
 ## 10. Multi-Day Tournament Template
 

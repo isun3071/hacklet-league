@@ -250,7 +250,6 @@ The full award set and scoring math are defined once in **format_spec.md §4**; 
 Tier C offers the **per-round award set** (format_spec §4):
 - **Slopless Builder** — lowest Slop Score (the deterministic catalog applies identically at every tier).
 - **Best Communicator** — highest Communication Score. The score is **LLM-judged** in the MVR profile (PITCH.md, §8) and **human-judged** in the Tier C Extended profile (live pitch + cross-examination); the award honors the same skill dimension either way.
-- **People's Hacklet** — audience-contingent: applies when a chapter hosts an in-person audience, skipped for audience-free events.
 - **Best Overall** — composite ranking per format_spec §4.3.
 
 **Tournament-level awards** (Best UX/UI, Most Novel, Most Efficient, Iron Player, Comeback Player) are **Tier A multi-day** territory and are not offered at Tier C — they depend on enforced token budgets and/or multi-round tournament structure that Tier C doesn't operate. See format_spec §4.

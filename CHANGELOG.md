@@ -12,6 +12,22 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## Four orphaned open items, resolved (2026-07-31)
+
+Deleting DECISIONS_OWED against a five-item precondition dropped several genuinely-open questions that were not on that list. Found by auditing the deleted file against its homes, and resolved rather than restored.
+
+**Players are sequestered.** They wait in a dedicated room and do not watch the pitches before their own. The exposure was pattern rather than content — a player defends their own build, so there is no answer key to overhear — but same-archetype submissions pitch back-to-back by design, so the second of a pair would otherwise hear the first's pitch *and* the panel's questions immediately before answering. It also keeps the slop-reveal-as-cross-ex-beat option viable, which an open room would leak. Costs a room, a staffer, and players missing their own event's audience.
+
+**Cross-examination is not rationed; the player's concision is scored** (NONTECH_JUDGE_NOTES §8). The panel works the 120-second window; the player's rubric scores whether they answered what was asked and yielded the floor. This replaces one-substantive-question-per-judge, under which a long answer silently cost a colleague their turn and the player carried liability for the panel's clock management. Self-correcting: a player facing that rubric answers tight, so the panel gets *more* questions in. Note this lands one rubric line — the rest of rubric internals stay open.
+
+**Tier B's 90-second cross-ex window is deleted.** It existed only as 3 judges × 30 seconds, derived from the rationing model, appeared nowhere else in the doc set, and was reflected in no phase block. The window is 120 seconds at every human-judged tier and is not a function of panel size.
+
+**People's Hacklet is televised Tier A only.** It is a broadcast element, so it needs Tier A *and* cameras. Since a televised round caps at 8 players, it never reaches the larger untelevised Tier A fields. Removed from Tier B §4/§6/§8 and Tier C §9, which had offered it contingent on audience presence. This resolves the standing contradiction with BUILD_ROADMAP and `scoring.py:133`, both of which already deferred it to broadcast. Worth noting the cost: the tiers most likely to run first, and most likely to have a room full of people, no longer have an audience award.
+
+**Also applied, from an earlier ruling that the docs had not caught up to: all four judge roles are required.** The drop-to-3 allowance at Tier A §2 and Tier B §9 is retired, along with the "minimum 3 members" corps requirement. The reasoning worth keeping: dropping a role does not rescale the axis, it *deletes a dimension*. A round with no nontech stakeholder has measured nothing about translation to a non-verifier, and no re-weighting recovers that.
+
+---
+
 ## Slopless Builder, a provisional allowlist, and one fewer source of truth (2026-07-31)
 
 **The award is Slopless Builder.** The metric had landed (lowest raw Slop Score); the name had not, and it had grown a rationale for staying — that the title should be aspirational while the score stayed descriptive, on the analogy of golf naming a Champion rather than a Lowest Score Holder. **That rationale is superseded and should not be reintroduced.** Recorded once, in format_spec §4.4, so it stops drifting: "slop" descends from *AI slop* and *workslop* (BetterUp Labs + Stanford Social Media Lab, HBR 2025), meaning AI-generated output that masquerades as good work while lacking the substance to advance the task. That is an absolute property rather than a rate, which is why the score is deduction-only and unbounded, and why **"Slopless"** names the metric exactly. **"Builder" is carried by the Communication axis, not the metric** — a minimal app has nothing to defend under cross-examination and sinks on the rank-sum, so the name does not need to smuggle in a substance requirement the composite already enforces. Renamed in eight documents and in code: the award key is now `slopless_builder`.

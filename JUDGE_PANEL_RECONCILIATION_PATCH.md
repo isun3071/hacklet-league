@@ -4,7 +4,8 @@
 > §4.1 and §4.2; Edit 3 in TIER_A §9; Edit 4 in TIER_B §9; Edit 5 in the DATA_MODEL enum (**doc
 > only** — the code still ships three `judge_specialization` values, not four). Edit 3's
 > instruction *not* to overwrite cross-examination timing was correctly honoured; the clock is
-> now settled at 60s + 120s and the **mechanism** remains open (DOC_STATE C-11). The
+> settled at 60s + 120s and the **mechanism is settled too** as of 2026-07-31 — the player's
+> concision is scored, questions are not rationed (C-11 closed). The
 > "Slopless Builder" name used below **was correct and the rest of the repo has caught up**
 > (2026-07-31): the award is Slopless Builder everywhere, including the `slopless_builder`
 > award key in code. C-17 is closed. Retained as the decision record; do not re-apply.
@@ -69,13 +70,15 @@ The intent-dependent-vs-independent boundary is already stated (the fuzzer owns 
 >
 > Four judges, four rubrics, weighted 30/20/20/30 into the 0-100 Communication axis.
 
-**Cross-examination structure — flag, do not silently overwrite.** §9 currently says 120-sec cross-ex, four judges, one substantive question each, ~30 sec per question, inside a 3.5-min-per-player / 28-min phase. In session we discussed a **1-min pitch + 2-min cross-ex** shape and scoring the *player's* concision/responsiveness (anti-filibuster) rather than rationing one question per judge. **These are not the same model and the timing was not fully locked.** Do NOT overwrite the timing in this patch. Resolve the cross-ex timing + concision-scoring model as its own decision, then edit §9's timing block and the matching phase block once.
+**Cross-examination structure — flag, do not silently overwrite.** §9 currently says 120-sec cross-ex, four judges, one substantive question each, ~30 sec per question, inside a 3.5-min-per-player / 28-min phase. In session we discussed a **1-min pitch + 2-min cross-ex** shape and scoring the *player's* concision/responsiveness (anti-filibuster) rather than rationing one question per judge. **RESOLVED 2026-07-31**: the clock is 60s + 120s (both candidate models agreed on it) and the mechanism is the concision rubric, not rationing. §9 and the phase block have been edited once, as instructed.
 
 ---
 
 ## Edit 4 — TIER_B_OPERATIONS.md §9
 
-§9 currently says Tier B uses the same panel as Tier A but "may run 3 judges" with a compressed 90-sec cross-ex. Update the panel reference to the four permanent roles, and state the Tier B reduction explicitly as **"Tier B may drop to 3 judges where senior corps is thin; when it does, name which role is dropped and how the 30/20/20/30 weights re-normalize across the remaining three."** (Dropping a judge silently re-weights the axis; make it explicit rather than implicit.)
+§9 originally said Tier B uses the same panel as Tier A but "may run 3 judges" with a compressed 90-sec cross-ex.
+
+> **SUPERSEDED 2026-07-31.** This edit asked for the 3-judge reduction to be stated explicitly with re-normalized weights. Both are now retired: **all four roles are required at every human-judged tier**, and the 90-second window is gone (the cross-ex window is 120s and is not a function of panel size). Dropping a role deletes a dimension rather than rescaling one, and no re-weighting recovers it.
 
 ---
 
