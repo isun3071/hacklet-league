@@ -38,9 +38,11 @@ PHASE_PROFILES = {
             ("awards_end", 60),
         ],
     },
-    "tier_c_extended": {
-        # Mirrors Tier A's phase shape minus the Zamboni (BYOD has no workstation reset).
-        # Base profile; longer cohorts widen the pitch window — adjust here when needed.
+    "tier_b": {
+        # Tier A's phase shape minus the Zamboni: BYOD has no workstations to reset. Only the
+        # build clock (24 min) and the per-player pitch slot are hard; the surrounding phases
+        # are planning estimates, and the pitch window scales with field size (8 players ->
+        # 28 min, 12 -> 42). Formerly `tier_c_extended`.
         "build_start": 5,
         "build_end": 29,
         "schedule": [
@@ -51,6 +53,10 @@ PHASE_PROFILES = {
         ],
     },
 }
+
+# Legacy key: rounds created before the 2026-07-31 tier restructure stored `tier_c_extended`
+# for what is now `tier_b`. Same profile, so old rows keep resolving. Not selectable.
+PHASE_PROFILES["tier_c_extended"] = PHASE_PROFILES["tier_b"]
 
 # Which phase is active in the interval *ending* at each phase_schedule boundary.
 KEY_PHASE = {

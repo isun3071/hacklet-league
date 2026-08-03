@@ -18,4 +18,8 @@ EXPOSE 8000
 # them, `uv run` re-syncs at boot and pulls dev tooling (ruff/mypy/faker) from PyPI
 # on every fresh container — slow cold starts, and the backend can't boot if PyPI is
 # down. --frozen also forbids any lockfile re-resolution at runtime (deterministic).
-CMD ["sh", "-c", "uv run --frozen --no-dev python manage.py migrate --noinput && uv run --frozen --no-dev python manage.py collectstatic --noinput && uv run --frozen --no-dev gunicorn hacklet.wsgi:application --bind 0.0.0.0:8000 --workers 3"]
+# Served over ASGI via gunicorn's uvicorn worker, not WSGI. The Stage 4 AI proxy streams model
+# output, and a streamed response holds its worker for the whole generation — on sync workers a
+# handful of concurrent players would exhaust the pool. Same process manager, same port; only the
+# worker class and the entrypoint module changed (hacklet.wsgi -> hacklet.asgi).
+CMD ["sh", "-c", "uv run --frozen --no-dev python manage.py migrate --noinput && uv run --frozen --no-dev python manage.py collectstatic --noinput && uv run --frozen --no-dev gunicorn hacklet.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers 3"]

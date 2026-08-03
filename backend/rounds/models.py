@@ -17,12 +17,16 @@ class Round(models.Model):
     """
 
     class TimingProfile(models.TextChoices):
-        # tier_c_extended is RETIRED (2026-07-31) — its phase durations were never decided,
-        # and the shipped profile ran 107 min against a doc claiming 135-180. It is gone from
-        # the selectable choices so no new round can pick it. The phase profile itself is kept
-        # in services.PHASE_PROFILES so any round already carrying the value still resolves.
-        TIER_A = "tier_a", "Tier A (135 min)"
-        TIER_C_MVR = "tier_c_mvr", "Tier C MVR (60 min)"
+        # The ladder grades on JUDGING RIGOR, not on who hosts the AI:
+        #   tier_c_mvr — PITCH.md, LLM-judged, one hour, scales to 100+
+        #   tier_b     — live pitch + cross-examination with human judges, BYOD substrate
+        #   tier_a     — the above plus controlled workstations and enforced substrate parity
+        # tier_b is the profile formerly called tier_c_extended (same phase shape: Tier A's
+        # minus the Zamboni, since BYOD has no workstations to reset). The legacy key still
+        # resolves in services.PHASE_PROFILES so any round already carrying it renders.
+        TIER_A = "tier_a", "Tier A"
+        TIER_B = "tier_b", "Tier B (live judging, BYOD)"
+        TIER_C_MVR = "tier_c_mvr", "Tier C MVR"
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Scheduled"

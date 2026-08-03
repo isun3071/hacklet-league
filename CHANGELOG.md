@@ -12,6 +12,32 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
+## The tier ladder now grades on judging rigour (2026-07-31)
+
+**Tier B is redefined. It is what was called Tier C Extended: live pitch and cross-examination with human judges, on BYOD substrate.**
+
+The old Tier B — "league-hosted substrate with honour-system budgets" — did not describe an integrity step, and TIER_B:75 said so out loud: *"no firewall prevents continued AI calls beyond budget — the proxy still serves the calls."* That was wrong on its own terms. **The firewall never enforced the budget; the server gate does**, and a per-player budget is enforceable anywhere the league hosts. What a missing firewall actually costs is *exclusivity* — nothing stops a player alt-tabbing to their own subscription — and exclusivity is the whole of the parity claim. So the old Tier B occupied the worst cell available: Tier A's costs for Tier C's integrity.
+
+**Each rung now buys exactly one thing:**
+
+| Tier | What it is | What the rung adds |
+|---|---|---|
+| **C** | PITCH.md, LLM-judged, one hour, scales to 100+ | the accessible floor |
+| **B** | live pitch + cross-examination, human judges, BYOD | **live human cross-examination** |
+| **A** | the above plus controlled workstations and enforced substrate | **parity you can actually claim** |
+
+C→B is bought with *people rather than hardware* — a four-role judge corps and an afternoon, no infrastructure a Tier C chapter lacks. That matters because cross-examination is the format's most distinctive credentialing dimension and it was previously reachable only through RMM, a firewall, broadcast and an on-site inspector, which is Year 3+ territory.
+
+**Who pays for the AI is no longer on the ladder.** League-hosted substrate is an **opt-in available at any tier**: the league meters and pays, the budget is genuinely enforced, and the event records it. It becomes an *integrity claim* only at Tier A, where the firewall makes it exclusive. Supplying a model and guaranteeing everyone used it are different things, and only the second is worth a credential. **Most Efficient is consequently Tier A only** — it needs total usage, and below Tier A a player can spend outside the proxy.
+
+**It also dissolves a problem the tier-C leaderboard would have created.** With Extended inside Tier C, a Tier C board would have mixed LLM-judged and human-judged Communication scores — two instruments on one axis, deciding rank-sum. Now each tier has exactly one judging instrument, so each board is internally coherent.
+
+**Exact phase durations are retired as commitments.** Only the **24-minute build clock** (server-enforced, and the format's defining constraint) and the **per-player pitch slot** (60s + 120s, a fairness constraint) are hard. Everything around them — opening, evaluation, deliberation, awards, Zamboni — is a planning estimate. This dissolves the "107 versus 135-180" disagreement that prompted retiring Extended in the first place: those were two planning estimates being compared as though they were specifications, and neither was a claim. Tier B's shape is Tier A's minus the Zamboni, because BYOD has no workstations to reset.
+
+**Code:** `Round.TimingProfile` gains `tier_b` (migration `0004`); `tier_c_extended` remains resolvable in `services.PHASE_PROFILES` as a legacy alias so any existing row still renders, but is not selectable. Frontend types, labels and the round-manager list follow. This also closes the gap DOC_STATE flagged where no `tier_b` value existed and a Tier B round had to be scheduled as `tier_a`.
+
+---
+
 ## The RSAC precedent, written down (2026-07-31)
 
 Cross-examination was modelled on the **Shark Tank-style Q&A of the RSAC Innovation Sandbox**, and that fact lived only in conversation. Recorded in format_spec §3.1, with the boundary rather than just the resemblance, because the boundary is what will get misremembered.

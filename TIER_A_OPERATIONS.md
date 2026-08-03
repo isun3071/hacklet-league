@@ -79,7 +79,7 @@ The league hosts AI substrate at Tier A through the unified-substrate model (see
 
 **Unified token budget**: chat-window and agent interface share the same per-player token budget for the round. Budget is enforced server-side at the proxy. A player using 5 chat windows + the agent has 1× budget split across however many interfaces they use, not 6× budget. The unification prevents tool-stacking advantage.
 
-**Season-pinned model**: each season specifies a single AI model serving as substrate for all Tier A events that season. Season 1 substrate is **DeepSeek V4 Flash** accessed through OpenRouter, with no league-injected system prompt beyond standard production deployment. Substrate equality holds across all Tier A players because every player faces the same model with the same available parameters under the same enforced budget.
+**Pinned model**: the league pins one AI model as the substrate, and it is a **dated snapshot, never a rolling alias** (format_spec.md §5.3). Current substrate is **`deepseek/deepseek-v4-flash-0731`** accessed through OpenRouter, with no league-injected system prompt beyond standard production deployment. Substrate equality holds across all Tier A players because every player faces the same model with the same available parameters under the same enforced budget.
 
 **Audit logging**: every AI call is logged at the proxy with player attribution, timestamp, token counts, and prompt content (for post-event review and dispute resolution). The audit trail is part of the credentialing integrity infrastructure — disputes about budget consumption or substrate behavior can be resolved through audit log review.
 

@@ -26,7 +26,7 @@ In development, all four run via docker-compose. In production, they run on a He
 
 External services the platform integrates with:
 
-- **OpenRouter** — AI substrate (DeepSeek V4 Flash for season 1)
+- **OpenRouter** — AI substrate. Pinned to the dated snapshot `deepseek/deepseek-v4-flash-0731`, never a rolling alias (format_spec.md §5.3)
 - **Future: Email service** (Postmark, SendGrid, or self-hosted) for account verification, password resets, event notifications
 - **Future: Object storage** (S3-compatible, possibly Hetzner Object Storage) for chapter documents, broadcast recordings, larger uploads
 
@@ -185,7 +185,7 @@ Single integration point for AI substrate. Configuration:
 
 - API key in environment variable, encrypted at rest
 - Base URL: `https://openrouter.ai/api/v1/`
-- Default model: `deepseek/deepseek-v4-flash` (season 1)
+- Pinned model: `deepseek/deepseek-v4-flash-0731`. **Dated snapshot, never a rolling alias** — `deepseek-v4-flash` and `-latest` both move, and the 0731 revision landed on 2026-07-31 without warning. Startup should reject a model ID that is a bare name, ends in `-latest`, or ends in `:free` (the free variants are capped at 20 RPM, which would stall an event)
 - Streaming responses for player chat
 - Standard error handling with retries on rate limit
 

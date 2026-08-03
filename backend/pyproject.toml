@@ -10,6 +10,9 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "whitenoise>=6.7",
     "gunicorn>=23",
+    # ASGI worker class for gunicorn. Required from Stage 4: the AI proxy streams responses,
+    # and a streamed response holds its worker for the whole generation.
+    "uvicorn[standard]>=0.32",
     "django-allauth[socialaccount]>=65.3",
     "django-anymail[resend]>=11",
     # Used directly by newsletter/views.py for the Buttondown proxy. It already arrived

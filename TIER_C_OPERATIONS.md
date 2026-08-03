@@ -21,19 +21,28 @@ Tier C is also the **truest expression of the format's "we don't legislate AI us
 
 The freedom-integrity tradeoff (LEAGUE_OPERATIONS.md §4) sits at the freedom-maximizing end at Tier C. Players who want freedom-style competition use Tier C. Players who want credentialing-grade equality use Tier A.
 
-## 2. Three Operational Profiles
+## 2. Two Operational Profiles
 
-> **Status: DESIGNED, and Tier C Extended is RETIRED (2026-07-31).** Its phase durations were never decided: the doc claimed ~135-180 minutes and the shipped profile ended at T+107 (DOC_STATE C-12). Rather than pick a number to make the two agree, the profile is withdrawn — `tier_c_extended` is gone from the selectable timing profiles (`backend/rounds/models.py`), so no new round can choose it. Only the **MVR** profile is offerable today. The Extended design below is kept for when the durations are decided; it is not currently runnable.
+> **Status: DESIGNED** — no Tier C event has run. **Changed 2026-07-31**: the third profile,
+> *Tier C Extended*, has moved out of Tier C entirely and become **Tier B**. It was live pitch
+> and cross-examination with human judges on BYOD substrate, which is exactly what Tier B now
+> means. See TIER_B_OPERATIONS.md.
 
-Tier C operates under three distinct profiles serving different chapter goals. All three share core HackLet DNA — BYOD substrate, deterministic fuzz catalog, time compression, AI-native design — and differ only in cohort scale, judging method, and ceremony, never in format fundamentals.
+Tier C now operates **two** profiles, both LLM-judged. They share core HackLet DNA — BYOD
+substrate, deterministic fuzz catalog, time compression, AI-native design — and differ only in
+cohort scale and how many rounds run in a day, never in format fundamentals.
 
-**MVR (60 minutes)** — the floor and the default. **PITCH.md + LLM-judged** written evaluation (§7, §8), any cohort from **8 to 100+**, club-meeting compatible. The Minimum Viable Round is the smallest configuration that genuinely delivers HackLet, and the profile most chapters run most weeks. Timing in §4; large-cohort scaling (to ~74 min for 30-100+ in a single round) in §5.
+**MVR (60 minutes)** — the floor and the default. **PITCH.md + LLM-judged** written evaluation
+(§7, §8), any cohort from **8 to 100+**, club-meeting compatible. The Minimum Viable Round is the
+smallest configuration that genuinely delivers HackLet, and the profile most chapters run most
+weeks. Timing in §4; large-cohort scaling in §5.
 
-**Tier C Extended (~135-180 minutes)** — **live pitch + cross-examination with human judges**, 8-12 players, weekend-afternoon timeframe. Equivalent operational rhythm to Tier B's live communication credentialing, but on BYOD substrate, so the credentialing claims stay Tier-C-bounded. For chapters with the judge capacity and player commitment to run the format's live-performance + cross-ex-defense dimension at chapter-local scope. (Phase shape mirrors the Tier A 135-min profile — see TIER_A_OPERATIONS.md §3 — minus broadcast production.)
+**Multi-round MVR-day** — multiple MVR rounds back-to-back as a half-day or full-day event
+(typically 2-4 rounds over 2-4 hours), serving participant volume by rotating cohorts through
+independent rounds rather than enlarging any single round. Detail in §4.
 
-**Multi-round MVR-day** — multiple MVR rounds back-to-back as a half-day or full-day event (typically 2-4 rounds over 2-4 hours), serving participant volume by rotating cohorts through independent rounds rather than enlarging any single round. Detail in §4.
-
-Chapters choose the profile that matches their community capacity, and many run more than one: weekly MVRs for engaged competitors, an occasional Tier C Extended for the live-pitch experience, multi-round MVR-days for larger turnout.
+**If a chapter wants live human judging, that is Tier B**, and it needs no infrastructure Tier C
+lacks — only a four-role judge corps and an afternoon. The upgrade path is people, not hardware.
 
 ## 3. Substrate
 
@@ -249,7 +258,7 @@ The full award set and scoring math are defined once in **format_spec.md §4**; 
 
 Tier C offers the **per-round award set** (format_spec §4):
 - **Slopless Builder** — lowest Slop Score (the deterministic catalog applies identically at every tier).
-- **Best Communicator** — highest Communication Score. The score is **LLM-judged** in the MVR profile (PITCH.md, §8) and **human-judged** in the Tier C Extended profile (live pitch + cross-examination); the award honors the same skill dimension either way.
+- **Best Communicator** — highest Communication Score, **LLM-judged** from PITCH.md (§8). A chapter wanting the human-judged live version runs Tier B.
 - **Best Overall** — composite ranking per format_spec §4.3.
 
 **Tournament-level awards** (Best UX/UI, Most Novel, Most Efficient, Iron Player, Comeback Player) are **Tier A multi-day** territory and are not offered at Tier C — they depend on enforced token budgets and/or multi-round tournament structure that Tier C doesn't operate. See format_spec §4.
@@ -286,14 +295,14 @@ Tier C credentials carry **bounded but real** market signal:
 
 **Substantive credentialing claims**:
 - Demonstrated AI-augmented engineering capability against deterministic fuzz catalog
-- Demonstrated communication capability under time compression — written PITCH.md (LLM-judged) in the MVR profile, live pitch + cross-examination (human-judged) in the Tier C Extended profile
+- Demonstrated communication capability under time compression — written PITCH.md, LLM-judged. Live pitch and cross-examination are Tier B and above
 - Demonstrated engagement with competitive engineering community at chapter level
 
 **Claims explicitly NOT supported at Tier C**:
 - Substrate equality (BYOD precludes it)
 - Resource calibration credentialing (no enforced budgets)
 - Global league ranking contribution (no cross-chapter ranking due to substrate variance)
-- Live performance under pressure *in the MVR default* (it's written/LLM-judged) — credentialed only when a chapter runs the Tier C Extended profile
+- Live performance under pressure — Tier C is written and LLM-judged throughout, so this dimension is simply absent. It is credentialed at Tier B and above
 
 **Credential interpretation for employers**:
 - *Hiring for engagement signal*: Tier C participation demonstrates competitive engineering engagement, peer-network involvement, technical community membership

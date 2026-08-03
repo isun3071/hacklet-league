@@ -5,7 +5,9 @@
 
 // ---- types -----------------------------------------------------------------
 
-export type TimingProfile = "tier_a" | "tier_c_mvr" | "tier_c_extended";
+// tier_c_extended is the legacy key for what is now tier_b (same phase shape). Kept in the
+// union so a round created before the 2026-07-31 tier restructure still renders.
+export type TimingProfile = "tier_a" | "tier_b" | "tier_c_mvr" | "tier_c_extended";
 
 // status = coarse lifecycle; phase = live, clock-derived value (the authoritative one).
 export type RoundStatus =
@@ -142,9 +144,10 @@ export type Ranking = {
 // ---- display labels --------------------------------------------------------
 
 export const TIMING_PROFILE_LABEL: Record<TimingProfile, string> = {
-  tier_a: "Tier A (135 min)",
-  tier_c_mvr: "Tier C · MVR (60 min)",
-  tier_c_extended: "Tier C · Extended",
+  tier_a: "Tier A · enforced substrate",
+  tier_c_mvr: "Tier C · MVR, LLM-judged",
+  tier_b: "Tier B · live judging, BYOD",
+  tier_c_extended: "Tier B · live judging, BYOD (legacy key)",
 };
 
 export const PHASE_LABEL: Record<RoundPhase, string> = {

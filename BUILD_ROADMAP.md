@@ -404,7 +404,9 @@ Tier C events become viable after the fuzz runner ships. Tier C requires:
 - Stage 1 (foundation), 2 (events), 3 (round mechanics) for platform event support
 - Stage 5 (fuzz runner) for automated catalog evaluation at code freeze
 
-Tier C **does not require** Stage 4 (AI substrate) because Tier C is BYOD-substrate — players bring their own AI. The Stage 4 league-hosted OpenRouter integration is for Tier B+ operations where the league hosts AI substrate. For Tier C launch, Stage 4 can be deferred or built in parallel with Stage 5 rather than sequentially.
+Tier C and Tier B **do not require** Stage 4 (AI substrate) — both are BYOD, so players bring their own AI. Under the 2026-07-31 tier restructure the ladder grades on judging rigour, not on who hosts the model: Tier C is LLM-judged, Tier B adds live human cross-examination, and only **Tier A requires league-hosted substrate**, because only Tier A's firewall makes it exclusive enough to claim parity. League hosting is otherwise an opt-in at any tier.
+
+That has a sequencing consequence worth stating: Stage 4's *required* consumer is Tier A, which is Year 3+ territory. Its near-term consumer is any Tier B or Tier C chapter that opts in. Stage 4 is therefore still worth building ahead of Tier A, but it is not on the Tier C launch critical path and never was.
 
 Tier C **does not require** Stage 6 (broadcast), Stage 7 (workstation hardening), Stage 8 (federation), Stage 9 (verification system), or Stage 10 (governance). Tier C operates with audience-in-room rather than broadcast, BYOD rather than RMM-controlled workstations, chapter-local rather than federation-coordinated, and light superadmin review rather than formal verification.
 
@@ -447,7 +449,7 @@ Starting from current state (Stage 1 shipped 2026-06):
 - **Stage 1**: ✓ shipped 2026-06 (Google SSO + foundation)
 - **Stage 2**: 4-6 weeks part-time, 1-2 weeks summer velocity
 - **Stage 3**: 4-6 weeks part-time, 1.5-2.5 weeks summer velocity
-- **Stage 4**: 4-6 weeks (deferrable for Tier C launch — defer to Tier B horizon)
+- **Stage 4**: 4-6 weeks (not on the Tier C launch critical path; required only at Tier A, opt-in below that)
 - **Stage 5**: 8-12 weeks part-time, 4-6 weeks summer velocity (genuine engineering complexity; the hardest single stage; don't rush the catalog quality)
 
 **Total to first Tier C event (BU pilot, BYOD substrate)**:

@@ -13,17 +13,47 @@
 
 ## 1. Tier B Identity
 
-> **Status: DESIGNED** — no Tier B chapter exists; Tier B is Year 1-2 territory (§12).
+> **Status: DESIGNED** — no Tier B chapter exists. **Redefined 2026-07-31**: Tier B was
+> previously "league-hosted AI substrate with honour-system budgets." That definition was
+> retired because it did not describe an integrity step — without a firewall the league cannot
+> claim substrate exclusivity, and budgets were always enforceable server-side regardless. Tier
+> B is now the profile formerly called *Tier C Extended*.
 
-Tier B is HackLet's **middle tier** — real competition with policy-based enforcement rather than infrastructure-based enforcement. Tier B sits in the middle of the freedom-integrity tradeoff (LEAGUE_OPERATIONS.md §4): it has league-hosted substrate (providing structural integrity baseline) with honor-system enforcement of budgets and anti-cheating (lighter operational burden than Tier A).
+Tier B is **live human judging without controlled infrastructure**. Players compete on their own
+machines with their own AI, and then defend their work in a live pitch and cross-examination in
+front of the four permanent judge roles. It is a weekend afternoon, 8-12 players per panel, no
+firewall, no RMM, no broadcast, and no league inspector.
+
+**The ladder grades on judging rigour, and Tier B is the rung where humans enter.** Each step
+buys one specific thing:
+
+| Tier | What it is | What the rung adds |
+|---|---|---|
+| **C** | PITCH.md, LLM-judged, one hour, scales to 100+ | the accessible floor |
+| **B** | live pitch + cross-examination, human judges, BYOD | **live human cross-examination** |
+| **A** | the above plus controlled workstations and enforced substrate | **parity you can actually claim** |
+
+That is why Tier B exists. Cross-examination under an informed adversarial panel is the format's
+most distinctive credentialing dimension, and before this redefinition it was reachable only by
+chapters that could field RMM, a firewall, broadcast, and an on-site inspector — which is Year
+3+ territory. Tier B makes it reachable with four judges and an afternoon.
 
 Tier B is useful for:
-- Chapters establishing themselves before Tier A verification is feasible
-- Smaller communities where Tier A infrastructure investment isn't justified
-- Events where credentialing rigor matters but not at full Tier A grade
-- Transitional operations as chapters mature toward Tier A capability
+- Chapters that can field a judge corps but not controlled infrastructure
+- Communities that want the live-defence dimension without Tier A's operational burden
+- Chapters building toward Tier A verification, since the judging discipline transfers directly
 
-Tier B credentialing claims sit **between Tier C-bounded and Tier A-credentialing-grade**. Wins contribute to chapter-local rankings plus partial regional contribution (per LEAGUE_OPERATIONS.md ranking systems). The credential carries community recognition without claiming the full credentialing-grade integrity that Tier A enforced infrastructure provides.
+**What Tier B does not claim: substrate equality.** Players bring their own AI, so a competitor
+with a premium subscription has a systematic advantage over one on a free tier. That is the same
+honest limitation Tier C carries (TIER_C_OPERATIONS.md §3), and it is exactly the gap Tier A's
+firewall closes. Tier B credentials therefore claim *demonstrated live defence of work built
+under self-selected substrate* — real, and bounded.
+
+**League-hosted substrate is available at any tier and is not what defines one.** A chapter may
+opt into the league proxy, in which case the league meters and pays for the inference and the
+event records that it did so. That is a convenience the league is buying, not an integrity
+claim: only Tier A's firewall makes league substrate *exclusive*, and exclusivity is the whole
+of the parity argument (format_spec.md §5.3).
 
 ## 2. Infrastructure
 
@@ -41,7 +71,7 @@ Tier B infrastructure is **substantially lighter** than Tier A:
 
 **What's optional**:
 - Workstation control (chapter chooses; BYOD acceptable but reduces integrity claims)
-- Network firewall (chapter chooses; honor system if BYOD)
+- Network firewall (not required; Tier B makes no exclusivity claim, so there is nothing for a firewall to enforce)
 - Broadcast infrastructure (not available at Tier B; see §6)
 - Multi-day tournament infrastructure (Tier A territory)
 
@@ -49,34 +79,33 @@ Tier B infrastructure is **substantially lighter** than Tier A:
 - RMM workstation control with master image deployment
 - Per-player ephemeral Unix accounts with `userdel -r` reset
 - Comprehensive audit trail (basic audit at AI substrate level remains)
-- Anti-cheating enforcement infrastructure (honor system replaces structural enforcement)
+- Anti-cheating enforcement infrastructure (honour system replaces structural enforcement; Tier B credentials do not claim what the chapter cannot enforce)
 
 The integrity gap from Tier A is honest. Tier B credentials don't claim what the chapter can't enforce. Players and employers interpret the credentials with appropriate weight.
 
 ## 3. AI Substrate at Tier B
 
-> **Status: DESIGNED** — no proxy exists, so the honor-system/enforced distinction is currently moot at both tiers.
+> **Status: DESIGNED** — no proxy exists, so the opt-in path below is unbuilt.
 
-The league hosts AI substrate at Tier B identical to Tier A's unified-substrate model (see TIER_A_OPERATIONS.md §3 and format_spec.md §5.3):
+**BYOD by default.** Players bring their own laptops and their own AI tooling — chat clients,
+IDE agents, whatever fits their workflow. Web search and multiple models are allowed, because
+without a firewall any restriction is theatre. No enforced token budgets, because the league is
+not paying for the inference.
 
-- Chat-window interface through hackletleague.com browser tab
-- In-IDE agent interface via signed VSCodium extension (when deployed, Stage 12+)
-- Unified token budget shared across interfaces
-- Season-pinned model (DeepSeek V4 Flash for Season 1)
-- OpenAI-compatible chat completions endpoint
-- AI calls audit-logged at proxy level
+**League substrate is an option, not a tier property.** A Tier B chapter may opt into the league
+proxy. If it does:
 
-**The substrate difference from Tier A is enforcement**, not capability. Both tiers provide identical AI substrate access. At Tier A, token budgets are enforced server-side at the proxy with no bypass; at Tier B, budgets operate **honor system** with chapter admin oversight.
+- Every player at that event uses the pinned model (format_spec.md §5.3), so *within* the event
+  the model is uniform
+- The league meters usage server-side and pays for it, so the per-player budget is real and
+  enforced — budget enforcement never depended on the firewall
+- The event records that it ran on league substrate
 
-**Honor system token budgets** mean:
-- Players self-report or chapter admin tracks token usage
-- Budget overruns are visible (chapter admin can see player consumption through admin portal)
-- Repeated violations result in chapter-level consequences (warnings, event eligibility suspension)
-- But no firewall prevents continued AI calls beyond budget — the proxy still serves the calls
+What it still does **not** buy is exclusivity. Nothing stops a player alt-tabbing to their own
+subscription, so the parity claim stays out of reach and the credential language does not change.
+The honest framing is "the league supplied a model" rather than "every player used the same one."
 
-This is **substantively weaker integrity** than Tier A's enforced budgets. The Most Efficient award has reduced credentialing weight at Tier B because the underlying measurement is honor-system rather than structural (see §8).
-
-**Substrate equality at Tier B** is a partial claim. Every player accesses the same model, same available parameters, same proxy. But budget honor-system means equality isn't fully enforced. Honest framing: "competition is comparable but substrate enforcement is policy-based, not structural."
+**Substrate equality at Tier B is not a claim**, opt-in or not. See §1.
 
 ## 4. Round Timing — Tier B Standard Profile
 
@@ -104,7 +133,7 @@ T+107:00 → T+135:00 (28 min)  — Zamboni Period (workstation reset if applica
 
 **Opening ceremony**: lighter production rhythm without broadcast requirements. Still serves orientation purpose, but no broadcast intro needed.
 
-**Build phase**: identical mechanics. Players construct under AI substrate access (honor-system budgeted), 24-min Sprint timer.
+**Build phase**: identical mechanics on the player's own machine and their own AI, 24-min Sprint timer. If the chapter opted into league substrate (§3), the budget is metered server-side.
 
 **Concurrent evaluation + pitch preparation**: identical concurrent structure. Judges evaluate in their portals while players write PITCH.md and prepare live pitches. PITCH.md authoring is optional at Tier B (the artifact exists, but live performance is the primary credentialing dimension as at Tier A).
 
@@ -114,7 +143,7 @@ T+107:00 → T+135:00 (28 min)  — Zamboni Period (workstation reset if applica
 
 **Award reveal + closing**: 14-min ceremony without broadcast production. Still ceremonial, still has audience reaction when audience is present, but lighter production overhead.
 
-**Zamboni Period**: applies when chapter uses controlled workstations. Some Tier B chapters with BYOD-policy substrate skip the workstation reset (players just close their laptops; no `userdel -r` needed because there were no ephemeral accounts).
+**Zamboni Period**: does not apply. Tier B is BYOD, so there are no ephemeral accounts to tear down and no workstations to re-image — players close their laptops. This is why the Tier B clock is Tier A's shape minus the Zamboni.
 
 ### Round Sizing
 
@@ -130,7 +159,7 @@ Tier B submission depends on chapter workstation policy:
 
 **BYOD policy**: portal upload with grace period identical to Tier C (see TIER_C_OPERATIONS.md §6). T+29 → T+32 grace window for upload completion. Failure to submit by T+32 results in disqualification.
 
-Chapters running Tier B at BYOD substrate produce credentials closer to Tier C credentialing weight; chapters running Tier B with controlled workstations produce credentials closer to Tier A credentialing weight. The underlying tier is the same; the infrastructure determines where on the integrity spectrum the chapter operates.
+Tier B credentials sit above Tier C because the live cross-examination dimension is present and human-judged, and below Tier A because substrate is self-selected. Opting into league substrate (§3) does not move them: the league supplying a model is not the same as every player provably using it.
 
 ## 6. Audience and Broadcast
 
@@ -162,7 +191,7 @@ Per format_spec.md §4, Tier B operates the scoring framework with **modified Mo
 - **Slopless Builder**: lowest Slop Score
 - **Best Communicator**: highest Communication Score (live pitch + cross-ex with human judges)
 - **Best Overall**: composite rank with progressive tiebreakers
-- **Most Efficient**: available with honor-system budget reporting caveat — measurement reliability is reduced from Tier A because budgets aren't enforced; the award still operates but credentialing weight is correspondingly reduced
+- **Most Efficient**: **not offered at Tier B.** It requires enforced token measurement across every player, which needs the firewall that makes league substrate exclusive. Tier B has no such guarantee even when it opts into the league proxy (format_spec.md §4.4)
 
 **Tournament-level categoricals**: Tier B chapters typically don't run multi-day tournaments (that's Tier A territory). Tournament categoricals (Best UX/UI, Most Novel, Iron Player, Comeback Player) are not available at standard Tier B events.
 
@@ -201,7 +230,7 @@ Tier B credentialing sits between Tier C-bounded and Tier A-credentialing-grade:
 
 **Claims explicitly weaker than Tier A**:
 - Substrate equality is policy-enforced, not infrastructurally enforced
-- Most Efficient credentialing carries reduced weight (honor-system budgets)
+- Most Efficient is not available (it needs enforced substrate measurement)
 - No structural anti-cheating enforcement
 - Limited audit capability beyond proxy-level logging
 - Does not contribute to global league rankings at credentialing-grade weight
@@ -230,7 +259,7 @@ Tier B in the league strategic sequencing (see TIER_C_OPERATIONS.md §14):
 
 **Year 0-1**: Tier B operations not yet active. Initial focus is Tier C MVR validation.
 
-**Year 1-2**: Tier B emerges at chapters with substrate-hosting infrastructure capacity. Chapters that want stronger credentialing than Tier C-bounded but don't yet have Tier A infrastructure operate Tier B as intermediate tier.
+**Year 1-2**: Tier B emerges at chapters that can field a four-role judge corps. It needs no infrastructure a Tier C chapter lacks — the step up is people, not hardware, which is what makes it the realistic second rung.
 
 **Year 2-3**: Tier B grows as chapter ecosystem matures. Some chapters operate stable Tier B; others use Tier B as transition toward Tier A verification.
 

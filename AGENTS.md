@@ -15,8 +15,8 @@ Supporting documents (referenced from `claude.md`):
 - `format_spec.md` — what HackLet League is as a competitive format (tier-agnostic format definition)
 - `LEAGUE_OPERATIONS.md` — how the league operates as a federated institution (governance, tier system overview, verification)
 - `TIER_A_OPERATIONS.md` — Tier A operational template (credentialing-grade, full 135-min round profile, broadcast architecture, multi-day tournament template)
-- `TIER_B_OPERATIONS.md` — Tier B operational template (middle tier, policy-enforced integrity)
-- `TIER_C_OPERATIONS.md` — Tier C operational template (training tier / MVR, BYOD substrate, three profiles: MVR / Extended / multi-round)
+- `TIER_B_OPERATIONS.md` — Tier B operational template (live human judging on BYOD substrate; the rung that adds cross-examination)
+- `TIER_C_OPERATIONS.md` — Tier C operational template (training tier / MVR, BYOD substrate, LLM-judged, two profiles: MVR / multi-round MVR-day)
 - `DATA_MODEL.md` — database schema
 - `ARCHITECTURE.md` — service relationships and request flows
 - `FUZZ_RUNNER_SPEC.md` — runner architecture (relevant in Stage 5). Owned by a separate session; do not edit it or `fuzz-runner/`.
