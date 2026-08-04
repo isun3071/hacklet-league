@@ -1,16 +1,18 @@
 # Judge Panel Reconciliation Patch
 
-> **Status: APPLIED, then partly superseded at v1.0.0.** This patch locked a *four-rubric* Communication axis. The v1.0.0 freeze (2026-08-03) revised that to **two rubrics** — one shared technical rubric scored by three judges at 30/20/20, plus the stakeholder rubric at 30 (format_spec §4.1). The 30/20/20/30 *weighting* the patch locked is unchanged; only the rubric *count* did. Read the 'four rubrics' phrasing below as the historical decision, not the current rule.
->
-> **Status: APPLIED — this patch's five edits have all landed.** Edit 1 and 2 are in format_spec
-> §4.1 and §4.2; Edit 3 in TIER_A §9; Edit 4 in TIER_B §9; Edit 5 in the DATA_MODEL enum (**doc
-> only** — the code still ships three `judge_specialization` values, not four). Edit 3's
-> instruction *not* to overwrite cross-examination timing was correctly honoured; the clock is
-> settled at 60s + 120s and the **mechanism is settled too** as of 2026-08-03 — the player's
-> concision is scored, questions are not rationed (C-11 closed). The
-> "Slopless Builder" name used below **was correct and the rest of the repo has caught up**
-> (2026-08-03): the award is Slopless Builder everywhere, including the `slopless_builder`
-> award key in code. C-17 is closed. Retained as the decision record; do not re-apply.
+> **Status: APPLIED, then partly superseded at v1.0.0 (2026-08-03). Historical decision record —
+> do not re-apply.** All five edits landed: Edit 1 and 2 in format_spec §4.1 and §4.2; Edit 3 in
+> TIER_A §9; Edit 4 in TIER_B §9; Edit 5 in the DATA_MODEL enum (**doc only** — the code still
+> ships three `judge_specialization` values, not four). What has changed since:
+> - **Rubric count superseded.** This patch locked a *four-rubric* axis; v1.0.0 revised it to
+>   **two rubrics** (one shared technical rubric scored by three judges at 30/20/20, plus the
+>   stakeholder rubric at 30 — format_spec §4.1). The 30/20/20/30 *weighting* is unchanged; only
+>   the rubric *count* did. Read the "four rubrics" phrasing below as history.
+> - **Cross-ex mechanism settled.** Edit 3's instruction not to overwrite the timing was honoured;
+>   the clock is 60s + 120s and the mechanism is the player's concision rubric, not rationing
+>   (C-11 closed).
+> - **Award name.** The "Slopless Builder" name used below was correct and the repo has caught up:
+>   it is Slopless Builder everywhere, including the `slopless_builder` award key (C-17 closed).
 
 *Fixes the three-vs-four-judge contradiction. Right now the docs disagree with each other: format_spec §4 and IDEAS treat the stakeholder judge as a real role, but TIER_A §9's panel and the DATA_MODEL `judge_specialization` enum only list three (tester, ux_designer, general) with stakeholder as a "when the format absorbs it" maybe. This locks the four-judge structure decided in session: four permanent roles, four separate rubrics, weighted 30/20/20/30, all feeding the single 0-100 communication axis. Apply these edits to the canonical docs.*
 
