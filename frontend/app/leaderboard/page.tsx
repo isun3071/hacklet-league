@@ -14,10 +14,11 @@ export default async function LeaderboardPage() {
   return (
     <main className="container block">
       <p className="prompt">/leaderboard</p>
-      <h1 className="page-title"># global leaderboard</h1>
+      <h1 className="page-title"># the verified board</h1>
       <p className="subtitle">
-        // all-time · Tier A chapters only — only controlled-workstation events carry global
-        credentialing weight. Chapter boards live on each chapter&apos;s page.
+        // all-time, Tier A events only. HackLet keeps a global board per tier: Verified (Tier A,
+        shown here), Open (Tier B), and Developmental (Tier C). You never compare across them, so
+        the other two open once those tiers run. Chapter boards live on each chapter&apos;s page.
       </p>
 
       {rows.length === 0 ? (
