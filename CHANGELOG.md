@@ -54,6 +54,23 @@ Cross-examination was modelled on the **Shark Tank-style Q&A of the RSAC Innovat
 
 ---
 
+## Rulebook v1.0.0 — the format is frozen (2026-07-31)
+
+The documentation set is versioned as a rulebook, and **v1.0.0** is the first frozen version: a coherent, decided set of rules with **no open format questions**. Future rule changes ship as new versions, announced 30 days ahead (§9), and credentials cite the version they were earned under.
+
+The four questions that were still `OPEN —` in the spec are resolved:
+
+- **Communication axis is two rubrics, not four (§4.1).** One shared **technical** rubric scored by the tester, UI/UX/HCI and general judges from three angles (combining 30/20/20), plus the **stakeholder** rubric at 30. The 30/20/20/30 weighting is unchanged — "two rubrics" means two scoring instruments, not two weights. They measure one trait through three windows and one genuinely-different trait; three separate technical rubrics would have recorded which judge pressed hardest. This adopts NONTECH_JUDGE_NOTES §1, which was written as a losing position and turned out to be the right one.
+- **A season is an academic year (§7.0).** Fall through spring, named by starting year (Season 2026 = fall 2026–spring 2027). Fits the university population, puts the championship before finals, keeps a student's results in one season. `Ranking.season_year` holds the starting year.
+- **Three global leaderboards, one per tier (§7.2).** **Verified** (Tier A), **Open** (Tier B), **Developmental** (Tier C) — named by what a placement means, never compared across. Each tier has exactly one judging instrument, so each board is coherent; the slop axis stays comparable everywhere.
+- **Tournament-level awards deferred to a future version (§4.4).** v1 defines the four per-round awards only (Slopless Builder, Best Communicator, People's Hacklet at televised Tier A, Best Overall). The tournament set waits in IDEAS for the multi-day Tier A events that give it meaning.
+
+Two smaller items resolved with the same freeze: **contest review is event-triggered, superadmin authority** (§4.2), and **qualification is on season standing, best-N-of-M, feeding the capacity-constrained tiers** (§7.3). Sequestration is now provisioned in the Tier A/B venue requirements.
+
+**What v1.0.0 does not claim: that the platform implements it.** The scoring engine still runs the Stage-3 six-facet stand-in; the AI proxy, the fuzz-runner wiring, and the per-tier boards are DESIGNED, not built. That is expected — a rulebook is the rules, and the platform tracks it by stage (BUILD_ROADMAP). The rules are frozen and internally consistent; the code catches up behind them.
+
+---
+
 ## Four orphaned open items, resolved (2026-07-31)
 
 Deleting DECISIONS_OWED against a five-item precondition dropped several genuinely-open questions that were not on that list. Found by auditing the deleted file against its homes, and resolved rather than restored.

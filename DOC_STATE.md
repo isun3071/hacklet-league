@@ -1,4 +1,13 @@
-# DOC_STATE — Documentation Audit (Phase 1)
+# DOC_STATE — Documentation Audit (HISTORICAL SNAPSHOT)
+
+> ## ⚠ This is a historical artifact, not a live audit.
+>
+> Produced 2026-07-28 and **not re-run since**. The rulebook was frozen at **v1.0.0 on
+> 2026-07-31** (see format_spec.md and CHANGELOG.md), and many rows below are stale — every
+> contradiction `C-01…C-22` that was resolvable has been resolved, and the four `OPEN` decisions
+> the audit flagged are now decided. **Do not use the tables below as current state.** For what
+> is true now: read the inline `Status:` markers in each doc, and the CHANGELOG for decisions.
+> This file is retained only as the record of the reconciliation that produced v1.0.0.
 
 *Produced 2026-07-28. Read-only audit. No document other than this one was modified.*
 

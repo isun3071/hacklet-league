@@ -1,13 +1,31 @@
 # HackLet League — Format Specification
 
+> ## Rulebook v1.0.0 — frozen 2026-07-31
+>
+> This is the first frozen version of the HackLet League rules. Like any rulebook it is
+> **versioned**: v1.0.0 is a coherent, decided set of rules with no open format questions. Future
+> rule changes ship as new versions (patch for clarifications, minor for additive rules, major
+> for changes that alter competitive outcomes), announced at least 30 days ahead per §9, and
+> credentials cite the version they were earned under.
+>
+> **Rules are frozen; implementation is not.** A rule marked **DESIGNED** is decided and binding
+> as a rule, even where no code implements it yet — the platform tracks the rulebook by stage
+> (BUILD_ROADMAP), it does not gate it. Do not read "DESIGNED" as "undecided."
+>
+> **What v1.0.0 settled (2026-07-31):** the two-rubric Communication axis (§4.1), the tier ladder
+> graded on judging accountability (LEAGUE_OPERATIONS §4), per-tier leaderboards (§7.2), the
+> season as an academic year (§7.0), standing-based qualification (§7.3), buzzer enforcement and
+> the 10M budget (§5.5), the Slopless Builder award (§4.4), and contest-not-override for the
+> tester judge (§4.2). The CHANGELOG carries the reasoning for each.
+
 *Executive summary of the official rules. The complete rulebook addresses every edge case in detail; this document establishes the format's identity, mechanics, and core operating principles.*
 
 > **Reading the status markers.** Each section below carries a `Status:` line: **BUILT**
 > (exists in code, cited to file and line), **DESIGNED** (specified, not implemented),
 > **MIXED**, or **SUPERSEDED** (describes a decision that has been replaced). Timing blocks
 > additionally carry **ILLUSTRATIVE**. Classifications were verified against source, not
-> against other documents. The full audit — including every known cross-document
-> contradiction — is in [DOC_STATE.md](DOC_STATE.md).
+> against other documents. The status audit is in [DOC_STATE.md](DOC_STATE.md) (a historical
+> snapshot — read its header).
 
 ---
 
@@ -110,7 +128,7 @@ Specific timing per player (3.5 minutes at Tier A's standard 8-player rounds) an
 
 In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-judged evaluation of PITCH.md + README + fuzz results (which also lets the MVR scale to large cohorts human judging couldn't). See TIER_C_OPERATIONS.md §8 for LLM judging architecture.
 
-**Deliberation and Voting Phase**: judges enter explicit deliberation. All four sit together — the nontech stakeholder is in the room with the three technical judges — but the stakeholder scores on a **separate rubric**, because translation and trust to a non-verifier is a different measurement from technical defense, and running it through a technical lens loses the thing that role exists to catch. Judges compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, and score across their own rubrics.
+**Deliberation and Voting Phase**: judges enter explicit deliberation. All four sit together — the nontech stakeholder is in the room with the three technical judges — but the stakeholder scores on a **separate rubric**, because translation and trust to a non-verifier is a different measurement from technical defense, and running it through a technical lens loses the thing that role exists to catch. Judges compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, and score on the technical and stakeholder rubrics (§4.1).
 
 **Deliberation produces scores, not winners.** Slopless Builder, the communication award, and Best Overall are all computed from the scores afterwards (§4.3, §4.4). No panel votes on an outcome. This matters behaviourally: a judge who believes they are deliberating toward a verdict argues differently from one who knows they are deliberating toward their own number. At televised Tier A only, audience votes for People's Hacklet through the portal during this window (§4.4).
 
@@ -149,25 +167,19 @@ At Tier B and Tier C, the format runs without broadcast production. In-person au
 A player's performance is measured on **two independent axes**:
 
 - **Slop Score**: the amount of slop the fuzz catalog detected in the submission — a **deduction-only** score in the range **[0, +∞)** where **lower is better and 0 is the aspirational maximum** (a clean submission). It is the sum of per-probe penalties for every probe that detected slop; passing a probe, or not having the surface a probe targets, contributes nothing. Golf-style: you accumulate slop the way a golfer accumulates strokes — zero is perfect, and there is no bound on how much slop a broken submission can carry. Produced by the fuzz catalog (intent-independent universals); unchanged by the judging structure below.
-- **Communication Score**: judge evaluation of live performance on a **[0, 100]** scale where **higher is better** — a **weighted composite of four permanent judge-role rubrics**, each scoring the player's pitch + cross-examination on its own rubric:
-  - Tester **30%** — intent-*dependent* correctness (the fuzzer's blind spot)
-  - UI/UX/HCI **20%** — the artifact's fitness for a human (legibility, actionable error states, the works-to-adopted gap)
-  - General engineering **20%** — engineering judgment revealed by the choices, mostly recovered via cross-ex
-  - Nontech stakeholder **30%** — translation and trust to a skeptical non-engineer, without jargon-drowning
+- **Communication Score**: judge evaluation of live performance on a **[0, 100]** scale where **higher is better** — a **weighted composite of four judge roles across two rubrics**, each judge scoring the player's pitch + cross-examination:
+  - **Technical rubric** (one shared rubric, scored by three judges from their own angle):
+    - Tester **30%** — intent-*dependent* correctness (the fuzzer's blind spot)
+    - UI/UX/HCI **20%** — the artifact's fitness for a human (legibility, actionable error states, the works-to-adopted gap)
+    - General engineering **20%** — engineering judgment revealed by the choices, mostly recovered via cross-ex
+  - **Stakeholder rubric** (its own rubric):
+    - Nontech stakeholder **30%** — translation and trust to a skeptical non-engineer, without jargon-drowning
 
-The two axes are **never summed into one number** — they differ in direction (slop lower-is-better, communication higher-is-better), scale (slop unbounded, communication ranged), and epistemics (the fuzzer is pure objectivity; cross-ex is where subjectivity is allowed to live). Each is reported as a raw score and used in categorical awards; Best Overall is the rank-based composition of the two axes (§4.3). The four judge rubrics live entirely inside the Communication axis; the Slop axis is untouched by the judging structure.
+The **two rubrics** carry the two things Communication measures. The technical rubric asks a single question — *can this person defend their technical decisions under informed adversarial pressure* — and the three technical judges score it through three entry angles (correctness, human-fitness, engineering judgment) rather than on three separate rubrics, because they measure one trait through three windows; separate rubrics would pretend to measure three traits and produce incoherent scores that mostly record which judge pressed hardest. Their three scores combine at **30/20/20** — a weighted average within the technical rubric, not three independent rubrics. The stakeholder rubric measures a genuinely different thing (can a non-verifier understand and trust it), which is why it stays separate at **30**. The axis weighting is unchanged: 30/20/20/30 across the four roles, 70 technical and 30 stakeholder.
 
-The old model split communication into separate Pitch Quality and Cross-Examination Performance components; under the four-rubric model each judge scores across *both* pitch and cross-ex on their own rubric, so pitch-vs-cross-ex is at most an internal sub-structure of a rubric — the axis-level weighting is by judge role (30/20/20/30). Rubric internals are written separately.
+The two axes are **never summed into one number** — they differ in direction (slop lower-is-better, communication higher-is-better), scale (slop unbounded, communication ranged), and epistemics (the fuzzer is pure objectivity; cross-ex is where subjectivity is allowed to live). Each is reported as a raw score and used in categorical awards; Best Overall is the rank-based composition of the two axes (§4.3). Both rubrics live entirely inside the Communication axis; the Slop axis is untouched by the judging structure.
 
-> **OPEN — four rubrics, or two?** The weighting above is settled at 30/20/20/30 by judge role,
-> and it is settled that the **nontech stakeholder scores on a rubric of its own** (§3.1). What
-> is *not* settled is whether the three technical judges each hold a separate rubric or share
-> one. NONTECH_JUDGE_NOTES §1 argues they should share: they measure a single trait — can this
-> person defend technical decisions under informed adversarial pressure — through three entry
-> angles, and three separate rubrics would pretend to measure three traits while producing
-> incoherent scores that mostly record which judge pressed hardest. Adopting that would collapse
-> the axis to **70/30** and reopen the locked weighting, which is why it has not been adopted.
-> Decide before rubric internals are written; the internals depend on it.
+The old model split communication into separate Pitch Quality and Cross-Examination Performance components; under the two-rubric model each judge scores across *both* pitch and cross-ex, so pitch-vs-cross-ex is at most an internal sub-structure of a rubric — the axis-level weighting is by judge role (30/20/20/30). Rubric internals are written separately.
 
 ### 4.2 Slop Scoring Philosophy
 
@@ -259,16 +271,15 @@ A **false negative** is silent. Nobody disputes a score that came out too well. 
 
 1. **The unit of correction is the catalog version, not the round.** Contests accumulate, are reviewed between events, and land as a versioned catalog change. Credentials cite the version, so "ranked 4th of 47 on the Q3 2026 catalog" stays true after Q4 repairs a probe.
 
-   > **OPEN — the review itself is unspecified.** "Reviewed between events" names no reviewer,
-   > no schedule, and no resolution states. Nothing in the doc set defines a cadence for
-   > reviewing the format or the catalog; the nearest neighbours are §9's 30-day change-notice
-   > rule, LEAGUE_OPERATIONS §11's 14-day appeal window, and the quarterly catalog versioning
-   > sketched in IDEAS_FOR_LATER. The candidates are per-season (matches substrate rotation,
-   > slowest to fix a mid-season defect), quarterly (moves with the catalog, more governance
-   > than a one-chapter league can absorb), or event-triggered (cheapest now, but provides no
-   > forcing function, which is how the current drift accumulated). Also undecided: who holds
-   > the authority — today that is the superadmin by default, since no catalog-maintainer role
-   > exists. Nothing is blocked on this until events run.
+   **Contest review (v1).** Contests are reviewed **event-triggered**: after any event that
+   produced contests, the **superadmin** reviews them before the next catalog version is cut.
+   A contest resolves to one of three states — **upheld** (the probe is repriced or retired for
+   the next version), **rejected** (the finding stands and the probe is unchanged), or
+   **deferred** (needs more instances before a call). No fixed calendar cadence is imposed at v1
+   because a one-chapter league does not generate the volume to justify one; the cadence is
+   revisited when contest volume warrants it, and authority moves to a catalog-maintainer role
+   if one is created. Whatever the review decides changes only future catalog versions, never a
+   completed round (§4.2).
 2. **Never recompute a finished round.** A quarantined or repriced probe applies to the next version forward. Retroactive correction would make a score depend on when you look at it, which is precisely the property removing the override exists to protect.
 3. **Penalty weight is bounded by oracle confidence.** A heuristic oracle may not carry a catastrophic penalty. The issued-key exposure probe is the model: an exact match against a string the league itself minted, zero false positives by construction, which is *why* it can sit at the top of the scale. A pattern-matching scan for secret-shaped strings measures the same class far less certainly and must be priced far lower. Score the probe's confidence first, then let it bound the penalty.
 4. **Publish the measured error rate.** This is the price of finality. A league that tells players "the score stands even when it is wrong" owes them a number for how often that happens, and a description of how the number was obtained. Stated tolerance is a defensible position; silence is not.
@@ -283,7 +294,7 @@ The README remains load-bearing for cross-examination and pitch context. Players
 
 The Best Overall winner is determined through rank-based composition with progressive tiebreaking:
 
-1. Players are ranked independently on Slop Score and Communication Score (Communication = the 30/20/20/30 weighted composite of the four judge-role rubrics, §4.1). Slop is ranked **ascending** (lowest slop is rank 1, since lower is better); Communication is ranked descending (highest is rank 1). Because composition is rank-based, the unbounded range and lower-is-better direction of the slop score need no normalization — only the ranking direction differs.
+1. Players are ranked independently on Slop Score and Communication Score (Communication = the 30/20/20/30 weighted composite across the two judge rubrics, §4.1). Slop is ranked **ascending** (lowest slop is rank 1, since lower is better); Communication is ranked descending (highest is rank 1). Because composition is rank-based, the unbounded range and lower-is-better direction of the slop score need no normalization — only the ranking direction differs.
 2. Each player's Rank Sum equals Slop Rank plus Communication Rank.
 3. **Lowest Rank Sum wins.**
 4. Ties on Rank Sum are broken by **smallest absolute differential** between Slop Rank and Communication Rank. This rewards balanced performance across components.
@@ -308,12 +319,12 @@ Per-round categorical awards are kept deliberately small to preserve credentiali
   **"Builder" is carried by the other axis, not by this one.** The obvious objection to rewarding an absence is that a player could win by shipping almost nothing. They cannot, because a minimal app has nothing to defend under cross-examination and sinks on the Communication axis, and Best Overall is the rank-sum of both (§4.3). The name says what the metric measures and lets the composite handle the rest.
 
   *(This replaces "Slopless Builder," which was kept on an aspirational-title argument — that the award should credential the quality while the score described the measurement, on the analogy of golf naming a "Champion" rather than a "Lowest Score Holder." That rationale is superseded and should not be reintroduced.)*
-- **Best Communicator**: Highest raw Communication Score (the weighted four-rubric composite per §4.1/§4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination. *(Award name flagged for a possible rename — credit defense-under-pressure over oratory — but unsettled; left as-is here.)*
+- **Best Communicator**: Highest raw Communication Score (the 30/20/20/30 two-rubric composite per §4.1/§4.3). Replaces the earlier "Best Pitch" award, which scored pitch only — Best Communicator captures the full communication dimension including defense under cross-examination. *(Award name flagged for a possible rename — credit defense-under-pressure over oratory — but unsettled; left as-is here.)*
 - **People's Hacklet**: Audience vote (separate from judge evaluation entirely). **Televised Tier A only.** It is a broadcast production element, so it requires both Tier A and cameras — and since a televised round caps at 8 players (§3.2), it never applies to the larger untelevised Tier A fields, which have no broadcast to carry it. Not offered at Tier B or Tier C.
 
 **Awards are scoped to the event that produced them; leaderboards are scoped to the tier.** Every award above is decided against the field that actually competed in that event, and against nothing else. A player can take Slopless Builder at a chapter event with a slop score of 20 while the global board's leader sits at 0, and both facts are correct: the award says *best in that room*, the leaderboard says *best across the tier*. They are answering different questions and are not required to agree.
 
-This follows from concurrent panels (§3.2) as much as from geography. Two panels at one event, or two events in two cities, are judged by different people, and the league is multi-city with disjoint judge corps by construction — so judge variance is a property of the institution, not something concurrent panels introduce. **There is no cross-panel score anchoring and no severity correction.** What makes a Communication score portable between panels is that the four rubrics are role-siloed and the same everywhere, not that panels are calibrated against each other. What makes a slop score portable is that no human can touch it (§4.2).
+This follows from concurrent panels (§3.2) as much as from geography. Two panels at one event, or two events in two cities, are judged by different people, and the league is multi-city with disjoint judge corps by construction — so judge variance is a property of the institution, not something concurrent panels introduce. **There is no cross-panel score anchoring and no severity correction.** What makes a Communication score portable between panels is that the two rubrics are the same everywhere and role-weighted identically, not that panels are calibrated against each other. What makes a slop score portable is that no human can touch it (§4.2).
 
 This produces **3 per-round categorical awards plus Best Overall** for each round, regardless of event tier or structure. Players may win multiple awards (e.g., a dominant performer might win Slopless Builder + Best Overall in the same round). A categorical winner need not also win Best Overall, and the Best Overall winner need not win any specific category.
 
@@ -325,19 +336,14 @@ This produces **3 per-round categorical awards plus Best Overall** for each roun
 
 **Tournament-level expanded categorical awards** are deployed at multi-day Tier A tournaments where judges observe each player across multiple rounds, making subtle categorical distinctions meaningful through aggregated evidence. See IDEAS_FOR_LATER.md "Multi-day Tier A tournament template" for the expanded set (Best UX/UI, Most Novel, Most Efficient, Iron Player, Comeback Player) and their allocation across qualifier-leaderboard vs finals-leaderboard.
 
-> **OPEN — does the per-round cut also retire the tournament set?** The three-award per-round
-> cut above is settled. What was never resolved is whether it applies only per-round, leaving
-> the tournament-level set intact as written here, or whether the anti-award-sprawl argument
-> should retire that set too. Keeping both is the status quo and preserves the
-> specialisation-recognition case that sponsor-facing material leans on; retiring the
-> tournament set maximises signal density but discards the IDEAS tournament design wholesale.
->
-> **Most Efficient is no longer part of this question** — it resolved separately on 2026-07-31
-> to **Tier A only**, because it needs total token usage and below Tier A a player can spend
-> outside the proxy. What remains open here is only whether the tournament-level set survives at
-> all. Note its rationale is weak regardless: an efficiency award measures little against a
-> budget the docs describe as a runaway-loop ceiling rather than a binding constraint (§5.5).
-> Decidable now; nothing blocks it.
+>  **v1 defines per-round awards only.** The tournament-level set (Best UX/UI, Most Novel, Most
+> Efficient, Iron Player, Comeback Player) is **deferred to a future rulebook version**, because
+> the multi-day Tier A tournaments it depends on are Year 3+ (IDEAS_FOR_LATER "Multi-day Tier A
+> tournament template"). It is not retired — it waits, in IDEAS, for the events that give it
+> meaning. This keeps v1 to the four per-round positions (Slopless Builder, Best Communicator,
+> People's Hacklet at televised Tier A, Best Overall), which is all any event in v1's lifetime
+> can actually award. Most Efficient, if it ever activates, is Tier A only regardless (§4.4
+> bullet above).
 
 The design principle is anti-award-sprawl: too many per-round categoricals at 8-player events means almost every player wins something, which destroys the *non-winning* signal that makes awards meaningful. Per-round awards stay tight; tournament-level awards expand because the field and round count justify richer categorical distribution.
 
@@ -640,6 +646,30 @@ Players may compete in tiers above their expected eligibility (a collegiate play
 
 ## 7. Season Structure
 
+### 7.0 What a Season Is
+
+> **Status: DESIGNED** — `Ranking.season_year` is a BUILT integer field; the season *boundary*
+> below is a rule the code does not yet key off (rankings currently compute all-time only).
+
+A **season is an academic year**, running from the fall through the following spring, and is
+**named by its starting year**: *Season 2026* is fall 2026 through spring 2027. Ranking windows
+accumulate across a season and reset at its end; the season culminates in a championship (where
+the tier and field support one — see §7.3).
+
+The academic year is the boundary rather than the calendar year because the population is
+university students and chapters are university clubs: summer is a dead zone with no players on
+campus, September is when recruiting and staffing happen, and a spring championship lands before
+final exams rather than colliding with December ones. It also keeps one student's results inside
+one season instead of splitting them across a January boundary. This maps `Ranking.season_year`
+directly: the field holds the starting year.
+
+The **per-season pins** — the substrate model (§5.3), the catalog version, and published
+qualification thresholds (§7.3) — are announced with season documentation. A season may re-pin
+the model or rev the catalog at its boundary; because scoring is rank-based (§4.3), such changes
+do not invalidate prior seasons' records, exactly as a sports rule change does not void earlier
+records. Results are reported per-season and cumulatively (all-time), so both "best this season"
+and "best across seasons" are answerable.
+
 ### 7.1 Events
 
 > **Status: MIXED** — Event and Round entities are BUILT. The 1-event-1-format rule is not enforced in code, and the round-size targets are DESIGNED.
@@ -683,7 +713,7 @@ League growth happens through event frequency and geographic spread rather than 
 
 ### 7.2 Rankings
 
-> **Status: MIXED** — persistent/all-time rankings are BUILT (`backend/rankings/services.py:103-123`), chapter and global scope only. Season rankings are DESIGNED; no season entity exists.
+> **Status: MIXED** — persistent/all-time rankings are BUILT (`backend/rankings/services.py:103-123`), chapter and global scope only. Season rankings are DESIGNED — the season is defined as an academic year (§7.0) and `Ranking.season_year` is a BUILT field, but the per-season boundary is not yet keyed off in the recompute (all-time only today).
 
 Two parallel ranking systems operate:
 
@@ -692,31 +722,55 @@ Two parallel ranking systems operate:
 
 Both rankings are publicly visible. Players accumulate rank points through event placement, weighted by event tier.
 
-> **OPEN — one board per tier, and what to call them.** Agreed in principle on 2026-07-31: each
-> tier gets its **own** global board rather than Tier A alone carrying a single "global"
-> ranking. The reasoning is that separate boards solve the comparability problem by
-> construction — you never compare across them — and that the tier restructure gave each tier
-> exactly **one judging instrument** (C: LLM-judged; B: human-judged, self-selected substrate;
-> A: human-judged, enforced substrate), so each board is internally coherent while a merged one
-> would not be.
->
-> **Not settled:** whether that is three boards or two, and what they are called. "Global" stops
-> referring to anything once there is more than one, so the names have to say what they measure
-> rather than which letter produced them — an employer reading "3rd globally" should not have
-> to ask which board.
->
-> **Nothing is built.** `Ranking.Scope` ships `global / chapter / regional` and
-> `recompute_global_rankings()` filters to Tier A chapters only
-> (`backend/rankings/services.py:116-123`), so today there is exactly one global board and it is
-> Tier A's. LEAGUE_OPERATIONS §4 already refers to "the Tier B leaderboard" and "the Tier C
-> leaderboard" in anticipation; those do not exist yet. Implementation is small — add scope
-> values rather than widening `scope_reference_id`, which is a UUID and cannot hold a tier.
+**Three global boards, one per tier.** There is no single "global" ranking. Each tier carries
+its own global board, because the tier restructure gave each tier exactly **one judging
+instrument**, so each board is internally coherent while a merged one would not be. The boards
+are named by what they measure, not by letter, so a credential is legible without a lookup:
+
+| Board | Tier | What a placement means |
+|---|---|---|
+| **Verified** | A | human-judged, enforced-substrate parity, inspector-audited conditions |
+| **Open** | B | human-judged live cross-examination, self-selected substrate |
+| **Developmental** | C | LLM-judged from PITCH.md, training tier |
+
+You never compare a placement across boards — that is the whole point, and it is what lets a
+Developmental leader at slop 0 and an Open winner at slop 20 both be true statements. The slop
+axis remains comparable everywhere (the catalog is identical across tiers); only the boards, and
+the Communication instrument behind them, are tier-scoped.
+
+*Implementation (Stage 8 / DESIGNED):* `Ranking.Scope` ships `global / chapter / regional` and
+`recompute_global_rankings()` currently filters to Tier A chapters only
+(`backend/rankings/services.py:116-123`) — i.e. only the Verified board exists in code. The Open
+and Developmental boards are added by introducing scope values (`global_verified`,
+`global_open`, `global_developmental`) rather than widening `scope_reference_id`, which is a UUID
+and cannot hold a tier. Not built for v1; the rulebook fixes the design so the code has a target.
 
 ### 7.3 Qualification Flow
 
-> **Status: DESIGNED**.
+> **Status: DESIGNED** — no qualification runs today; this fixes the principle so thresholds can
+> be published per season without reopening the shape.
 
-Top performers at chapter events qualify for regional events. Top performers at regional events qualify for the season championship. Specific qualification thresholds are published per season and per region.
+**The accessible tier feeds the capacity-constrained ones.** Tier C (LLM-judged, scales to 100+)
+is where most players enter; Tier B and Tier A are bounded by human-judge hours, so they cannot
+absorb everyone. Qualification is the funnel between them: strong Developmental-board performers
+qualify into Tier B events, strong Open-board performers into Tier A. This is the same
+open-ladder-feeds-invitational-finals shape that FMWC's season ladder uses to feed the Excel
+championship, and it is what makes Tier C's accessibility load-bearing rather than merely nice.
+
+**Qualification is on season *standing*, not a single win.** A player's qualifying position is
+their accumulated season ranking on the relevant board, not one event result — because the
+thesis is that judgment and consistency beat a good day, and a single-win gate rewards variance.
+Following FMWC precedent, a season's standing may drop each player's worst results (best-N-of-M),
+so one disaster round does not sink a season; the exact N and M are among the per-season pins.
+
+**Because Tier C now feeds qualification, it carries feeder auditability** (LEAGUE_OPERATIONS §4):
+a Tier C error costs a real player a scarce Tier B slot, so qualifying-relevant Tier C events run
+the LLM pipeline under a named human sign-off over the qualifying boundary. A terminal,
+chapter-local Tier C event needs no such thing.
+
+Specific qualification thresholds (how many advance, the best-N window, any regional structure)
+are **published per season** with season documentation, so they can be tuned to the field size a
+season actually has without changing the rule above.
 
 ## 8. Conduct
 

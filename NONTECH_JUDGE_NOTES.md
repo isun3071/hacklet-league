@@ -1,12 +1,21 @@
 # Nontech / Stakeholder Judge — Design Notes
 
-> **Status: WORKING NOTES — with two positions since decided against.** The file's own header is
-> accurate and should stay. But §1's "the three technical judges share ONE rubric" and §10's
-> "aggregation — not decided" were both **superseded** by the four-rubric 30/20/20/30 decision
-> locked in JUDGE_PANEL_RECONCILIATION_PATCH.md and landed in format_spec §4.1. Read those two
-> passages as history. §8's concision model is *not* superseded — it is a live candidate in the
-> still-open cross-examination mechanism question (DOC_STATE C-11), and §9's slop-reveal timing
-> conflicts with TIER_A §4 (C-16). Both are carried as open decisions.
+> **Status: WORKING NOTES — most of which are now canonical, as of the v1.0.0 rulebook freeze
+> (2026-07-31).** This file argued three positions that were open when it was written; all three
+> have since been *adopted* into format_spec:
+> - **§1 — "the three technical judges share ONE rubric": ADOPTED.** The v1 rulebook is the
+>   two-rubric model (one shared technical rubric scored by three judges at 30/20/20, plus the
+>   stakeholder rubric at 30). format_spec §4.1 is canonical. §1's reasoning is the reasoning
+>   the rulebook uses.
+> - **§8 — score the player's concision (anti-filibuster): ADOPTED.** Cross-examination is not
+>   rationed; the player's rubric scores responsiveness and concision (format_spec §3.1).
+> - **§9 — slop-reveal timing: the withhold-through-cross-ex intent is honoured**; the format
+>   captures and grades the deployed submission, and judges enter cross-ex without the score in
+>   front of them.
+>
+> The rest of this file (the per-format stakeholder postures, the underspecified treatment) is
+> design depth behind the canonical §4.1 summary, not competing decisions. Read it as the
+> rationale, not as open questions.
 
 *Working notes, not canonical yet. Captures the stakeholder-judge deep-dive. Flags open questions honestly rather than pretending they're resolved.*
 

@@ -66,7 +66,7 @@ Tier B infrastructure is **substantially lighter** than Tier A:
 - Chapter-determined workstation policy (chapter-hosted hardware OR BYOD with chapter-determined policy)
 - Chapter admin oversight in place of firewall enforcement
 - Judge corps covering all four permanent roles (calibration relaxed from Tier A, but the roles are not optional — see §9)
-- Documented venue with appropriate setup
+- Documented venue with appropriate setup, including a space where players wait without watching pitches ahead of their own (sequestration, format_spec §3.1)
 - Chapter admin team familiar with league operations
 
 **What's optional**:

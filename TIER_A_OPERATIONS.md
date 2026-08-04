@@ -63,7 +63,7 @@ Tier A chapters must demonstrate the following infrastructure to qualify for ver
 - Judge availability for full round duration (135-min commitment per round)
 
 **Venue and operational support**:
-- Documented venue with appropriate physical setup (workstation seating, judge stations, audience accommodation, broadcast booth)
+- Documented venue with appropriate physical setup (workstation seating, judge stations, audience accommodation, broadcast booth, and a **player sequestration room** with a staffer — players wait there and do not watch pitches ahead of their own, format_spec §3.1)
 - Chapter admin team trained on league operations
 - Pre-event setup checklist execution and verification
 
@@ -244,7 +244,7 @@ Per format_spec.md §4, Tier A operates the full scoring framework:
 
 **Communication Score** at Tier A captures **live performance** including pitch quality and cross-examination defense under live questioning. This is the format's most distinctive credentialing dimension. PITCH.md may be authored during pitch prep as preparation material; the live performance is what judges evaluate.
 
-**Tournament-level categoricals** at multi-day Tier A tournaments include:
+**Tournament-level categoricals** at multi-day Tier A tournaments (**deferred to a future rulebook version** — not part of v1.0.0, since multi-day Tier A tournaments are Year 3+; format_spec §4.4) include:
 - Tournament Best Overall, Tournament Slopless Builder, Tournament Best Communicator (cumulative across rounds)
 - Best UX/UI (judge-aggregated across rounds)
 - Most Novel (judge-aggregated across rounds, "consistently novel approach across tournament")
@@ -266,7 +266,7 @@ Tier A uses **human judge corps** with calibrated panel roles. LLM judging is no
 - **General engineering judge** — engineering judgment revealed by the choices: tradeoffs, scoping, which corners got cut, mostly recovered via cross-ex. Weight 20.
 - **Nontech stakeholder judge** — translation and trust to a non-verifier; per-format posture (CES attendee / anxious incumbent / the vague-brief author). Weight 30.
 
-Four judges, four rubrics, weighted 30/20/20/30 into the 0-100 Communication axis (format_spec.md §4.1). The panel lives entirely inside the Communication axis; the fuzzer's Slop Score is separate and untouched.
+Four judges across **two rubrics** — one shared technical rubric scored by the tester, UI/UX/HCI and general judges (combining 30/20/20), and the nontech stakeholder's own rubric (30) — weighted 30/20/20/30 into the 0-100 Communication axis (format_spec.md §4.1). The panel lives entirely inside the Communication axis; the fuzzer's Slop Score is separate and untouched.
 
 **Judge calibration**: judge corps participates in pre-event calibration sessions reviewing exemplar submissions across scoring dimensions. Calibration produces shared evaluation standards reducing inter-judge variance. Calibration discipline is part of Tier A chapter operational maturity.
 
