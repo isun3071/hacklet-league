@@ -31,7 +31,7 @@
 
 ## 1. What HackLet League Is
 
-> **Status: DESIGNED** — the format's identity. `Event.format` accepts all three values as of 2026-07-31, so the matrix is now recordable (DOC_STATE C-14 closed). Recordable is not the same as run: only **Vibe** has ever operated, and Unslop and Underspecified are introduced in that order as each predecessor stabilises.
+> **Status: DESIGNED** — the format's identity. `Event.format` accepts all three values as of 2026-08-03, so the matrix is now recordable (DOC_STATE C-14 closed). Recordable is not the same as run: only **Vibe** has ever operated, and Unslop and Underspecified are introduced in that order as each predecessor stabilises.
 
 **In one sentence: hackathon, but minutes instead of hours, with a cheering audience.**
 
@@ -116,7 +116,7 @@ Specific timing per player (3.5 minutes at Tier A's standard 8-player rounds) an
 
 **The precedent, and where HackLet leaves it.** Cross-examination is modelled on the **Shark Tank-style Q&A of the RSAC Innovation Sandbox**, which is worth writing down because it is otherwise carried only in the founder's head, and because the boundary matters more than the resemblance.
 
-*Verified about the precedent* (checked 2026-07-31): ten finalists present in sequence on one stage to a single panel; each gets a **three-minute pitch** followed by a Q&A round; the panel is **five judges**; they deliberate to a single winner, "Most Innovative Startup." **The Q&A duration is not published anywhere.** Do not cite a number for it — an earlier internal claim of 180 seconds could not be substantiated and should not be repeated.
+*Verified about the precedent* (checked 2026-08-03): ten finalists present in sequence on one stage to a single panel; each gets a **three-minute pitch** followed by a Q&A round; the panel is **five judges**; they deliberate to a single winner, "Most Innovative Startup." **The Q&A duration is not published anywhere.** Do not cite a number for it — an earlier internal claim of 180 seconds could not be substantiated and should not be repeated.
 
 *What transfers.* The panel works the Q&A window freely rather than in rationed turns, which is the shape HackLet adopts. Ten finalists in sequence to one panel is also the working precedent for HackLet's 8-per-panel sizing (§3.2).
 
@@ -138,7 +138,7 @@ In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-j
 
 ### 3.2 Round Sizing
 
-> **Status: DESIGNED** — no player cap is enforced anywhere; `Round.player_count` is a free integer. **Revised 2026-07-31**: the old "12 is the structural maximum" claim is retired, and DOC_STATE C-08 is resolved in favour of the broadcast reading.
+> **Status: DESIGNED** — no player cap is enforced anywhere; `Round.player_count` is a free integer. **Revised 2026-08-03**: the old "12 is the structural maximum" claim is retired, and DOC_STATE C-08 is resolved in favour of the broadcast reading.
 
 **The unit that has a size limit is the panel, not the event.** A panel is four judges and the players they hear, and its ceiling comes from one place: pitch and cross-examination run in sequence, so the phase grows linearly with the number of players a single panel must sit through. **8 players per panel** is standard, **6-12** is the workable range, and beyond that the phase stops fitting a sensible clock.
 
@@ -432,7 +432,7 @@ Mid-tier model choice is deliberate. Frontier models would mask the verification
 
 ## 5.4 Substrate Languages and Package Mirror
 
-> **Status: DESIGNED** — no mirror exists yet. The **language-tier framing was retired 2026-07-31**; what replaces it is below. This also closes DOC_STATE C-09 and D-06, which were a disagreement about which languages sat in which tier — a question that stops existing once the tiers do.
+> **Status: DESIGNED** — no mirror exists yet. The **language-tier framing was retired 2026-08-03**; what replaces it is below. This also closes DOC_STATE C-09 and D-06, which were a disagreement about which languages sat in which tier — a question that stops existing once the tiers do.
 
 **Language support is a provisioning problem, not a grading one.** The catalog cannot tell what
 a submission is written in and does not try. Every probe applies on observed HTTP surface alone
@@ -593,7 +593,7 @@ So neither play dominates: take the key for a better pitch, a worse clock, and a
 **Why this is the thesis as a mechanic.** HackLet's claim (§10) is that AI collapsed the cost of *producing* and left the cost of *understanding* intact. The key decision is exactly that: the model makes an ambitious build possible in 24 minutes (collapsed production cost), but it does not make the player understand what shipping the key *means*, and that stays as expensive as it ever was. The format is not asking whether you can use AI; it is asking whether you can use it without hurting yourself.
 
 **Settled decisions.**
-- **The firewall sits above the container, not around it (2026-07-31).** The grading container is *not* network-isolated. It gets egress, and a firewall one layer up allows a league-controlled destination only. Everything else is blocked. This is what makes the mechanic work at all: the app can reach the proxy at runtime, and the allowlist keeps attribution airtight, because the league proxy remains the only inference endpoint any submission can reach. It also means "no internet access" is the wrong description of the sandbox and must not be restated; the correct one is "one allowed destination." (Egress restriction in FUZZ_RUNNER_SPEC's threat model should be read as *allowlisted*, not *absent*.)
+- **The firewall sits above the container, not around it (2026-08-03).** The grading container is *not* network-isolated. It gets egress, and a firewall one layer up allows a league-controlled destination only. Everything else is blocked. This is what makes the mechanic work at all: the app can reach the proxy at runtime, and the allowlist keeps attribution airtight, because the league proxy remains the only inference endpoint any submission can reach. It also means "no internet access" is the wrong description of the sandbox and must not be restated; the correct one is "one allowed destination." (Egress restriction in FUZZ_RUNNER_SPEC's threat model should be read as *allowlisted*, not *absent*.)
 
   > **The allowlist itself is PROVISIONAL, not settled.** It currently reads
   > `hackletleague.com` and `*.hackletleague.com`. The wildcard is a placeholder because the

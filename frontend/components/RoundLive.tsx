@@ -173,7 +173,7 @@ export function RoundLive({
 // and `attack_surface_coverage` are grading-pipeline outputs, not player input — the league
 // builds and deploys the container (so the player has no URL to give), and coverage is derived
 // from the probe-applicability count (format_spec §4.2). Both were collected here until
-// 2026-07-31 and read by nothing.
+// 2026-08-03 and read by nothing.
 
 function PlayerPanel({
   round,

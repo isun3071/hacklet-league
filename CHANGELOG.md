@@ -12,7 +12,7 @@ This is a human-readable summary; the authoritative record is the git history.
 
 ---
 
-## The tier ladder now grades on judging rigour (2026-07-31)
+## The tier ladder now grades on judging rigour (2026-08-03)
 
 **Tier B is redefined. It is what was called Tier C Extended: live pitch and cross-examination with human judges, on BYOD substrate.**
 
@@ -38,7 +38,7 @@ C→B is bought with *people rather than hardware* — a four-role judge corps a
 
 ---
 
-## The RSAC precedent, written down (2026-07-31)
+## The RSAC precedent, written down (2026-08-03)
 
 Cross-examination was modelled on the **Shark Tank-style Q&A of the RSAC Innovation Sandbox**, and that fact lived only in conversation. Recorded in format_spec §3.1, with the boundary rather than just the resemblance, because the boundary is what will get misremembered.
 
@@ -71,7 +71,7 @@ Two smaller items resolved with the same freeze: **contest review is event-trigg
 
 ---
 
-## Four orphaned open items, resolved (2026-07-31)
+## Four orphaned open items, resolved (2026-08-03)
 
 Deleting DECISIONS_OWED against a five-item precondition dropped several genuinely-open questions that were not on that list. Found by auditing the deleted file against its homes, and resolved rather than restored.
 
@@ -87,7 +87,7 @@ Deleting DECISIONS_OWED against a five-item precondition dropped several genuine
 
 ---
 
-## Slopless Builder, a provisional allowlist, and one fewer source of truth (2026-07-31)
+## Slopless Builder, a provisional allowlist, and one fewer source of truth (2026-08-03)
 
 **The award is Slopless Builder.** The metric had landed (lowest raw Slop Score); the name had not, and it had grown a rationale for staying — that the title should be aspirational while the score stayed descriptive, on the analogy of golf naming a Champion rather than a Lowest Score Holder. **That rationale is superseded and should not be reintroduced.** Recorded once, in format_spec §4.4, so it stops drifting: "slop" descends from *AI slop* and *workslop* (BetterUp Labs + Stanford Social Media Lab, HBR 2025), meaning AI-generated output that masquerades as good work while lacking the substance to advance the task. That is an absolute property rather than a rate, which is why the score is deduction-only and unbounded, and why **"Slopless"** names the metric exactly. **"Builder" is carried by the Communication axis, not the metric** — a minimal app has nothing to defend under cross-examination and sinks on the rank-sum, so the name does not need to smuggle in a substance requirement the composite already enforces. Renamed in eight documents and in code: the award key is now `slopless_builder`.
 
@@ -97,7 +97,7 @@ Deleting DECISIONS_OWED against a five-item precondition dropped several genuine
 
 ---
 
-## The judge panel: no override, panels not events, local awards (2026-07-31)
+## The judge panel: no override, panels not events, local awards (2026-08-03)
 
 Four decisions that had been sitting decided-but-unapplied.
 
@@ -117,7 +117,7 @@ Replaced by the **contest**: the tester may mark a finding CONTESTED, recording 
 
 ---
 
-## Six blocked decisions resolved (2026-07-31)
+## Six blocked decisions resolved (2026-08-03)
 
 Answers to six of the calls in DECISIONS_OWED, and what each changed.
 
@@ -176,7 +176,7 @@ The resilience score was reworked and renamed in two composed changes, formalize
 
 Preserved deliberately: the **"Most Resilient"** award title (aspirational quality vs descriptive measurement), the **"fuzz catalog" / "fuzz runner"** names (fuzzing is the method, slop is the measurement), and **"resilient"** as a quality adjective.
 
-> **Reversed 2026-07-31.** The award is **Slopless Builder**, and the aspirational-title argument recorded above is superseded — it should not be reintroduced. The "fuzz catalog" / "fuzz runner" names and "resilient" as a plain adjective still stand. See the rename entry below and format_spec §4.4.
+> **Reversed 2026-08-03.** The award is **Slopless Builder**, and the aspirational-title argument recorded above is superseded — it should not be reintroduced. The "fuzz catalog" / "fuzz runner" names and "resilient" as a plain adjective still stand. See the rename entry below and format_spec §4.4.
 
 Cascaded across format_spec.md (§4, canonical), LEAGUE_OPERATIONS.md, the tier ops docs, FUZZ_RUNNER_SPEC.md, IDEAS_FOR_LATER.md, BUILD_ROADMAP.md, ARCHITECTURE.md, claude.md, and the landing copy. **No platform migration:** the shipped Stage-3 scoring uses a judge-entered `engineering_score` stand-in (higher-is-better), intentionally left as-is; the real deduction-only `slop_score` field is born when the Stage-5 runner is built.
 

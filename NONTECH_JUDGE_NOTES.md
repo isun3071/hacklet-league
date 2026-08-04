@@ -1,7 +1,7 @@
 # Nontech / Stakeholder Judge — Design Notes
 
 > **Status: WORKING NOTES — most of which are now canonical, as of the v1.0.0 rulebook freeze
-> (2026-07-31).** This file argued three positions that were open when it was written; all three
+> (2026-08-03).** This file argued three positions that were open when it was written; all three
 > have since been *adopted* into format_spec:
 > - **§1 — "the three technical judges share ONE rubric": ADOPTED.** The v1 rulebook is the
 >   two-rubric model (one shared technical rubric scored by three judges at 30/20/20, plus the

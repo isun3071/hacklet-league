@@ -28,7 +28,7 @@
 > (**C-01** / D-11) is **still real**, and is now waiting on the fuzzer being wired rather than
 > on a decision.
 >
-> The **7.2M-token measurement is withdrawn** (2026-07-31). It could never be identified —
+> The **7.2M-token measurement is withdrawn** (2026-08-03). It could never be identified —
 > no date, event, operator or log — so it is treated as never having happened rather than
 > cited as evidence. The 10M budget stands as an **ASSUMED** figure sized to survive
 > agentic context re-sending. Rows below that mark it MEASURED are stale.
@@ -37,7 +37,7 @@
 > award key).
 >
 > DECISIONS_OWED.md, which this file referred to for the open list, was **deleted on
-> 2026-07-31**: its resolutions had landed in format_spec, and its still-open items are now
+> 2026-08-03**: its resolutions had landed in format_spec, and its still-open items are now
 > marked `OPEN —` in the sections that own them. Search for that string. [CHANGELOG.md](CHANGELOG.md)
 > carries the reasoning. Where either disagrees with the snapshot below, they win.
 

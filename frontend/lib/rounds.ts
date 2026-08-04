@@ -6,7 +6,7 @@
 // ---- types -----------------------------------------------------------------
 
 // tier_c_extended is the legacy key for what is now tier_b (same phase shape). Kept in the
-// union so a round created before the 2026-07-31 tier restructure still renders.
+// union so a round created before the 2026-08-03 tier restructure still renders.
 export type TimingProfile = "tier_a" | "tier_b" | "tier_c_mvr" | "tier_c_extended";
 
 // status = coarse lifecycle; phase = live, clock-derived value (the authoritative one).

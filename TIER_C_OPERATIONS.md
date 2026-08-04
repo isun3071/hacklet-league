@@ -23,7 +23,7 @@ The freedom-integrity tradeoff (LEAGUE_OPERATIONS.md §4) sits at the freedom-ma
 
 ## 2. Two Operational Profiles
 
-> **Status: DESIGNED** — no Tier C event has run. **Changed 2026-07-31**: the third profile,
+> **Status: DESIGNED** — no Tier C event has run. **Changed 2026-08-03**: the third profile,
 > *Tier C Extended*, has moved out of Tier C entirely and become **Tier B**. It was live pitch
 > and cross-examination with human judges on BYOD substrate, which is exactly what Tier B now
 > means. See TIER_B_OPERATIONS.md.

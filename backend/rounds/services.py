@@ -54,7 +54,7 @@ PHASE_PROFILES = {
     },
 }
 
-# Legacy key: rounds created before the 2026-07-31 tier restructure stored `tier_c_extended`
+# Legacy key: rounds created before the 2026-08-03 tier restructure stored `tier_c_extended`
 # for what is now `tier_b`. Same profile, so old rows keep resolving. Not selectable.
 PHASE_PROFILES["tier_c_extended"] = PHASE_PROFILES["tier_b"]
 

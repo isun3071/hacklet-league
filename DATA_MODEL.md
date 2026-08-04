@@ -176,7 +176,7 @@ id                  : UUID primary key
 event_id            : FK Event
 round_number        : int (1, 2, 3... within event)
 timing_profile      : enum (tier_a, tier_c_mvr) — selects the phase set + clock
-                      (tier_c_extended RETIRED 2026-07-31: durations undecided. Not selectable;
+                      (tier_c_extended RETIRED 2026-08-03: durations undecided. Not selectable;
                        its phase profile survives in services.PHASE_PROFILES so any existing
                        row still resolves.)
 status              : enum (scheduled, opening, build, evaluation, judging, awards, completed)
@@ -276,7 +276,7 @@ Tests are split into bundles reflecting their different correctness models. Secu
 
 ### FuzzResult
 
-> **Status: DESIGNED** — no model exists. Two changes since the audit: the signed `points_contributed` and four-value `outcome` enum **were replaced 2026-07-30** with a non-negative `penalty_contributed` and the three deduction-only outcomes (DOC_STATE **C-02**); and the `override_*` fields **were replaced 2026-07-31** with the `contested_*` trio, because **D-18 resolved against the override** — no judge can void a finding (format_spec §4.2).
+> **Status: DESIGNED** — no model exists. Two changes since the audit: the signed `points_contributed` and four-value `outcome` enum **were replaced 2026-07-30** with a non-negative `penalty_contributed` and the three deduction-only outcomes (DOC_STATE **C-02**); and the `override_*` fields **were replaced 2026-08-03** with the `contested_*` trio, because **D-18 resolved against the override** — no judge can void a finding (format_spec §4.2).
 
 The outcome of one fuzz test against one submission. Records only **authoritative results** from central fuzz infrastructure at code freeze. Local fuzz runner results during build are informational only and not stored in this table.
 

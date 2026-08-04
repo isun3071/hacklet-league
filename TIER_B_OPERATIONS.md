@@ -13,7 +13,7 @@
 
 ## 1. Tier B Identity
 
-> **Status: DESIGNED** — no Tier B chapter exists. **Redefined 2026-07-31**: Tier B was
+> **Status: DESIGNED** — no Tier B chapter exists. **Redefined 2026-08-03**: Tier B was
 > previously "league-hosted AI substrate with honour-system budgets." That definition was
 > retired because it did not describe an integrity step — without a firewall the league cannot
 > claim substrate exclusivity, and budgets were always enforceable server-side regardless. Tier

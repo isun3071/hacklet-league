@@ -13,8 +13,8 @@ document describing a mechanism is not evidence the mechanism exists.
 Four things to know before you touch anything:
 
 1. **Check the stage.** BUILD_ROADMAP.md's *Status & Deviations* block is the current truth.
-   As of 2026-07-31: Stages 0-3 shipped, **Stage 4 (AI substrate) is active, unstarted, and now
-   unblocked** — its design questions were answered on 07-31 (format_spec §5.5). Stage 5 (fuzz
+   As of 2026-08-03: Stages 0-3 shipped, **Stage 4 (AI substrate) is active, unstarted, and now
+   unblocked** — its design questions were answered on 08-03 (format_spec §5.5). Stage 5 (fuzz
    runner) is proceeding out of order as a standalone project in `fuzz-runner/`, close to done
    but **not yet wired to the platform**.
 2. **Check the status marker.** Every section of every structural doc now carries one:
@@ -274,7 +274,7 @@ For operations that affect credentialing integrity (score changes, verification 
 - **format_spec.md** — What hacklet league is as a competitive format. Tier-agnostic format definition: two-axis taxonomy, scoring axes, substrate principles, two-principle thesis. Read this to understand what the platform is supporting.
 - **LEAGUE_OPERATIONS.md** — How the league operates as a federated institution. Chapters, roles, tier system overview, freedom-integrity tradeoff, verification, governance.
 - **TIER_A_OPERATIONS.md** — Tier A operational template. Credentialing-grade tier with full 135-min round profile, broadcast architecture, multi-day tournament template (snake-draft, alternates, two-leaderboard, tag credentialing), anti-cheating enforcement.
-- **TIER_B_OPERATIONS.md** — Tier B operational template. **Live human judging on BYOD substrate**: live pitch + cross-examination before the four permanent roles, 8-12 players per panel, no firewall or RMM. The rung that adds human cross-examination. *(Redefined 2026-07-31; it previously meant league-hosted substrate with honour-system budgets.)*
+- **TIER_B_OPERATIONS.md** — Tier B operational template. **Live human judging on BYOD substrate**: live pitch + cross-examination before the four permanent roles, 8-12 players per panel, no firewall or RMM. The rung that adds human cross-examination. *(Redefined 2026-08-03; it previously meant league-hosted substrate with honour-system budgets.)*
 - **TIER_C_OPERATIONS.md** — Tier C operational template. Training tier and Minimum Viable Round (MVR) floor. BYOD substrate, no enforced budgets, **LLM-judged throughout**, two profiles (60-min MVR for cohorts of 8-100+, and multi-round MVR-days). PITCH.md as the written communication artifact.
 - **DATA_MODEL.md** — Database schema. The entities, relationships, constraints. Required reading before writing models or queries. Nine of its sixteen entities exist; each section says which.
 - **ARCHITECTURE.md** — Service relationships, request flows, deployment topology. The most over-asserted document in the set; read its status markers, not just its prose.
@@ -337,7 +337,7 @@ Canonical doc voice (format_spec, LEAGUE_OPERATIONS, tier ops) is more formal th
 The fuzz catalog produces a **Slop Score**: deduction-only, range [0, +∞), **lower is better, 0 is perfect** (golf-style — you accumulate slop, you never earn points). Use "slop score" in all copy, UI labels, and docs for the measurement.
 
 - The score is **Slop Score** — not "Resilience Score" or "Fuzz Score" (both retired names). But **"fuzz catalog" and "fuzz runner" keep the "fuzz" name**: fuzzing is the *method*, slop is what it *measures*.
-- The award for the lowest raw slop score is **Slopless Builder** (award key `slopless_builder`). It was called "Most Resilient" until 2026-07-31, on the argument that the title should be aspirational while the score stayed descriptive. **That argument is superseded — do not reintroduce it.** "Slop" descends from *AI slop* / *workslop* (BetterUp Labs + Stanford Social Media Lab, HBR 2025) and names an absolute property rather than a rate, so "Slopless" names the metric exactly. "Builder" is carried by the Communication axis, not the metric: a minimal app has nothing to defend under cross-examination and sinks on the rank-sum. See format_spec §4.4.
+- The award for the lowest raw slop score is **Slopless Builder** (award key `slopless_builder`). It was called "Most Resilient" until 2026-08-03, on the argument that the title should be aspirational while the score stayed descriptive. **That argument is superseded — do not reintroduce it.** "Slop" descends from *AI slop* / *workslop* (BetterUp Labs + Stanford Social Media Lab, HBR 2025) and names an absolute property rather than a rate, so "Slopless" names the metric exactly. "Builder" is carried by the Communication axis, not the metric: a minimal app has nothing to defend under cross-examination and sinks on the rank-sum. See format_spec §4.4.
 - **"resilient" / "resilience"** as an adjective or property ("build a resilient app") is still fine in prose. It is no longer an award name.
 - Direction matters: lower slop is better. Never write "high slop score" as praise.
 

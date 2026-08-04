@@ -1,15 +1,15 @@
 # Judge Panel Reconciliation Patch
 
-> **Status: APPLIED, then partly superseded at v1.0.0.** This patch locked a *four-rubric* Communication axis. The v1.0.0 freeze (2026-07-31) revised that to **two rubrics** — one shared technical rubric scored by three judges at 30/20/20, plus the stakeholder rubric at 30 (format_spec §4.1). The 30/20/20/30 *weighting* the patch locked is unchanged; only the rubric *count* did. Read the 'four rubrics' phrasing below as the historical decision, not the current rule.
+> **Status: APPLIED, then partly superseded at v1.0.0.** This patch locked a *four-rubric* Communication axis. The v1.0.0 freeze (2026-08-03) revised that to **two rubrics** — one shared technical rubric scored by three judges at 30/20/20, plus the stakeholder rubric at 30 (format_spec §4.1). The 30/20/20/30 *weighting* the patch locked is unchanged; only the rubric *count* did. Read the 'four rubrics' phrasing below as the historical decision, not the current rule.
 >
 > **Status: APPLIED — this patch's five edits have all landed.** Edit 1 and 2 are in format_spec
 > §4.1 and §4.2; Edit 3 in TIER_A §9; Edit 4 in TIER_B §9; Edit 5 in the DATA_MODEL enum (**doc
 > only** — the code still ships three `judge_specialization` values, not four). Edit 3's
 > instruction *not* to overwrite cross-examination timing was correctly honoured; the clock is
-> settled at 60s + 120s and the **mechanism is settled too** as of 2026-07-31 — the player's
+> settled at 60s + 120s and the **mechanism is settled too** as of 2026-08-03 — the player's
 > concision is scored, questions are not rationed (C-11 closed). The
 > "Slopless Builder" name used below **was correct and the rest of the repo has caught up**
-> (2026-07-31): the award is Slopless Builder everywhere, including the `slopless_builder`
+> (2026-08-03): the award is Slopless Builder everywhere, including the `slopless_builder`
 > award key in code. C-17 is closed. Retained as the decision record; do not re-apply.
 
 *Fixes the three-vs-four-judge contradiction. Right now the docs disagree with each other: format_spec §4 and IDEAS treat the stakeholder judge as a real role, but TIER_A §9's panel and the DATA_MODEL `judge_specialization` enum only list three (tester, ux_designer, general) with stakeholder as a "when the format absorbs it" maybe. This locks the four-judge structure decided in session: four permanent roles, four separate rubrics, weighted 30/20/20/30, all feeding the single 0-100 communication axis. Apply these edits to the canonical docs.*
@@ -56,7 +56,7 @@ Four permanent judge roles, each with its own rubric, each scoring 0-100, weight
 
 The intent-dependent-vs-independent boundary is already stated (the fuzzer owns intent-independent universals; the tester judge owns intent-dependent correctness). **Keep that.** Add the full four-role definition and make explicit that the tester judge *extends* the fuzzer (catches what it can't reach). Add UI/UX/HCI, general, and nontech stakeholder as **permanent** roles with the ownership shown in the table above. Remove any "when the format absorbs it" hedging for the stakeholder role.
 
-> **SUPERSEDED 2026-07-31 — the override is gone.** This edit originally said the tester also *checks* the fuzzer by overriding intent-mismatched false positives. That was reversed: a human authority to void a finding makes the slop score a function of who judged it, breaking reproducibility, cross-panel comparability, intent-independence, and attribution-at-authoring-time. The tester may mark a finding **CONTESTED** instead, which changes no score and resolves into catalog changes going forward. See format_spec §4.2.
+> **SUPERSEDED 2026-08-03 — the override is gone.** This edit originally said the tester also *checks* the fuzzer by overriding intent-mismatched false positives. That was reversed: a human authority to void a finding makes the slop score a function of who judged it, breaking reproducibility, cross-panel comparability, intent-independence, and attribution-at-authoring-time. The tester may mark a finding **CONTESTED** instead, which changes no score and resolves into catalog changes going forward. See format_spec §4.2.
 
 ---
 
@@ -72,7 +72,7 @@ The intent-dependent-vs-independent boundary is already stated (the fuzzer owns 
 >
 > Four judges, four rubrics, weighted 30/20/20/30 into the 0-100 Communication axis.
 
-**Cross-examination structure — flag, do not silently overwrite.** §9 currently says 120-sec cross-ex, four judges, one substantive question each, ~30 sec per question, inside a 3.5-min-per-player / 28-min phase. In session we discussed a **1-min pitch + 2-min cross-ex** shape and scoring the *player's* concision/responsiveness (anti-filibuster) rather than rationing one question per judge. **RESOLVED 2026-07-31**: the clock is 60s + 120s (both candidate models agreed on it) and the mechanism is the concision rubric, not rationing. §9 and the phase block have been edited once, as instructed.
+**Cross-examination structure — flag, do not silently overwrite.** §9 currently says 120-sec cross-ex, four judges, one substantive question each, ~30 sec per question, inside a 3.5-min-per-player / 28-min phase. In session we discussed a **1-min pitch + 2-min cross-ex** shape and scoring the *player's* concision/responsiveness (anti-filibuster) rather than rationing one question per judge. **RESOLVED 2026-08-03**: the clock is 60s + 120s (both candidate models agreed on it) and the mechanism is the concision rubric, not rationing. §9 and the phase block have been edited once, as instructed.
 
 ---
 
@@ -80,7 +80,7 @@ The intent-dependent-vs-independent boundary is already stated (the fuzzer owns 
 
 §9 originally said Tier B uses the same panel as Tier A but "may run 3 judges" with a compressed 90-sec cross-ex.
 
-> **SUPERSEDED 2026-07-31.** This edit asked for the 3-judge reduction to be stated explicitly with re-normalized weights. Both are now retired: **all four roles are required at every human-judged tier**, and the 90-second window is gone (the cross-ex window is 120s and is not a function of panel size). Dropping a role deletes a dimension rather than rescaling one, and no re-weighting recovers it.
+> **SUPERSEDED 2026-08-03.** This edit asked for the 3-judge reduction to be stated explicitly with re-normalized weights. Both are now retired: **all four roles are required at every human-judged tier**, and the 90-second window is gone (the cross-ex window is 120s and is not a function of panel size). Dropping a role deletes a dimension rather than rescaling one, and no re-weighting recovers it.
 
 ---
 

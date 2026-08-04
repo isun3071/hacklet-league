@@ -271,7 +271,7 @@ Four judges across **two rubrics** — one shared technical rubric scored by the
 **Judge calibration**: judge corps participates in pre-event calibration sessions reviewing exemplar submissions across scoring dimensions. Calibration produces shared evaluation standards reducing inter-judge variance. Calibration discipline is part of Tier A chapter operational maturity.
 
 **Cross-examination structure**: the panel works the 120-sec window; questions are not rationed one per judge. **Anti-filibuster is handled on the player's rubric**, not by the clock — responsiveness and concision are scored, so eating the window to dodge a hard question costs the player directly (format_spec.md §3.1). A rational player therefore answers tight and yields, which gets more questions asked than rationing did. Cross-examination tests defense under live pressure, the dimension human judging captures that LLM judging cannot.
->  **RESOLVED 2026-07-31.** The clock is settled at 60s pitch + 120s cross-ex, and the
+>  **RESOLVED 2026-08-03.** The clock is settled at 60s pitch + 120s cross-ex, and the
 > anti-filibuster mechanism is settled too: **score the player's concision**, per
 > NONTECH_JUDGE_NOTES.md §8. Questions are not rationed. The panel works the window, and
 > the player's rubric scores whether they answered what was asked and yielded the floor.
