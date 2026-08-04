@@ -21,6 +21,14 @@ const UNSLOP_PHASES: Phase[] = [
   { name: "awards", mins: 8, time: "8m", tone: "muted" },
 ];
 
+const UNDERSPEC_PHASES: Phase[] = [
+  { name: "opening", mins: 5, time: "5m", tone: "muted" },
+  { name: "interpret + build", mins: 24, time: "24m", tone: "accent" },
+  { name: "defend", mins: 18, time: "18m", tone: "danger" },
+  { name: "pitch", mins: 15, time: "5–30m", tone: "muted" },
+  { name: "awards", mins: 8, time: "8m", tone: "muted" },
+];
+
 export default function Home() {
   return (
     <main>
@@ -70,17 +78,19 @@ export default function Home() {
       <section className="container block" id="how">
         <h2 className="h2"># how it works</h2>
         <p className="body">
-          HackLet League runs two formats. Both compress engineering into 24 minutes with AI,
-          both run the same QA catalog at time expiry, both score across slop and
+          HackLet League runs three formats. All three compress engineering into 24 minutes with
+          AI, all three run the same QA catalog at time expiry, all three score across slop and
           communication. They differ in what you do during the build phase.
         </p>
         <p className="note">
           <Link href="/scoring">see exactly how scoring works &rarr;</Link>
         </p>
         <pre className="codeblock">{`$ ./hacklet --formats
-  vibe     build a working web app from scratch
-  unslop   diagnose and fix a broken ai-generated app (the kind
-           you'd call "slop")`}</pre>
+  vibe            build a working web app from scratch
+  unslop          diagnose and fix a broken ai-generated app (the
+                  kind you'd call "slop")
+  underspecified  build to a vague client brief, and defend how you
+                  read it`}</pre>
 
         <h3 className="h3">
           <span className="icon-label">
@@ -121,6 +131,29 @@ export default function Home() {
           HackLet Unslop reflects the reality of engineering work: working with existing
           codebases that may or may not be functioning ideally. HackLet Unslop tests if you
           can deal with existing code you see at work... under pressure.
+        </p>
+
+        <h3 className="h3">
+          <span className="icon-label">
+            <Icon name="underspecified" /> ## HackLet Underspecified: read the brief
+          </span>
+        </h3>
+        <p className="body">
+          Get a vague, half-formed client brief. Work out what they actually need, build it, and
+          defend the call you made. The brief does not hand you the answer, and reading it wrong
+          is part of the test.
+        </p>
+        <TimelineBar phases={UNDERSPEC_PHASES} />
+        <pre className="codeblock">{`$ ./hacklet --format underspecified --timeline
+  5 min     opening · the vague brief drops
+  24 min    interpret + build · decide what it means, then ship it
+  18 min    defend · same qa testing + pitch prep
+  5-30 min  pitch · defend how you read the brief
+  8 min     awards · closing`}</pre>
+        <p className="body">
+          HackLet Underspecified tests the thing a real client meeting tests: turning an unclear
+          ask into a defensible plan. Most engineering that fails does not fail because the code
+          was bad. It fails because someone built the wrong thing well.
         </p>
       </section>
 

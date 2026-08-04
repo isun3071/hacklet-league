@@ -10,7 +10,8 @@ export type IconName =
   | "event"
   | "clock"
   | "vibe"
-  | "unslop";
+  | "unslop"
+  | "underspecified";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // competitor — a person
@@ -62,6 +63,16 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // unslop — fix the broken: a wrench
   unslop: (
     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  ),
+  // one vague brief forking into readings you have to choose between
+  underspecified: (
+    <>
+      <path d="M12 21v-8" />
+      <path d="M12 13 6 5" />
+      <path d="M12 13l6-8" />
+      <circle cx="6" cy="4" r="1.4" />
+      <circle cx="18" cy="4" r="1.4" />
+    </>
   ),
 };
 

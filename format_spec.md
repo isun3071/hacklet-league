@@ -1,6 +1,6 @@
 # HackLet League — Format Specification
 
-> ## Rulebook v1.0.0 — frozen 2026-07-31
+> ## Rulebook v1.0.0 — frozen 2026-08-03
 >
 > This is the first frozen version of the HackLet League rules. Like any rulebook it is
 > **versioned**: v1.0.0 is a coherent, decided set of rules with no open format questions. Future
@@ -12,7 +12,7 @@
 > as a rule, even where no code implements it yet — the platform tracks the rulebook by stage
 > (BUILD_ROADMAP), it does not gate it. Do not read "DESIGNED" as "undecided."
 >
-> **What v1.0.0 settled (2026-07-31):** the two-rubric Communication axis (§4.1), the tier ladder
+> **What v1.0.0 settled (2026-08-03):** the two-rubric Communication axis (§4.1), the tier ladder
 > graded on judging accountability (LEAGUE_OPERATIONS §4), per-tier leaderboards (§7.2), the
 > season as an academic year (§7.0), standing-based qualification (§7.3), buzzer enforcement and
 > the 10M budget (§5.5), the Slopless Builder award (§4.4), and contest-not-override for the

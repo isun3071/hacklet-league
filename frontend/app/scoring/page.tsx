@@ -183,7 +183,7 @@ performance  speed gates (ttfb/fcp/inp) · load · dos resistance`}</pre>
       </p>
 
       <p className="note">
-        <Link href="/#how">&larr; the two formats</Link>
+        <Link href="/#how">&larr; the three formats</Link>
         {"  ·  "}
         <Link href="/leaderboard">leaderboard &rarr;</Link>
       </p>

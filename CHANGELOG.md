@@ -54,7 +54,7 @@ Cross-examination was modelled on the **Shark Tank-style Q&A of the RSAC Innovat
 
 ---
 
-## Rulebook v1.0.0 — the format is frozen (2026-07-31)
+## Rulebook v1.0.0 — the format is frozen (2026-08-03)
 
 The documentation set is versioned as a rulebook, and **v1.0.0** is the first frozen version: a coherent, decided set of rules with **no open format questions**. Future rule changes ship as new versions, announced 30 days ahead (§9), and credentials cite the version they were earned under.
 
