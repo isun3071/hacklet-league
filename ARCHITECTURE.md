@@ -107,7 +107,7 @@ The local fuzz runner contains the public test pool only. The hidden pool exists
 5. Central fuzz runner executes both public AND hidden test pools against deployed submission
 6. Results written to FuzzResult records — these are the authoritative scored results
 7. Submission status updated based on deployment success (completed/dnf/limited)
-8. Results visible to judges in their portal for clickaround context
+8. Slop results are withheld from judges until deliberation — Communication is scored blind (format_spec.md §4.1); judges' clickaround context during evaluation is the running app and code, not the findings
 9. Post-event, completed submissions are mirrored to the public HackLet git org (github.com/hacklet-league/) with player attribution as part of the credentialing artifact archive
 
 At Tier A/B, SCP-based capture (rather than git push from the workstation) reflects the per-player account lifecycle on workstations. The player's ephemeral, non-sudo Unix account doesn't accumulate git credentials, doesn't maintain long-lived repository state, and is deleted via `userdel -r` at the Zamboni Period. The submission daemon runs as a service account with pre-configured SCP credentials targeting the central path; the player's account is just the source filesystem to copy *from*. The chapter's firewall must allow workstation outbound SCP to the league submission endpoint. At Tier C there is no league-controlled workstation, so the player uploads to the league portal themselves within the grace period; the downstream deploy → container → fuzz → score pipeline is unchanged.

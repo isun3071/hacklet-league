@@ -1,18 +1,23 @@
 # HackLet League — Format Specification
 
-> ## Rulebook v1.0.0 — frozen 2026-08-03
+> ## Rulebook v1.0.1 — 2026-08-03
 >
-> This is the first frozen version of the HackLet League rules. Like any rulebook it is
-> **versioned**: v1.0.0 is a coherent, decided set of rules with no open format questions. Future
-> rule changes ship as new versions (patch for clarifications, minor for additive rules, major
-> for changes that alter competitive outcomes), announced at least 30 days ahead per §9, and
-> credentials cite the version they were earned under.
+> The HackLet League rules are **versioned**. A version is a coherent, decided set of rules with
+> no open format questions. Rule changes ship as new versions (patch for clarifications, minor
+> for additive rules, major for changes that alter competitive outcomes), announced at least 30
+> days ahead per §9, and credentials cite the version they were earned under.
 >
 > **Rules are frozen; implementation is not.** A rule marked **DESIGNED** is decided and binding
 > as a rule, even where no code implements it yet — the platform tracks the rulebook by stage
 > (BUILD_ROADMAP), it does not gate it. Do not read "DESIGNED" as "undecided."
 >
-> **What v1.0.0 settled (2026-08-03):** the two-rubric Communication axis (§4.1), the tier ladder
+> **v1.0.1 (2026-08-03)** transmits two decisions that were made but had not reached the docs, so
+> v1.0.0's "no open format questions" was true of the repo's contents but not of the actual rule
+> set: **no judge sees the Slop Score before Communication scores lock** (§4.1, closing C-16),
+> and the **2.25-minute per-submission figure is removed** as an artifact of an allocation that
+> does not exist (§4.1, TIER_A §4).
+>
+> **v1.0.0 (2026-08-03)** settled: the two-rubric Communication axis (§4.1), the tier ladder
 > graded on judging accountability (LEAGUE_OPERATIONS §4), per-tier leaderboards (§7.2), the
 > season as an academic year (§7.0), standing-based qualification (§7.3), buzzer enforcement and
 > the 10M budget (§5.5), the Slopless Builder award (§4.4), and contest-not-override for the
@@ -99,18 +104,18 @@ Every HackLet round operates the following phase sequence:
 
 **Build Phase**: the central system simultaneously unlocks all workstations and reveals the round prompt. Players have the variant's timer (24 minutes for Sprint, 12 for XP, 48 for Agile, etc.) to construct a web application. No required features, no mandated architectures. Players direct AI substrate however they choose within tier constraints. At freeze (build phase end), the network cuts for code changes, all build activity ceases — no further coding, no agent-interface edits, no fuzz invocations. The submission is captured and deployed at this instant, and grading reads the deployed copy from here on, so later edits reach nothing that is scored. The AI substrate stays available into pitch preparation on the same budget (§5.5).
 
-**Evaluation Phase**: at freeze, submissions move to scoring infrastructure. Submission mechanism varies by tier — SCP from controlled workstations at Tier A/B, portal upload with grace period at Tier C (see tier docs for specifics). League infrastructure receives each submission, deploys in an ephemeral container, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; any local fuzz invocations during build were intelligence-gathering only. Post-competition, submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
+**Evaluation Phase**: at freeze, submissions move to scoring infrastructure. Submission mechanism varies by tier — SCP from controlled workstations at Tier A/B, portal upload with grace period at Tier C (see tier docs for specifics). League infrastructure receives each submission, deploys in an ephemeral container, executes the full authoritative fuzz catalog (both public and hidden pools). Central testing scores submissions; any local fuzz invocations during build were intelligence-gathering only. **The judges do not receive the Slop Score during this window** — they work from the running app, clickaround, and (for the three technical roles) code and README; the findings list stays with the runner until deliberation (§4.1). Post-competition, submissions are published to the public HackLet git org with player attribution as part of the credentialing artifact archive.
 
 **Pitch Preparation Phase**: code files become read-only at freeze. Players retain access to submitted code, README, and AI assistance for pitch preparation, drawing on the same token budget they built with (§5.5) — reading your own code is most of what preparing a pitch is, and the graded artifact is already captured, so the assistance cannot change it. Players digest what they built, plan their articulation, anticipate cross-examination questions. Players also author **PITCH.md** documenting defensive choices, design rationale, and strategic decisions — this artifact is the canonical written communication artifact in the Tier C MVR (LLM-judged) and serves as pitch prep material at Tier A and Tier B (where the live pitch is the primary credentialing dimension). See PITCH.md template per TIER_C_OPERATIONS.md §7.
 
-**Pitch and Cross-Examination Phase**: human judges evaluate live performance at **Tier A and Tier B**. Tier C replaces it with LLM-judged written evaluation (below), which is the main thing the two tiers differ on. Each player presents in sequence:
+**Pitch and Cross-Examination Phase**: human judges evaluate live performance at **Tier A and Tier B**, **blind to the Slop Score** — no judge has seen the findings (§4.1). Tier C replaces it with LLM-judged written evaluation (below), which is the main thing the two tiers differ on. Each player presents in sequence:
 - Pitch — what they built, key choices, distinctiveness
 - Cross-examination — judges work the window as a panel. The player is scored on answering what was asked and yielding the floor (see below).
 - Brief transition before next player
 
 Specific timing per player (3.5 minutes at Tier A's standard 8-player rounds) and judge corps composition vary by tier. Same-archetype submissions (multiple players who built similar applications) pitch back-to-back to enable direct comparison.
 
-**Players are sequestered.** A player waits in a dedicated room and does not watch the pitches before their own. Two things make this the right call rather than an over-precaution: same-archetype submissions are deliberately scheduled back-to-back, so without sequestration the second of a pair would hear the first's pitch *and* the judges' questions immediately before answering; and every later slot would otherwise accumulate a read on what this panel presses hardest. Note the risk is pattern, not content — a player defends **their own build**, so there is no answer key to overhear. Sequestration also keeps the option of revealing the slop score as a cross-examination beat open, which an open room would leak. It costs a room and a staff member, and it takes players out of the audience for their own event.
+**Players are sequestered.** A player waits in a dedicated room and does not watch the pitches before their own. Two things make this the right call rather than an over-precaution: same-archetype submissions are deliberately scheduled back-to-back, so without sequestration the second of a pair would hear the first's pitch *and* the judges' questions immediately before answering; and every later slot would otherwise accumulate a read on what this panel presses hardest. Note the risk is pattern, not content — a player defends **their own build**, so there is no answer key to overhear. (Cross-examination is conducted blind in any case — no judge holds the Slop Score until Communication scores lock, §4.1 — so there is no findings leak to worry about here; the concern sequestration addresses is purely the pitch-pattern one above.) It costs a room and a staff member, and it takes players out of the audience for their own event.
 
 **Cross-examination is not rationed; the player's concision is scored.** Judges work the window as a panel rather than each being allotted one question. What is scored, on the player's own rubric, is **responsiveness and concision** — did they answer what was asked and yield the floor, or filibuster, dodge, and over-explain to run out the clock. This scores the *player's* behaviour rather than making them liable for the panel's clock management, and it is self-correcting: a player facing that rubric answers tight and yields, which gets the panel *more* questions in than rationing would. The judgment it asks of judges is distinguishing padding from genuine thoroughness, which competent people do intuitively. (This supersedes the earlier one-substantive-question-each model, where a verbose answer silently cost a colleague their turn.)
 
@@ -128,7 +133,7 @@ Specific timing per player (3.5 minutes at Tier A's standard 8-player rounds) an
 
 In the Tier C MVR profile, live pitch + cross-examination is replaced with LLM-judged evaluation of PITCH.md + README + fuzz results (which also lets the MVR scale to large cohorts human judging couldn't). See TIER_C_OPERATIONS.md §8 for LLM judging architecture.
 
-**Deliberation and Voting Phase**: judges enter explicit deliberation. All four sit together — the nontech stakeholder is in the room with the three technical judges — but the stakeholder scores on a **separate rubric**, because translation and trust to a non-verifier is a different measurement from technical defense, and running it through a technical lens loses the thing that role exists to catch. Judges compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, and score on the technical and stakeholder rubrics (§4.1).
+**Deliberation and Voting Phase**: judges enter explicit deliberation. All four sit together — the nontech stakeholder is in the room with the three technical judges — but the stakeholder scores on a **separate rubric**, because translation and trust to a non-verifier is a different measurement from technical defense, and running it through a technical lens loses the thing that role exists to catch. **The Slop Score is released now, at the start of deliberation** — after the blind pitch and cross-examination, with Communication scores locked (§4.1). Judges compare what they witnessed during pitches against clickaround observations, re-visit submissions with player framing context, and score on the technical and stakeholder rubrics (§4.1). Seeing the findings, the tester may file **contests** (§4.2), which is catalog feedback and changes no score.
 
 **Deliberation produces scores, not winners.** Slopless Builder, the communication award, and Best Overall are all computed from the scores afterwards (§4.3, §4.4). No panel votes on an outcome. This matters behaviourally: a judge who believes they are deliberating toward a verdict argues differently from one who knows they are deliberating toward their own number. At televised Tier A only, audience votes for People's Hacklet through the portal during this window (§4.4).
 
@@ -180,6 +185,15 @@ The **two rubrics** carry the two things Communication measures. The technical r
 The two axes are **never summed into one number** — they differ in direction (slop lower-is-better, communication higher-is-better), scale (slop unbounded, communication ranged), and epistemics (the fuzzer is pure objectivity; cross-ex is where subjectivity is allowed to live). Each is reported as a raw score and used in categorical awards; Best Overall is the rank-based composition of the two axes (§4.3). Both rubrics live entirely inside the Communication axis; the Slop axis is untouched by the judging structure.
 
 The old model split communication into separate Pitch Quality and Cross-Examination Performance components; under the two-rubric model each judge scores across *both* pitch and cross-ex, so pitch-vs-cross-ex is at most an internal sub-structure of a rubric — the axis-level weighting is by judge role (30/20/20/30). Rubric internals are written separately.
+
+**No judge sees the Slop Score before Communication scores lock.** The two axes are independent by construction, and this rule keeps them independent until nothing a judge does can move a number:
+
+1. During the evaluation window, **no judge receives the Slop Score — not the tester either.** Judges have the running app and clickaround, plus code and README for the three technical roles. The findings list stays with the runner.
+2. Pitch and cross-examination are conducted **blind** by all four judges.
+3. Communication scores **lock**.
+4. The Slop Score is **released at the start of deliberation**.
+
+Why, recorded so it does not drift back. The tester's job is intent-*dependent* correctness — the fuzzer's blind spot. The Slop Score is a list of intent-*independent* findings already scored on the other axis, so handing it to the tester pulls them out of their own lane: they would spend a 120-second window on an unthrottled login instead of on whether the app does what it claims, which is the only thing no other instrument in the format can reach. The anti-bluff floor does not need the score either — the fuzzer cannot read code and the tester can, and for verifying a claim a player makes under pressure a white-box read is a strictly better instrument than a black-box probe result. That property was already there. And it removes a leak: cross-examination is public, so a tester who cited a finding aloud would hand it to the whole panel and the audience in one sentence; with nobody holding the findings, there is nothing to leak.
 
 ### 4.2 Slop Scoring Philosophy
 
@@ -249,7 +263,11 @@ The division is architectural, not merely sequencing. The fuzz catalog is the **
 
 **No judge can void a finding.** The tester judge has **no override** on the slop score. A human authority to strike a probe result would make the slop score a function of *who judged it*, and that breaks four properties the score is built on at once: **reproducibility** (the same submission must score the same twice, which is what lets a whole discovery profile be cached and replayed deterministically), **comparability** (a slop score from one panel in one city has to mean what a slop score from another panel in another city means), **intent-independence** (the authoring invariant that a probe's correct outcome does not depend on what the app was for — an override is exactly the intent judgment the invariant exists to keep out), and **attribution at authoring time** (a probe's penalty is decided when the probe is written and reviewed, not at the scoring table). If a probe produces intent-dependent false positives, the probe is badly authored, and the catalog is where that gets fixed.
 
-What the tester judge has instead is the **contest**. They may mark a finding CONTESTED, which records the probe, the submission, the judge, the timestamp, and a reason. It changes no score. **The round result is final** — HackLet reveals live, so there is no window between scoring and the ceremony in which a result could be revised, and there is no retroactive amendment of a completed round. Contests are reviewed between events and resolve into catalog changes going *forward*: a contest that turns out to be right improves the probe for everyone who competes after it, which is the durable fix rather than the local one.
+What the tester judge has instead is the **contest**. They may mark a finding CONTESTED, which records the probe, the submission, the judge, the timestamp, and a reason. It changes no score. The tester does this **at deliberation**, once the Slop Score has been released (§4.1) and after their own Communication score is already locked — which is exactly why it is safe: they are looking at the findings for the first time, and nothing they conclude can move a number in this round. Contesting is **catalog feedback, not scoring, and is not part of the tester's rubric**. It means the tester's role extends slightly past the round: the other three judges are done when Communication scores lock, while the tester also reviews the released findings and files any contests.
+
+**The round result is final** — HackLet reveals live, so there is no window between scoring and the ceremony in which a result could be revised, and there is no retroactive amendment of a completed round. Contests are reviewed between events and resolve into catalog changes going *forward*: a contest that turns out to be right improves the probe for everyone who competes after it, which is the durable fix rather than the local one. This forward-only handling matches how competitive bodies generally treat a disputed result — the outcome on the day stands, and the dispute produces a ruling that governs future contests rather than rewriting the past.
+
+**A contest is not a sanction, and the two resolve in opposite directions.** An integrity failure *voids* a result (LEAGUE_OPERATIONS §11) because the result was never valid — the player cheated, so there was nothing legitimate to keep. A measurement dispute *propagates* because the result **was** valid: the instrument scored what it saw, and what needs fixing is the instrument, for next time. Voiding looks backward at a result that should not stand; contesting looks forward at a probe that should score better.
 
 This is not a demotion of the role, because the tester was never the fuzzer's editor. **The fuzzer cannot read code.** It is a black-box HTTP grader: it sends requests to a running app and scores what comes back, and it has no idea what the source says, what the app was for, or whether a behaviour was deliberate. (The one exception proves the rule — a static scan of the submission for hardcoded secrets, which exists precisely because that class never reaches the wire. It pattern-matches files; it does not comprehend them.)
 

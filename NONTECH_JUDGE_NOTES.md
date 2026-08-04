@@ -9,9 +9,10 @@
 >   the rulebook uses.
 > - **§8 — score the player's concision (anti-filibuster): ADOPTED.** Cross-examination is not
 >   rationed; the player's rubric scores responsiveness and concision (format_spec §3.1).
-> - **§9 — slop-reveal timing: the withhold-through-cross-ex intent is honoured**; the format
->   captures and grades the deployed submission, and judges enter cross-ex without the score in
->   front of them.
+> - **§9 — slop-reveal timing: ADOPTED as the v1.0.1 rule.** No judge sees the Slop Score
+>   before Communication scores lock; pitch and cross-ex are blind; the score is released at the
+>   start of deliberation (format_spec §4.1). The §9 body's "reveal as a cross-ex beat" idea is
+>   *not* the rule — the reveal is at deliberation, not mid-cross-ex.
 >
 > The rest of this file (the per-format stakeholder postures, the underspecified treatment) is
 > design depth behind the canonical §4.1 summary, not competing decisions. Read it as the
@@ -195,7 +196,7 @@ The 1-min pitch + 2-min cross-ex compression is construct-valid, not just televi
 
 ## 9. Slop-score reveal timing (relevant to cross-ex, not only nontech)
 
-Withhold the slop score through the *blind* pitch and cross-ex, because the highest-value signal (does this person know their own work well enough to find its weakness *without* the machine telling them) only exists if they defend blind. Handing them the fuzzer's verdict first lets them parrot the machine and *look* like they have the instinct. Ideal sequence: build → fuzzer runs (hidden) → blind pitch + cross-ex → reveal *as a cross-ex beat* ("the fuzzer found X, you didn't mention it, talk to me") so you also catch own-your-failures-gracefully. Fallback if the 2-min clock can't fit a reveal beat: withhold entirely until after cross-ex and protect the self-knowledge signal (the more load-bearing of the two for the thesis).
+Withhold the slop score through the *blind* pitch and cross-ex, because the highest-value signal (does this person know their own work well enough to find its weakness *without* the machine telling them) only exists if they defend blind. Handing them the fuzzer's verdict first lets them parrot the machine and *look* like they have the instinct. Ideal sequence: build → fuzzer runs (hidden) → blind pitch + cross-ex → reveal **at deliberation, after Communication scores lock** (the v1.0.1 rule, format_spec §4.1; an earlier draft floated revealing it *as a cross-ex beat* ("the fuzzer found X, you didn't mention it, talk to me") so you also catch own-your-failures-gracefully. Fallback if the 2-min clock can't fit a reveal beat: withhold entirely until after cross-ex and protect the self-knowledge signal (the more load-bearing of the two for the thesis).
 
 ---
 

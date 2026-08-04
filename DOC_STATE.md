@@ -36,6 +36,8 @@
 > Also closed: **C-17** (the award is **Slopless Builder**, in docs and in the `slopless_builder`
 > award key).
 >
+> Also closed at v1.0.1 (2026-08-03): **C-16** (slop-score reveal — no judge sees it before Communication locks; released at deliberation).
+>
 > DECISIONS_OWED.md, which this file referred to for the open list, was **deleted on
 > 2026-08-03**: its resolutions had landed in format_spec, and its still-open items are now
 > marked `OPEN —` in the sections that own them. Search for that string. [CHANGELOG.md](CHANGELOG.md)
@@ -280,7 +282,7 @@ and nothing in the file says so.
 | 3, 4A, 4B, 4, 5 | Per-format stakeholder postures, CES/incumbent/brief-author models | DESIGNED (working) |
 | 6, 7 | Pre-commit and freeze; on-stage intro | DESIGNED (working) |
 | 8 | Cross-ex concision / anti-filibuster | DESIGNED — **the live alternative** to Tier A's one-question-per-judge rationing. **C-11** |
-| 9 | Slop-score reveal withheld through cross-ex | DESIGNED — contradicts TIER_A:103. **C-16** |
+| 9 | Slop-score reveal withheld through cross-ex | **C-16 RESOLVED v1.0.1** — no judge sees slop before Communication locks; released at deliberation (format_spec §4.1) |
 | 10 | Open questions incl. aggregation | **SUPERSEDED in part** — "aggregation not decided" was decided as 30/20/20/30 |
 
 ### JUDGE_PANEL_RECONCILIATION_PATCH.md
@@ -555,7 +557,7 @@ technical-average-plus-nontech.
 The file is labelled working-notes, but carries no marker that the panel question was
 subsequently locked against it.
 
-**C-16 — When do judges see the slop score?**
+**C-16 — When do judges see the slop score? — RESOLVED 2026-08-03 (v1.0.1).** Rule: no judge (tester included) receives the Slop Score until Communication scores lock; pitch and cross-ex are blind; the score is released at the start of deliberation (format_spec §4.1). The three conflicting passages below are reconciled to that rule. Original conflict, for the record:
 `NONTECH_JUDGE_NOTES.md:181` — withhold through pitch and cross-ex, because "the
 highest-value signal… only exists if they defend blind"; reveal as a cross-ex beat.
 `TIER_A_OPERATIONS.md:103` — during the 18-min evaluation window, "Fuzz runner output gives

@@ -54,6 +54,20 @@ Cross-examination was modelled on the **Shark Tank-style Q&A of the RSAC Innovat
 
 ---
 
+## Rulebook v1.0.1 — two decisions that never reached the docs (2026-08-03)
+
+v1.0.0 claimed "no open format questions." That was accurate for what the **repository** contained, but two decisions had been made and never transmitted to the docs, so the rule set itself still had two loose ends. v1.0.1 closes them.
+
+**No judge sees the Slop Score before Communication scores lock (closes C-16).** Three passages held three different states: TIER_A §4 handed all four judges the slop findings at T+29, eighteen minutes before the first pitch; NONTECH_JUDGE_NOTES claimed the withhold-through-cross-ex intent was already honoured; and format_spec §3.1 called revealing the score as a cross-examination beat "an option kept open" — an undecided question sitting inside a frozen rulebook. The rule now (§4.1): during evaluation **no judge receives the Slop Score, tester included**; pitch and cross-examination are **blind**; Communication scores **lock**; the Slop Score is **released at the start of deliberation**.
+
+Why, recorded so it does not drift back. The two axes are independent by construction, and this keeps them independent until nothing a judge does can move a number. The tester's job is intent-*dependent* correctness — the fuzzer's blind spot; the Slop Score is intent-*independent* findings already scored on the other axis, so handing it to the tester pulls them out of their lane (a 120-second window spent on an unthrottled login instead of on whether the app does what it claims). The anti-bluff floor does not need the score: the fuzzer cannot read code and the tester can, and white-box reading beats a black-box probe result for testing a claim under pressure. And it removes a leak — cross-examination is public, so a tester citing a finding aloud would hand it to the whole panel and the audience; with nobody holding the findings, there is nothing to leak. What the tester does with the score at deliberation is file **contests** (§4.2): catalog feedback, not scoring, safe precisely because their Communication score is already locked — which means the tester's role runs slightly past the round while the other three end when scores lock. Recorded alongside it: a contest **propagates forward** (the result was valid, the instrument needs fixing) where a sanction **voids** (the result was never valid) — opposite directions, per LEAGUE_OPERATIONS §11.
+
+**The 2.25-minute per-submission figure is removed entirely.** It was arithmetic (18 min ÷ 8 submissions) that assumed a perfectly equal time allocation across submissions, and no such allocation exists or is enforced. Both the figure and the parenthetical defending it (the earlier "~9 minutes" correction) are gone from TIER_A §4 and the Round Sizing cognitive-load line, with no retirement note left to seed it again. The statement now: judges evaluate all 8 submissions across the 18-minute window and continue during deliberation, a second pass; **nothing allocates or enforces per-submission time, and no per-submission figure exists.** The panel-size ceiling rests on the **pitch phase growing linearly with field size** (28 min at 8 players), not on any per-submission evaluation number.
+
+Cascaded through format_spec §3.1/§4.1/§4.2, TIER_A §4, ARCHITECTURE (scoring flow), NONTECH_JUDGE_NOTES, and DOC_STATE (C-16 marked resolved).
+
+---
+
 ## Rulebook v1.0.0 — the format is frozen (2026-08-03)
 
 The documentation set is versioned as a rulebook, and **v1.0.0** is the first frozen version: a coherent, decided set of rules with **no open format questions**. Future rule changes ship as new versions, announced 30 days ahead (§9), and credentials cite the version they were earned under.
