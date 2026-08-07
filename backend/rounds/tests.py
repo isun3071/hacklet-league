@@ -10,7 +10,11 @@ from rest_framework.test import APIClient
 
 from chapters.models import Chapter, ChapterStaff
 from events.models import Event, EventParticipant
-from rounds.models import Round, Score, Submission
+import json
+
+from django.core.management import call_command
+
+from rounds.models import FuzzResult, Round, Score, Submission
 from rounds.services import SUBMISSION_GRACE
 
 User = get_user_model()
@@ -565,3 +569,88 @@ def test_results_hidden_until_revealed(mgr_event):
     pub = APIClient().get(f"/api/rounds/{rnd.id}/results/")
     assert pub.status_code == 200
     assert pub.data["revealed"] is True
+
+
+# ---- fuzz grade import (manual-bridge grading path) ------------------------
+
+
+@pytest.mark.django_db
+def test_import_fuzz_results_sets_slop_score_and_findings(event, tmp_path):
+    rnd = Round.objects.create(event=event, round_number=1)
+    player = User.objects.create_user(email="graded@example.com", password="pw")
+    sub = Submission.objects.create(round=rnd, player=player, status=Submission.Status.SUBMITTED)
+
+    # The runner writes JSONL keyed by `repo` = the submission id (dir named by its uuid).
+    rec = {
+        "repo": f"/runs/{sub.id}", "deployed": True, "slop_score": 42,
+        "axis_slop": {"security": 30, "qa": 12},
+        "findings": [
+            {"probe_id": "sec-sqli-001", "bundle": "security", "category": "sql-injection",
+             "outcome": "slop_detected", "penalty": 30, "reason": "boolean differential"},
+            {"probe_id": "qa-crash-003", "bundle": "qa", "category": "crash",
+             "outcome": "slop_detected", "penalty": 12},
+        ],
+    }
+    f = tmp_path / "results.jsonl"
+    f.write_text(json.dumps(rec) + "\n")
+
+    call_command("import_fuzz_results", str(f))
+
+    sub.refresh_from_db()
+    assert sub.slop_score == 42
+    assert sub.status == Submission.Status.SUBMITTED_DEPLOYED
+    assert sub.fuzz_results.count() == 2
+    sqli = sub.fuzz_results.get(probe_id="sec-sqli-001")
+    assert sqli.penalty_contributed == 30
+    assert sqli.bundle == "security"
+    assert sqli.evidence["reason"] == "boolean differential"
+
+
+@pytest.mark.django_db
+def test_import_fuzz_results_deploy_failed_record(event, tmp_path):
+    rnd = Round.objects.create(event=event, round_number=1)
+    player = User.objects.create_user(email="dnf@example.com", password="pw")
+    sub = Submission.objects.create(round=rnd, player=player, status=Submission.Status.SUBMITTED)
+
+    rec = {"repo": str(sub.id), "deployed": False}
+    f = tmp_path / "r.jsonl"
+    f.write_text(json.dumps(rec) + "\n")
+    call_command("import_fuzz_results", str(f))
+
+    sub.refresh_from_db()
+    assert sub.slop_score is None
+    assert sub.status == Submission.Status.SUBMITTED_FAILED
+
+
+@pytest.mark.django_db
+def test_import_fuzz_results_is_idempotent(event, tmp_path):
+    rnd = Round.objects.create(event=event, round_number=1)
+    player = User.objects.create_user(email="idem@example.com", password="pw")
+    sub = Submission.objects.create(round=rnd, player=player)
+
+    def write(score, probes):
+        rec = {"repo": str(sub.id), "deployed": True, "slop_score": score,
+               "findings": [{"probe_id": p, "bundle": "security", "outcome": "slop_detected",
+                             "penalty": 10} for p in probes]}
+        f = tmp_path / "r.jsonl"
+        f.write_text(json.dumps(rec) + "\n")
+        return f
+
+    call_command("import_fuzz_results", str(write(50, ["a", "b", "c"])))
+    assert sub.fuzz_results.count() == 3
+    # Re-import with a corrected grade: fewer findings, new score — no stale rows left behind.
+    call_command("import_fuzz_results", str(write(20, ["a"])))
+    sub.refresh_from_db()
+    assert sub.slop_score == 20
+    assert sub.fuzz_results.count() == 1
+
+
+@pytest.mark.django_db
+def test_import_fuzz_results_skips_unknown_submission(tmp_path):
+    import uuid as _uuid
+    rec = {"repo": str(_uuid.uuid4()), "deployed": True, "slop_score": 5, "findings": []}
+    f = tmp_path / "r.jsonl"
+    f.write_text(json.dumps(rec) + "\n")
+    # No matching submission -> no crash, nothing created.
+    call_command("import_fuzz_results", str(f))
+    assert FuzzResult.objects.count() == 0
