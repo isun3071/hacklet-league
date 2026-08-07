@@ -201,7 +201,7 @@ Per format_spec.md §4, Tier B operates the scoring framework with two exclusion
 
 ## 9. Live Judging Protocol
 
-> **Status: DESIGNED** — four-role panel locked, unimplemented.
+> **Status: MIXED** — four-role panel locked; its role-weighted scoring is now BUILT (`backend/rounds/scoring.py`, 30/20/20/30 over present roles). The live human-judging operations remain DESIGNED.
 
 Tier B uses **human judge corps** identical to Tier A judging protocol (see TIER_A_OPERATIONS.md §9). Same judge panel composition — the four permanent roles (tester, UI/UX/HCI, general engineering, nontech stakeholder), weighted 30/20/20/30 into the 0-100 Communication axis (format_spec.md §4.1) — same cross-examination structure, same calibration discipline.
 

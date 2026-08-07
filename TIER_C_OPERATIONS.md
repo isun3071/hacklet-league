@@ -191,7 +191,7 @@ AI assistance doesn't automatically produce strong PITCH.md. Players must direct
 
 ## 8. LLM Judging Architecture
 
-> **Status: DESIGNED** — no judging pipeline exists. Note the 40/30/30 aggregation below is a **third** Communication-axis decomposition, alongside format_spec §4.1's 30/20/20/30 and the shipped six-facet mean (DOC_STATE C-01).
+> **Status: DESIGNED** — no LLM judging pipeline exists. The 40/30/30 aggregation below is the **LLM** judge's own-merit / nontech / comparative weighting, a separate instrument from the human four-role Communication weighting (format_spec §4.1's 30/20/20/30, now BUILT in `rounds/scoring.py`). The old shipped six-facet mean is retired. Reconciling this LLM decomposition with the human one is the open remainder of **C-01**.
 
 The MVR profile evaluates submissions through **LLM-judged written evaluation** rather than human-judged live performance. The architecture uses OpenRouter Fusion (or equivalent multi-model deliberation pipeline) to evaluate PITCH.md + README + fuzz results across multiple dimensions in parallel.
 

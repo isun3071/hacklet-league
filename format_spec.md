@@ -167,7 +167,7 @@ At Tier B and Tier C, the format runs without broadcast production. In-person au
 
 ### 4.1 Component Structure
 
-> **Status: DESIGNED** — **the shipped code implements a different decomposition.** `backend/rounds/scoring.py:24-33` averages six judge-entered facets into two axes and never reads `judge_specialization`; the 30/20/20/30 role weighting is unimplemented. A third decomposition (40/30/30) lives in TIER_C §8. See DOC_STATE C-01 and the DATA_MODEL EventParticipant flag.
+> **Status: MIXED** — the two-axis scoring math is now **BUILT**. `backend/rounds/scoring.py` ranks the Slop axis on `Submission.slop_score` (the fuzz runner's damped total, imported by `import_fuzz_results`), and computes Communication as the 30/20/20/30 role-weighted composite: `_communication` (scoring.py:69) reads `judge_specialization` and weights Tester 30, UI/UX 20, General 20, Nontech 30, normalized over the roles actually present, with a flat-mean fallback when no judge is specialized. The old six-facet judge stand-in for the objective axis is retired. Still **DESIGNED** (process, not code-enforced): the blind-judging sequence (§4.1 steps 1-4) and the contest mechanic (§4.2). Partially open (**C-01**): TIER_C_OPERATIONS §8 defines a *separate* Communication decomposition for the **LLM** judge (40/30/30 own-merit / nontech / comparative), a different instrument for the LLM-judged tier that is not reconciled with this human role weighting.
 
 A player's performance is measured on **two independent axes**:
 
@@ -308,7 +308,7 @@ The README remains load-bearing for cross-examination and pitch context. Players
 
 ### 4.3 Best Overall (Composite Ranking)
 
-> **Status: BUILT** — `backend/rounds/scoring.py:95-112` implements the rank-sum and all four tiebreakers in this order. It currently ranks a judge-entered engineering stand-in rather than a machine slop score.
+> **Status: BUILT** — `backend/rounds/scoring.py:140-172` implements the rank-sum and all four tiebreakers in this order. It ranks the machine Slop Score (`Submission.slop_score`, ascending, lower is better) against the human Communication Score.
 
 The Best Overall winner is determined through rank-based composition with progressive tiebreaking:
 
@@ -326,7 +326,7 @@ This produces the right kind of Best Overall winner: the most balanced player am
 
 ### 4.4 Categorical Awards
 
-> **Status: MIXED** — Slopless Builder, Best Communicator and Best Overall are BUILT (`backend/rounds/scoring.py:132-137`). People's Hacklet is DESIGNED and deferred. Most Efficient is retired here but listed as live in TIER_A §8 and TIER_B §8 (DOC_STATE C-06).
+> **Status: MIXED** — Slopless Builder, Best Communicator and Best Overall are BUILT (`backend/rounds/scoring.py:195-203`). People's Hacklet is DESIGNED and deferred. Most Efficient is retired here but listed as live in TIER_A §8 and TIER_B §8 (DOC_STATE C-06).
 
 Per-round categorical awards are kept deliberately small to preserve credentialing signal at 8-player round size. Per-round awards alongside Best Overall (§4.3):
 

@@ -256,7 +256,7 @@ See §10 for multi-day tournament structure.
 
 ## 9. Live Judging Protocol
 
-> **Status: DESIGNED** — the four-role panel is the locked decision (JUDGE_PANEL_RECONCILIATION_PATCH.md) but is unimplemented: `judge_specialization` ships three values, not four, and scoring never reads it.
+> **Status: MIXED** — the four-role panel is the locked decision (JUDGE_PANEL_RECONCILIATION_PATCH.md), and its scoring is now BUILT: `judge_specialization` ships all four values and `backend/rounds/scoring.py` weights the roles 30/20/20/30, normalized over the roles present. The controlled-workstation substrate and broadcast pipeline that distinguish Tier A remain DESIGNED.
 
 Tier A uses **human judge corps** with calibrated panel roles. LLM judging is not used at Tier A because the live performance dimension (pitch + cross-ex) requires human evaluators capable of real-time question generation, body-language reading, follow-up probing.
 

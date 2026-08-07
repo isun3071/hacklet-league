@@ -324,7 +324,7 @@ This table is the data source for broadcast overlays and live leaderboards durin
 
 ### EventParticipant
 
-> **Status: BUILT with a known gap** — `backend/events/models.py:88`. The `judge_specialization` enum here lists four values; the code ships three (no `stakeholder`). The scoring-math warning below it is accurate and remains the single most honest passage in the doc set.
+> **Status: BUILT** — `backend/events/models.py:100`. The `judge_specialization` enum ships all four values (`stakeholder` was added in migration `0002`). The scoring-math warning below it is now **resolved**: the role weighting it described as unbuilt is implemented in `backend/rounds/scoring.py`.
 
 Everyone associated with an event as a person — **players, judges, and non-competing audience** — regardless of how they joined (invited, applied/RSVP'd, or drawn from the chapter judge corps). This single entity also replaces the old `JudgeAssignment` (a judge is just a participant with `role=judge`). It is the join point for access modes and all person-roles at an event.
 
@@ -355,7 +355,7 @@ The `status` lifecycle covers both access modes and both join paths:
 
 `role`+`judge_specialization` determine which scoring interfaces a judge sees and how their expertise weights categorical awards.
 
-> **⚠ Scoring-math flag — the enum add is NOT the whole fix.** The four permanent judge roles compose the Communication axis **weighted 30/20/20/30 by judge role** (tester / UI-UX-HCI / general / nontech — format_spec.md §4.1). But `Score.score_type` and the current aggregation model scoring as *facet score-types* (pitch_quality, cross_examination, creative_coherence, ux_quality, technical_execution, documentation) averaged into composites — a **different decomposition**. Adding `stakeholder` to this enum does not by itself implement the role-weighting; weighting each judge-role's contribution to the Communication composite is a separate scoring-logic change to be scoped on its own. Do not mistake the enum add for a complete fix, and do not silently rewrite the facet-based aggregation to match.
+> **✓ Scoring-math flag — RESOLVED.** The four permanent judge roles compose the Communication axis **weighted 30/20/20/30 by judge role** (tester / UI-UX-HCI / general / nontech, format_spec.md §4.1), and `backend/rounds/scoring.py` now implements exactly that: `_communication` reads each judge's `judge_specialization`, blends the four roles by `ROLE_WEIGHTS` normalized over the roles actually present, and falls back to a flat mean when no judge is specialized. The old facet-based aggregation was retired in the same change: the objective axis is now the fuzzer's `Submission.slop_score`, not a mean of judge facets. `Score.score_type` still carries `pitch_quality` + `cross_examination` as the two Communication dimensions each judge scores; the four engineering facet score-types (creative_coherence, ux_quality, technical_execution, documentation) are no longer read by scoring, and their removal from the judge console is a follow-up.
 
 **Audience** participants (`role=audience`) are non-competing spectators — RSVP'd attendees tracked for headcount and in-person People's Hacklet eligibility. They carry no `judge_specialization`, no `chapter_staff`, and never the `corps` source; they don't count toward the player cap, and may optionally link to an `AudienceVote`. (Anonymous walk-in audience and anonymous voting still work through `AudienceVote` with no EventParticipant row.)
 
