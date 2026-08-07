@@ -117,6 +117,11 @@ class Submission(models.Model):
     attack_surface_coverage = models.CharField(
         max_length=20, choices=AttackSurfaceCoverage.choices, blank=True
     )
+    # The authoritative objective axis: the fuzz runner's damped slop total ([0, +inf), lower is
+    # better). NULL until the submission is graded (import_fuzz_results). This is the runner's
+    # own aggregate, NOT a naive sum of FuzzResult penalties — the runner already applied its
+    # variant-group / diminishing / per-bundle dampers, so ranking reads this field, not a re-sum.
+    slop_score = models.PositiveIntegerField(null=True, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
@@ -168,3 +173,54 @@ class Score(models.Model):
 
     def __str__(self):
         return f"{self.score_type} {self.value} — {self.submission}"
+
+
+class FuzzResult(models.Model):
+    """One fuzz finding against a submission, imported from the runner's grade record
+    (`manage.py import_fuzz_results`). Deduction-only per format_spec §4.2: a fired probe carries
+    a non-negative `penalty_contributed`; `clean` / `not_applicable` carry 0.
+
+    The authoritative ranked number is `Submission.slop_score` (the runner's damped total). These
+    rows are the itemized findings — for the player's slop report and for the tester judge's
+    contest mechanic. `probe_id` is the runner catalog's string id (e.g. "sec-sqli-001") rather
+    than an FK to a FuzzTest table, which is not built at the manual-bridge stage; the FuzzTest
+    catalog becomes a platform table in the full Stage 5 pipeline (DATA_MODEL.md FuzzResult).
+    """
+
+    class Outcome(models.TextChoices):
+        SLOP_DETECTED = "slop_detected", "Slop detected"
+        CLEAN = "clean", "Clean"
+        NOT_APPLICABLE = "not_applicable", "Not applicable"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.ForeignKey(
+        Submission, on_delete=models.CASCADE, related_name="fuzz_results"
+    )
+    probe_id = models.CharField(max_length=100)
+    bundle = models.CharField(max_length=20, blank=True)  # security / qa / performance
+    category = models.CharField(max_length=80, blank=True)
+    outcome = models.CharField(max_length=20, choices=Outcome.choices)
+    penalty_contributed = models.PositiveIntegerField(default=0)
+    evidence = models.JSONField(default=dict, blank=True)
+    # Contest (format_spec §4.2): the tester judge disputes a finding at deliberation. Records
+    # only — changes no score, and never amends this round. Reviewed between events into catalog
+    # changes going forward.
+    contested_by = models.ForeignKey(
+        "events.EventParticipant", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="contested_findings",
+    )
+    contested_reason = models.TextField(blank=True)
+    contested_at = models.DateTimeField(null=True, blank=True)
+    ran_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "rounds_fuzzresult"
+        ordering = ("submission", "bundle", "probe_id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["submission", "probe_id"], name="unique_submission_probe"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.probe_id} {self.outcome} (+{self.penalty_contributed}) — {self.submission}"
