@@ -35,18 +35,25 @@ export default function Home() {
       {/* SECTION 1: HERO */}
       <section className="container hero">
         <FuzzWave />
-        {/* One type size for all four lines. Hierarchy is brightness only: accent > text >
-            muted. Do not reintroduce a size jump here. */}
+        {/* Hierarchy is size + brightness: the tagline is the focal point, the rest step down
+            (see .hero-* in globals.css). */}
         <h1 className="hero-line hero-tagline">no slop survives.</h1>
         <p className="hero-line hero-descriptor">
           a rapid app building league with automated stress testing
         </p>
-        <p className="hero-line hero-pipeline">build with AI | defend it | pitch it</p>
         <p className="hero-line hero-body">
           We took a hackathon and messed up the units. You have 24{" "}
           <s className="struck">hours</s> minutes to build, and then everything you built
           gets put to the test.
         </p>
+        <div className="actions">
+          <Link className="btn" href="#signup">
+            [ get notified ]
+          </Link>
+          <Link className="textlink" href="#how">
+            how it works &rarr;
+          </Link>
+        </div>
       </section>
 
       <AsciiRule />

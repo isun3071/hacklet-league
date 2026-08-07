@@ -1,0 +1,33 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HackLet League">
+  <defs>
+    <linearGradient id="hl-fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b6f400" stop-opacity="0"/>
+      <stop offset="1" stop-color="#b6f400" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="40" fill="#0a0c0b"/>
+  <g transform="translate(10,40)">
+    <g transform="translate(10,0) skewX(-9)">
+      <g fill="url(#hl-fade)">
+        <rect x="28" y="16" width="62" height="4"/>
+        <rect x="28" y="23" width="62" height="4"/>
+        <rect x="28" y="30" width="62" height="4"/>
+        <rect x="28" y="37" width="62" height="4"/>
+        <rect x="28" y="44" width="62" height="4"/>
+        <rect x="28" y="51" width="62" height="4"/>
+        <rect x="28" y="58" width="62" height="4"/>
+        <rect x="28" y="65" width="62" height="4"/>
+        <rect x="28" y="72" width="62" height="4"/>
+        <rect x="28" y="79" width="62" height="4"/>
+        <rect x="28" y="86" width="62" height="4"/>
+        <rect x="28" y="93" width="62" height="4"/>
+        <rect x="28" y="100" width="62" height="4"/>
+      </g>
+      <g fill="#b6f400">
+        <rect x="90" y="16" width="16" height="88"/>
+        <rect x="134" y="16" width="16" height="88"/>
+        <rect x="106" y="52" width="28" height="16"/>
+      </g>
+    </g>
+  </g>
+</svg>

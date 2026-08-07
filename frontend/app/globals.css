@@ -77,7 +77,9 @@ a { color: var(--accent); text-decoration: none; }
   background: rgba(10, 12, 11, 0.92); backdrop-filter: blur(6px);
 }
 .bar-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; gap: 1rem; }
-.logo { font-weight: 700; letter-spacing: 0.02em; color: var(--text); white-space: nowrap; }
+.logo { font-weight: 700; letter-spacing: 0.02em; color: var(--text); white-space: nowrap; display: inline-flex; align-items: center; gap: 0.5rem; }
+/* The mark tints itself lime via currentColor; sized to the wordmark's cap height. */
+.logo-mark { height: 1.1em; width: auto; color: var(--accent); flex: none; }
 .bar-link { font-size: 0.9rem; }
 .bar-link:hover { background: var(--accent); color: var(--bg); }
 
@@ -94,20 +96,38 @@ a { color: var(--accent); text-decoration: none; }
 .readout { color: var(--accent); font-size: clamp(0.85rem, 1.8vw, 1rem); margin: 0 0 1.3rem; letter-spacing: 0.02em; }
 .sub { color: var(--muted); font-size: clamp(0.95rem, 1.8vw, 1.1rem); max-width: 60ch; margin: 0 0 1.8rem; }
 
-/* Hero lines: ONE size and weight for all of them. The hierarchy is carried by brightness
-   (accent > text > muted), never by type size. h1 is reset to match the paragraphs. */
+/* Hero lines: hierarchy from BOTH size and brightness. The tagline is the focal point; the
+   rest step down. Brightness (accent > text > muted) still separates the roles. */
 .hero-line {
-  font-size: clamp(1rem, 2.2vw, 1.35rem);
-  line-height: 1.55;
-  font-weight: 400;
   letter-spacing: 0;
-  max-width: 64ch;
-  margin: 0 0 0.35rem;
+  max-width: 40ch;
+  margin: 0 0 0.4rem;
 }
-.hero-tagline { color: var(--accent); margin-bottom: 1.6rem; }
-.hero-descriptor { color: var(--text); }
-.hero-pipeline { color: var(--text); margin-bottom: 1.6rem; }
-.hero-body { color: var(--muted); margin-bottom: 1.8rem; }
+/* The statement. Big, bold, accent — the one thing the eye lands on. */
+.hero-tagline {
+  color: var(--accent);
+  font-size: clamp(2.6rem, 8vw, 5rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin-bottom: 1.5rem;
+}
+/* What it is. A clear supporting subhead. */
+.hero-descriptor {
+  color: var(--text);
+  font-size: clamp(1.2rem, 3vw, 1.9rem);
+  font-weight: 500;
+  line-height: 1.25;
+  max-width: 30ch;
+}
+/* The joke. Muted body, wide measure. */
+.hero-body {
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+  line-height: 1.55;
+  max-width: 58ch;
+  margin-bottom: 1.8rem;
+}
 /* "24 hours minutes" — the struck word sits back so the correction reads at a glance. */
 .struck { color: var(--muted); opacity: 0.65; text-decoration-thickness: 1px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2rem; }
@@ -118,7 +138,6 @@ a { color: var(--accent); text-decoration: none; }
 .hero > .prompt { animation-delay: 0.05s; }
 .hero > .headline, .hero > .hero-tagline { animation-delay: 0.28s; }
 .hero > .readout, .hero > .hero-descriptor { animation-delay: 0.48s; }
-.hero > .hero-pipeline { animation-delay: 0.6s; }
 .hero > .sub, .hero > .hero-body { animation-delay: 0.72s; }
 .hero > .actions { animation-delay: 0.9s; }
 @media (prefers-reduced-motion: reduce) {
