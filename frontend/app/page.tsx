@@ -37,7 +37,7 @@ export default function Home() {
         <FuzzWave />
         {/* Hierarchy is size + brightness: the tagline is the focal point, the rest step down
             (see .hero-* in globals.css). */}
-        <h1 className="hero-line hero-tagline">no slop survives.</h1>
+        <h1 className="hero-line hero-tagline">move fast, break nothing.</h1>
         <p className="hero-line hero-descriptor">
           a rapid app building league with automated stress testing
         </p>
