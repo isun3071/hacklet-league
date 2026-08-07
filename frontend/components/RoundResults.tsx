@@ -77,7 +77,7 @@ export function RoundResults({ roundId, refreshKey = 0 }: { roundId: string; ref
                 <tr>
                   <th>#</th>
                   <th>player</th>
-                  <th>engineering</th>
+                  <th>slop</th>
                   <th>communication</th>
                   <th>rank-sum</th>
                 </tr>
@@ -91,8 +91,8 @@ export function RoundResults({ roundId, refreshKey = 0 }: { roundId: string; ref
                     </td>
                     <td>{s.player_display || "—"}</td>
                     <td>
-                      {s.engineering_score.toFixed(1)}{" "}
-                      <span className="dim">(#{s.engineering_rank})</span>
+                      {s.slop_score ?? "—"}{" "}
+                      <span className="dim">(#{s.slop_rank})</span>
                     </td>
                     <td>
                       {s.communication_score.toFixed(1)}{" "}
@@ -105,7 +105,8 @@ export function RoundResults({ roundId, refreshKey = 0 }: { roundId: string; ref
             </table>
           </div>
           <p className="note">
-            // engineering = judge stand-in for the Slop Score until the Stage 5 runner lands.
+            // slop = fuzzer findings, lower is better (0 = clean, &ldquo;—&rdquo; = not graded).
+            communication is human-judged, higher is better.
           </p>
         </>
       )}

@@ -107,10 +107,10 @@ export type Standing = {
   submission_id: string;
   player_id: string;
   player_display: string;
-  engineering_score: number;
+  slop_score: number | null; // fuzzer's damped total, lower is better; null until graded
   communication_score: number;
   dimension_averages: Partial<Record<ScoreType, number>>;
-  engineering_rank: number;
+  slop_rank: number;
   communication_rank: number;
   rank_sum: number;
   overall_rank: number;

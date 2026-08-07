@@ -99,9 +99,9 @@ class EventParticipant(models.Model):
 
     class JudgeSpecialization(models.TextChoices):
         # Three technical roles plus one nontechnical. `ux_designer` keeps its value to avoid
-        # a rename migration; its scope is UI/UX/HCI. NOTE: having all four values does NOT
-        # implement the 30/20/20/30 role weighting — rounds/scoring.py still averages the six
-        # facet score_types and never reads this field. See DATA_MODEL.md's warning and D-11.
+        # a rename migration; its scope is UI/UX/HCI. rounds/scoring.py reads this field to apply
+        # the 30/20/20/30 role weighting on the Communication axis (ROLE_WEIGHTS), normalized over
+        # the roles actually present, with a flat-mean fallback when no judge is specialized.
         TESTER = "tester", "Tester"
         UX_DESIGNER = "ux_designer", "UI/UX/HCI"
         GENERAL = "general", "General engineering"

@@ -439,10 +439,11 @@ def test_round_submissions_visibility(mgr_event, settings, tmp_path):
 # increment 4 — scoring API + composite + awards
 # ===========================================================================
 
-def _judge(event, email="j@example.com"):
+def _judge(event, email="j@example.com", specialization=""):
     user = User.objects.create_user(email=email, password="pw")
     return EventParticipant.objects.create(
         event=event, user=user, role="judge", source="corps", status="registered",
+        judge_specialization=specialization,
     )
 
 
@@ -539,20 +540,75 @@ def test_results_composite_and_awards(mgr_event):
     judge = _judge(mgr_event["event"])
     a = _registered_player(mgr_event["event"], "a@example.com")
     b = _registered_player(mgr_event["event"], "b@example.com")
-    # A: strong engineering, weak communication. B: the reverse.
-    _scored_submission(rnd, a, judge, {"technical_execution": 90, "pitch_quality": 60, "cross_examination": 60})
-    _scored_submission(rnd, b, judge, {"technical_execution": 60, "pitch_quality": 90, "cross_examination": 90})
+    # A: clean build (low slop), weak communication. B: the reverse.
+    a_sub = _scored_submission(rnd, a, judge, {"pitch_quality": 60, "cross_examination": 60})
+    a_sub.slop_score = 10
+    a_sub.save(update_fields=["slop_score"])
+    b_sub = _scored_submission(rnd, b, judge, {"pitch_quality": 90, "cross_examination": 90})
+    b_sub.slop_score = 100
+    b_sub.save(update_fields=["slop_score"])
     r = _client(mgr_event["mgr"]).get(f"/api/rounds/{rnd.id}/results/")
     assert r.status_code == 200
     standings = {s["player_id"]: s for s in r.data["standings"]}
-    assert standings[str(a.id)]["engineering_rank"] == 1
+    assert standings[str(a.id)]["slop_rank"] == 1  # lowest slop wins
     assert standings[str(b.id)]["communication_rank"] == 1
-    # rank-sum ties 3-3; tiebreak (|diff| equal, then best engineering rank) -> A overall #1
+    # rank-sum ties 3-3; tiebreak (|diff| equal, then best slop rank) -> A overall #1
     assert standings[str(a.id)]["overall_rank"] == 1
     assert standings[str(b.id)]["overall_rank"] == 2
     assert r.data["awards"]["slopless_builder"] == [str(a.id)]
     assert r.data["awards"]["best_communicator"] == [str(b.id)]
     assert r.data["awards"]["best_overall"] == [str(a.id)]
+
+
+@pytest.mark.django_db
+def test_communication_is_role_weighted_over_present_roles(mgr_event):
+    rnd = Round.objects.create(event=mgr_event["event"], round_number=1)
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    tester = _judge(mgr_event["event"], "t@example.com", specialization="tester")  # weight 30
+    ux = _judge(mgr_event["event"], "u@example.com", specialization="ux_designer")  # weight 20
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    for st in ("pitch_quality", "cross_examination"):
+        Score.objects.create(submission=sub, judge_participant=tester, score_type=st, value=100)
+        Score.objects.create(submission=sub, judge_participant=ux, score_type=st, value=0)
+    r = _client(mgr_event["mgr"]).get(f"/api/rounds/{rnd.id}/results/")
+    s = r.data["standings"][0]
+    # weighted over the two present roles: (30*100 + 20*0)/(30+20) = 60, NOT the flat mean of 50.
+    assert s["communication_score"] == 60.0
+
+
+@pytest.mark.django_db
+def test_communication_falls_back_to_flat_mean_without_roles(mgr_event):
+    rnd = Round.objects.create(event=mgr_event["event"], round_number=1)
+    player = _registered_player(mgr_event["event"], "p@example.com")
+    j1 = _judge(mgr_event["event"], "j1@example.com")  # no specialization
+    j2 = _judge(mgr_event["event"], "j2@example.com")  # no specialization
+    sub = Submission.objects.create(round=rnd, player=player, status="submitted")
+    for st in ("pitch_quality", "cross_examination"):
+        Score.objects.create(submission=sub, judge_participant=j1, score_type=st, value=100)
+        Score.objects.create(submission=sub, judge_participant=j2, score_type=st, value=0)
+    r = _client(mgr_event["mgr"]).get(f"/api/rounds/{rnd.id}/results/")
+    s = r.data["standings"][0]
+    assert s["communication_score"] == 50.0  # role-blind flat mean
+
+
+@pytest.mark.django_db
+def test_ungraded_submission_ranks_last_on_slop(mgr_event):
+    rnd = Round.objects.create(event=mgr_event["event"], round_number=1)
+    judge = _judge(mgr_event["event"])
+    a = _registered_player(mgr_event["event"], "a@example.com")
+    b = _registered_player(mgr_event["event"], "b@example.com")
+    a_sub = _scored_submission(rnd, a, judge, {"pitch_quality": 50, "cross_examination": 50})
+    a_sub.slop_score = 80  # graded; even a high slop beats not being graded at all
+    a_sub.save(update_fields=["slop_score"])
+    # B deploy-failed: no slop_score, though judges still scored a pitch.
+    _scored_submission(rnd, b, judge, {"pitch_quality": 90, "cross_examination": 90})
+    r = _client(mgr_event["mgr"]).get(f"/api/rounds/{rnd.id}/results/")
+    standings = {s["player_id"]: s for s in r.data["standings"]}
+    assert standings[str(a.id)]["slop_rank"] == 1
+    assert standings[str(b.id)]["slop_rank"] == 2  # ungraded sorts last (§4.2)
+    assert standings[str(b.id)]["slop_score"] is None
+    # Slopless Builder goes to the graded low-slop build, never to the ungraded one.
+    assert r.data["awards"]["slopless_builder"] == [str(a.id)]
 
 
 @pytest.mark.django_db
