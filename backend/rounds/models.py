@@ -80,9 +80,12 @@ def submission_upload_path(instance, filename):
 
 
 class Submission(models.Model):
-    """A player's submission for a round. Uploaded directly to the platform as a single zip
-    archive (no git) and captured at code-freeze; stored privately and never extracted until
-    the Stage 5 sandbox. See DATA_MODEL.md."""
+    """A player's submission for a round: a PUBLIC git repository, cloned and pinned to a commit
+    SHA at submit time (fetch-on-submit) and frozen when the upload window closes. The platform
+    only clones the bytes onto league storage; it never builds or runs submission code (that is the
+    fuzzer's sandbox). The fuzzer grades the pinned commit and never pulls past it, so changes
+    pushed after the buzzer are not reflected. The legacy zip path (archive/archive_filename) is
+    retired but kept blank/dormant. See DATA_MODEL.md."""
 
     class Status(models.TextChoices):
         IN_PROGRESS = "in_progress", "In progress"
@@ -110,6 +113,13 @@ class Submission(models.Model):
     # the FileField default of 100 is too short and storage raises SuspiciousFileOperation.
     archive = models.FileField(upload_to=submission_upload_path, blank=True, max_length=255)
     archive_filename = models.CharField(max_length=255, blank=True)
+    # The submission is a PUBLIC git repo, cloned and SHA-pinned at submit time (fetch-on-submit).
+    # repo_url is the player-supplied HTTPS clone URL; commit_sha is the default-branch HEAD resolved
+    # and fetched onto league storage when the player submits, frozen when the upload window closes.
+    # The fuzzer builds this exact commit and never pulls past it. (archive/archive_filename above are
+    # the retired zip path, kept blank/dormant to avoid a destructive migration.)
+    repo_url = models.URLField(blank=True)
+    commit_sha = models.CharField(max_length=64, blank=True)  # 40-char SHA-1 today; room for SHA-256
     deployed_url = models.URLField(blank=True)
     readme_content = models.TextField(blank=True)
     token_budget_used = models.PositiveIntegerField(default=0)

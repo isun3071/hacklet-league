@@ -710,3 +710,22 @@ def test_import_fuzz_results_skips_unknown_submission(tmp_path):
     # No matching submission -> no crash, nothing created.
     call_command("import_fuzz_results", str(f))
     assert FuzzResult.objects.count() == 0
+
+
+# ---- git-repo submission schema (public repo, SHA-pinned) ------------------
+
+
+@pytest.mark.django_db
+def test_submission_carries_repo_url_and_pinned_sha(event):
+    rnd = Round.objects.create(event=event, round_number=1)
+    player = User.objects.create_user(email="repo@example.com", password="pw")
+    sub = Submission.objects.create(
+        round=rnd, player=player,
+        repo_url="https://github.com/acme/widget",
+        commit_sha="a" * 40,
+    )
+    sub.refresh_from_db()
+    assert sub.repo_url == "https://github.com/acme/widget"
+    assert sub.commit_sha == "a" * 40
+    # The retired zip path stays dormant, not required.
+    assert sub.archive.name in ("", None)
