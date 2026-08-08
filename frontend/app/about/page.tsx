@@ -2,7 +2,7 @@ import Link from "next/link";
 import { NewsletterSignup } from "@/components/NewsletterSignup";
 
 export const metadata = {
-  title: "About — HackLet League",
+  title: "About, HackLet League",
   description: "the story behind HackLet, the founder, how it works, and where the project is.",
 };
 

@@ -5,7 +5,7 @@ import { getRankings } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Leaderboard — HackLet League",
+  title: "Leaderboard, HackLet League",
 };
 
 export default async function LeaderboardPage() {

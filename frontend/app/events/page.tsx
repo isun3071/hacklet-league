@@ -11,7 +11,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Events — HackLet League",
+  title: "Events, HackLet League",
 };
 
 export default async function EventsPage() {

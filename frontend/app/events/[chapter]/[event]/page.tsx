@@ -57,7 +57,7 @@ export default async function EventPage({
       <p className="prompt">/events/{event.chapter.slug}/{event.slug}</p>
       <h1 className="page-title">{event.name}</h1>
       <p className="subtitle">
-        // {variantName(event.format, event.timer)} · {TIMER_MINUTES[event.timer]} ·
+        // {variantName(event.format, event.timer)}, {TIMER_MINUTES[event.timer]},
         hosted by{" "}
         <Link href={`/chapters/${event.chapter.slug}`}>{event.chapter.name}</Link>
       </p>
@@ -145,7 +145,7 @@ export default async function EventPage({
             {(["player", "judge", "audience"] as const)
               .filter((r) => counts[r])
               .map((r) => `${counts[r]} ${ROLE_LABEL[r].toLowerCase()}${counts[r] === 1 ? "" : "s"}`)
-              .join(" · ")}
+              .join(", ")}
           </p>
           <div className="table-wrap">
             <table className="data">
@@ -178,7 +178,7 @@ export default async function EventPage({
 
       <p className="note">
         <Link href="/events">&larr; all events</Link>
-        {"  ·  "}
+        {"  /  "}
         <Link href={`/events/${event.chapter.slug}/${event.slug}/manage`}>
           organizer tools &rarr;
         </Link>

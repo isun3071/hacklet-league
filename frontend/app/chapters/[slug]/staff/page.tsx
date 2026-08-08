@@ -242,7 +242,7 @@ export default function ChapterStaffPage() {
 
       <p className="note">
         <Link href="/dashboard">&larr; dashboard</Link>
-        {"  ·  "}
+        {"  /  "}
         <Link href={`/chapters/${slug}`}>chapter page</Link>
       </p>
     </main>

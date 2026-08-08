@@ -9,7 +9,7 @@ const VIBE_PHASES: Phase[] = [
   { name: "opening", mins: 5, time: "5m", tone: "muted" },
   { name: "build", mins: 24, time: "24m", tone: "accent" },
   { name: "defend", mins: 18, time: "18m", tone: "danger" },
-  { name: "pitch", mins: 15, time: "5–30m", tone: "muted" },
+  { name: "pitch", mins: 15, time: "5-30m", tone: "muted" },
   { name: "awards", mins: 8, time: "8m", tone: "muted" },
 ];
 
@@ -17,7 +17,7 @@ const UNSLOP_PHASES: Phase[] = [
   { name: "opening", mins: 5, time: "5m", tone: "muted" },
   { name: "remediate", mins: 24, time: "24m", tone: "accent" },
   { name: "defend", mins: 18, time: "18m", tone: "danger" },
-  { name: "pitch", mins: 15, time: "5–30m", tone: "muted" },
+  { name: "pitch", mins: 15, time: "5-30m", tone: "muted" },
   { name: "awards", mins: 8, time: "8m", tone: "muted" },
 ];
 
@@ -25,7 +25,7 @@ const UNDERSPEC_PHASES: Phase[] = [
   { name: "opening", mins: 5, time: "5m", tone: "muted" },
   { name: "interpret + build", mins: 24, time: "24m", tone: "accent" },
   { name: "defend", mins: 18, time: "18m", tone: "danger" },
-  { name: "pitch", mins: 15, time: "5–30m", tone: "muted" },
+  { name: "pitch", mins: 15, time: "5-30m", tone: "muted" },
   { name: "awards", mins: 8, time: "8m", tone: "muted" },
 ];
 
@@ -107,11 +107,11 @@ export default function Home() {
         <p className="body">Build a working web app with AI assistance of your own choice.</p>
         <TimelineBar phases={VIBE_PHASES} />
         <pre className="codeblock">{`$ ./hacklet --format vibe --timeline
-  5 min     opening · round prep
-  24 min    build · ai-assisted building (aka vibecoding)
-  18 min    defend · qa testing + pitch prep
-  5-30 min  pitch · judging
-  8 min     awards · closing`}</pre>
+  5 min     opening: round prep
+  24 min    build: ai-assisted building (aka vibecoding)
+  18 min    defend: qa testing + pitch prep
+  5-30 min  pitch: judging
+  8 min     awards: closing`}</pre>
         <p className="body">
           HackLet Vibe is akin to a traditional hackathon except with time compressed to
           minutes instead of hours. As AI is ubiquitous, HackLet Vibe tests if you can build
@@ -129,11 +129,11 @@ export default function Home() {
         </p>
         <TimelineBar phases={UNSLOP_PHASES} />
         <pre className="codeblock">{`$ ./hacklet --format unslop --timeline
-  5 min     opening · broken codebase revealed
-  24 min    remediate · ai-assisted diagnosis and repair
-  18 min    defend · same qa testing + pitch prep
-  5-30 min  pitch · same judging
-  8 min     awards · closing`}</pre>
+  5 min     opening: broken codebase revealed
+  24 min    remediate: ai-assisted diagnosis and repair
+  18 min    defend: same qa testing + pitch prep
+  5-30 min  pitch: same judging
+  8 min     awards: closing`}</pre>
         <p className="body">
           HackLet Unslop reflects the reality of engineering work: working with existing
           codebases that may or may not be functioning ideally. HackLet Unslop tests if you
@@ -152,11 +152,11 @@ export default function Home() {
         </p>
         <TimelineBar phases={UNDERSPEC_PHASES} />
         <pre className="codeblock">{`$ ./hacklet --format underspecified --timeline
-  5 min     opening · the vague brief drops
-  24 min    interpret + build · decide what it means, then ship it
-  18 min    defend · same qa testing + pitch prep
-  5-30 min  pitch · defend how you read the brief
-  8 min     awards · closing`}</pre>
+  5 min     opening: the vague brief drops
+  24 min    interpret + build: decide what it means, then ship it
+  18 min    defend: same qa testing + pitch prep
+  5-30 min  pitch: defend how you read the brief
+  8 min     awards: closing`}</pre>
         <p className="body">
           HackLet Underspecified tests the thing a real client meeting tests: turning an unclear
           ask into a defensible plan. Most engineering that fails does not fail because the code

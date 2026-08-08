@@ -151,8 +151,8 @@ export default function ManageEventPage() {
       <p className="prompt">/events/{ev.chapter.slug}/{ev.slug}/manage</p>
       <h1 className="page-title"># manage: {ev.name}</h1>
       <p className="subtitle">
-        // {variantName(ev.format, ev.timer)} · {STATUS_LABEL[ev.status]} ·{" "}
-        <Link href={`/events/${ev.chapter.slug}/${ev.slug}`}>public page</Link> ·{" "}
+        // {variantName(ev.format, ev.timer)}, {STATUS_LABEL[ev.status]}.{" "}
+        <Link href={`/events/${ev.chapter.slug}/${ev.slug}`}>public page</Link> /{" "}
         <Link href={`/events/${ev.chapter.slug}/${ev.slug}/edit`}>edit event</Link>
       </p>
 
@@ -273,7 +273,7 @@ export default function ManageEventPage() {
               onChange={(e) => setCorps((f) => ({ ...f, staffId: e.target.value }))}
               required
             >
-              <option value="">— pick a judge —</option>
+              <option value="">pick a judge</option>
               {corpsCandidates.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.display_name ? `${s.display_name} (${s.email})` : s.email}

@@ -68,9 +68,9 @@ export default function NewChapterPage() {
         <label className="field">
           <span>tier</span>
           <select value={form.tier} onChange={(e) => set("tier", e.target.value)}>
-            <option value="C">C — Practice</option>
-            <option value="B">B — Standard</option>
-            <option value="A">A — Verified</option>
+            <option value="C">C: Practice</option>
+            <option value="B">B: Standard</option>
+            <option value="A">A: Verified</option>
           </select>
         </label>
         <label className="field">

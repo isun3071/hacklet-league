@@ -26,11 +26,11 @@ export default async function RoundPage({
         /events/{event.chapter.slug}/{event.slug}/rounds/{round.round_number}
       </p>
       <h1 className="page-title">
-        {event.name} — round {round.round_number}
+        {event.name}, round {round.round_number}
       </h1>
       <p className="subtitle">
-        // {variantName(event.format, event.timer)} · hosted by{" "}
-        <Link href={`/chapters/${event.chapter.slug}`}>{event.chapter.name}</Link> ·{" "}
+        // {variantName(event.format, event.timer)}, hosted by{" "}
+        <Link href={`/chapters/${event.chapter.slug}`}>{event.chapter.name}</Link>.{" "}
         <Link href={`/events/${event.chapter.slug}/${event.slug}`}>event page</Link>
       </p>
 

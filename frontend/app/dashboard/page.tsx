@@ -186,7 +186,7 @@ export default function DashboardPage() {
       {/* events I run */}
       <h2 className="h2" id="events-i-run"># events i run</h2>
       {events.length === 0 ? (
-        <p className="note">// no events yet — create one from a chapter above.</p>
+        <p className="note">// no events yet. create one from a chapter above.</p>
       ) : (
         <div className="table-wrap">
           <table className="data">

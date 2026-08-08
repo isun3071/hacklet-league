@@ -33,7 +33,7 @@ export default function LoginPage() {
       return;
     }
     if (res.status === 401) {
-      setError("Verify your email before logging in — check the link we sent.");
+      setError("Verify your email before logging in. Check the link we sent.");
     } else {
       setError(res.errors[0] ?? "Invalid email or password.");
     }

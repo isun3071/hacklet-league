@@ -14,7 +14,7 @@ const OPTIONS: { role: ParticipantRole; label: string }[] = [
 ];
 
 const CLOSED_NOTE: Partial<Record<EventStatus, string>> = {
-  scheduled: "registration hasn't opened yet — check back soon.",
+  scheduled: "registration hasn't opened yet. check back soon.",
   registration_closed: "registration has closed for this event.",
   in_progress: "this event is underway.",
   completed: "this event has concluded.",
@@ -42,7 +42,7 @@ export function EventApply({
 
   if (accessMode !== "application") {
     return (
-      <p className="note">// invite-only — you need an invitation from the organizers to take part.</p>
+      <p className="note">// invite-only. you need an invitation from the organizers to take part.</p>
     );
   }
   if (status !== "registration_open") {
@@ -72,8 +72,8 @@ export function EventApply({
     if (res.status === 201 && res.data) {
       setResult(
         res.data.status === "registered"
-          ? "You're in — see you there. 🎉"
-          : "Application submitted — pending organizer review.",
+          ? "You're in. See you there. 🎉"
+          : "Application submitted, pending organizer review.",
       );
       return;
     }

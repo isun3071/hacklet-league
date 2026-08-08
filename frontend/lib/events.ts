@@ -34,7 +34,7 @@ export const TIMER_MINUTES: Record<EventTimer, string> = {
   sprint: "24 min",
   scrum: "36 min",
   agile: "48 min",
-  waterfall: "72–96 min",
+  waterfall: "72-96 min",
 };
 
 // The three distinct "tier" axes the UI must keep apart (see DATA_MODEL.md):

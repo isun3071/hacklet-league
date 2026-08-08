@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Contact — HackLet League",
+  title: "Contact, HackLet League",
   description: "get in touch to run a chapter, judge, sponsor, or contribute to the catalog.",
 };
 

@@ -46,7 +46,7 @@ export function RoundResults({ roundId, refreshKey = 0 }: { roundId: string; ref
     <section className="block">
       <h2 className="h2"># results{!data.revealed && " (preview)"}</h2>
       {!data.revealed && (
-        <p className="note">// not yet public — visible to you as staff. Completing the round reveals them.</p>
+        <p className="note">// not yet public. visible to you as staff, and completing the round reveals them.</p>
       )}
 
       {data.standings.length === 0 ? (

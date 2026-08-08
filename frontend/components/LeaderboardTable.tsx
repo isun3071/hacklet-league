@@ -4,7 +4,7 @@ import type { Ranking } from "@/lib/rounds";
  * per-chapter board. */
 export function LeaderboardTable({ rows }: { rows: Ranking[] }) {
   if (rows.length === 0) {
-    return <p className="note">// no ranked players yet — standings appear once a round completes.</p>;
+    return <p className="note">// no ranked players yet. standings appear once a round completes.</p>;
   }
   return (
     <div className="table-wrap">

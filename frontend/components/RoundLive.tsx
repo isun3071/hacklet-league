@@ -31,7 +31,7 @@ type Boundary = { label: string; targetMs: number };
 function nextBoundary(round: Round, nowMs: number): Boundary | null {
   const c: { label: string; iso: string | null }[] = [
     { label: "round opens", iso: round.opening_at },
-    { label: "prompt drops · build begins", iso: round.build_start_at },
+    { label: "prompt drops, build begins", iso: round.build_start_at },
     { label: "CODE FREEZE", iso: round.build_end_at },
     ...Object.entries(round.phase_schedule ?? {}).map(([k, iso]) => ({
       label: BOUNDARY_LABEL[k] ?? k,
@@ -124,12 +124,12 @@ export function RoundLive({
     <div className="block">
       {/* phase + countdown */}
       <div className="status-banner">
-        <strong>{PHASE_LABEL[phase]}</strong> — {PHASE_BLURB[phase]}
+        <strong>{PHASE_LABEL[phase]}</strong>: {PHASE_BLURB[phase]}
       </div>
 
       {boundary && phase !== "completed" && phase !== "cancelled" && (
         <p className={isFreeze ? "readout accent-strong" : "readout"}>
-          {isFreeze ? "⏱ freeze in " : `next · ${boundary.label} in `}
+          {isFreeze ? "⏱ freeze in " : `next: ${boundary.label} in `}
           <span className="countdown">{fmtCountdown(boundary.targetMs - nowMs)}</span>
         </p>
       )}
@@ -244,7 +244,7 @@ function PlayerPanel({
     });
     setBusy(false);
     if (res.ok) {
-      setOk("Submitted — you can re-upload until freeze.");
+      setOk("Submitted. You can re-upload until freeze.");
       await loadMine();
       onChanged();
     } else {
@@ -281,14 +281,14 @@ function PlayerPanel({
         )
       ) : (
         <p className="note">
-          // checked in ✓{submitted ? ` · submitted (${mine?.archive_filename || "archive"})` : ""}
+          // checked in ✓{submitted ? `, submitted (${mine?.archive_filename || "archive"})` : ""}
         </p>
       )}
 
       {checkedIn && canSubmit(round, nowMs) && (
         <form className="form" onSubmit={submit}>
           <p className="subtitle">
-            // upload your work as a single .zip — re-upload overwrites until the window closes.
+            // upload your work as a single .zip. re-upload overwrites until the window closes.
           </p>
           {inGrace && (
             <p className="readout accent-strong">

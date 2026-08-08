@@ -63,7 +63,7 @@ export function JudgeConsole({ roundId }: { roundId: string }) {
     }
     setSaved(next);
     setBusy(null);
-    if (errors.length) setErr((e) => ({ ...e, [sub.id]: errors.join(" · ") }));
+    if (errors.length) setErr((e) => ({ ...e, [sub.id]: errors.join(", ") }));
     else setMsg((m) => ({ ...m, [sub.id]: "scores saved." }));
   }
 
@@ -73,7 +73,8 @@ export function JudgeConsole({ roundId }: { roundId: string }) {
     <section className="block">
       <h2 className="h2"># judge console</h2>
       <p className="subtitle">
-        // scoring as {myEmail || "you"} · 0–100 per dimension · engineering + communication axes
+        // scoring as {myEmail || "you"}, 0-100 per dimension, Communication axis (pitch +
+        cross-examination); Slop is graded by the fuzzer
       </p>
       {subs.length === 0 ? (
         <p className="note">// no submissions to score yet.</p>
@@ -81,17 +82,17 @@ export function JudgeConsole({ roundId }: { roundId: string }) {
         subs.map((sub) => (
           <div className="panel" key={sub.id}>
             <p className="subtitle">
-              // {sub.player_display || sub.player_email || "player"} ·{" "}
+              // {sub.player_display || sub.player_email || "player"},{" "}
               {sub.status.replace(/_/g, " ")}
               {sub.has_archive && (
                 <>
-                  {" · "}
+                  {", "}
                   <a href={`/api/submissions/${sub.id}/download/`}>download zip</a>
                 </>
               )}
               {sub.deployed_url && (
                 <>
-                  {" · "}
+                  {", "}
                   <a href={sub.deployed_url} target="_blank" rel="noopener noreferrer">
                     deployed
                   </a>
@@ -106,9 +107,7 @@ export function JudgeConsole({ roundId }: { roundId: string }) {
                 const k = key(sub.id, dim.key);
                 return (
                   <label className="field" key={dim.key}>
-                    <span>
-                      {dim.label} <span className="dim">[{dim.axis}]</span>
-                    </span>
+                    <span>{dim.label}</span>
                     <input
                       type="number"
                       min={0}

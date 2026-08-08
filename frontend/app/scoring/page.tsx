@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "How scoring works — HackLet League",
+  title: "How scoring works, HackLet League",
   description: "exactly how the fuzz catalog deploys and tests your app, and how the slop score works. no surprises on competition day.",
 };
 
@@ -115,10 +115,10 @@ export default function ScoringPage() {
 
       <h2 className="h2"># what gets tested</h2>
       <p className="body">one catalog, three bundles, run identically against every submission:</p>
-      <pre className="codeblock">{`security     sql injection · xss · auth bypass · access control
-             csrf · file upload · sensitive-path exposure
-qa           crash resistance · error hygiene · http semantics · encoding
-performance  speed gates (ttfb/fcp/inp) · load · dos resistance`}</pre>
+      <pre className="codeblock">{`security     sql injection, xss, auth bypass, access control
+             csrf, file upload, sensitive-path exposure
+qa           crash resistance, error hygiene, http semantics, encoding
+performance  speed gates (ttfb/fcp/inp), load, dos resistance`}</pre>
       <p className="body">
         each penalty scales by how common the flaw is and how bad its worst case is, discounted by
         how hard the fix is in 24 minutes. a competent engineer under a real deadline triages, and
@@ -184,7 +184,7 @@ performance  speed gates (ttfb/fcp/inp) · load · dos resistance`}</pre>
 
       <p className="note">
         <Link href="/#how">&larr; the three formats</Link>
-        {"  ·  "}
+        {"  /  "}
         <Link href="/leaderboard">leaderboard &rarr;</Link>
       </p>
     </main>

@@ -16,7 +16,7 @@ const STATUS_BANNER: Record<string, { icon: string; label: string; text: string 
   suspended: {
     icon: "⛔",
     label: "Suspended",
-    text: "this chapter's verification was revoked, so it isn't public — contact the league to restore it.",
+    text: "this chapter's verification was revoked, so it isn't public. contact the league to restore it.",
   },
   unverified: {
     icon: "✗",
@@ -44,7 +44,7 @@ export default async function ChapterPage({
 
       {banner && (
         <p className="status-banner">
-          {banner.icon} <strong>{banner.label}</strong> — {banner.text} You (its creator)
+          {banner.icon} <strong>{banner.label}</strong>: {banner.text} You (its creator)
           can see this page; the public can&apos;t until it&apos;s verified.
         </p>
       )}
@@ -86,12 +86,12 @@ export default async function ChapterPage({
       </div>
 
       <h2 className="h2"># chapter leaderboard</h2>
-      <p className="subtitle">// all-time · every event this chapter runs</p>
+      <p className="subtitle">// all-time, every event this chapter runs</p>
       <LeaderboardTable rows={rankings} />
 
       <p className="note">
         <Link href="/chapters">&larr; all chapters</Link>
-        {"  ·  "}
+        {"  /  "}
         <Link href="/leaderboard">global leaderboard &rarr;</Link>
       </p>
     </main>

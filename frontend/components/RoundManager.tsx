@@ -89,13 +89,13 @@ export function RoundManager({
       {err && <p className="form-error">{err}</p>}
 
       {rounds.length === 0 ? (
-        <p className="note">// no rounds yet — create the first one below.</p>
+        <p className="note">// no rounds yet. create the first one below.</p>
       ) : (
         rounds.map((r) => (
           <div className="panel" key={r.id}>
             <p className="subtitle">
-              // round #{r.round_number} · {TIMING_PROFILE_LABEL[r.timing_profile]} ·{" "}
-              <strong>{PHASE_LABEL[r.phase]}</strong> ·{" "}
+              // round #{r.round_number}, {TIMING_PROFILE_LABEL[r.timing_profile]},{" "}
+              <strong>{PHASE_LABEL[r.phase]}</strong>.{" "}
               <Link href={`/events/${chapterSlug}/${eventSlug}/rounds/${r.round_number}`}>
                 live view
               </Link>
@@ -161,7 +161,7 @@ export function RoundManager({
         </label>
         {hasStarter ? (
           <label className="field">
-            <span>starter prompt — the slop app brief, revealed when build begins (Unslop)</span>
+            <span>starter prompt: the slop app brief, revealed when build begins (Unslop)</span>
             <textarea
               rows={3}
               value={form.prompt}
@@ -169,7 +169,7 @@ export function RoundManager({
             />
           </label>
         ) : (
-          <p className="note">// Vibe has no starter prompt — players build from a blank slate.</p>
+          <p className="note">// Vibe has no starter prompt. players build from a blank slate.</p>
         )}
         <button type="submit" className="btn">
           [ create round ]

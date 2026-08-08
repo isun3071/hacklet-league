@@ -144,10 +144,10 @@ export type Ranking = {
 // ---- display labels --------------------------------------------------------
 
 export const TIMING_PROFILE_LABEL: Record<TimingProfile, string> = {
-  tier_a: "Tier A · enforced substrate",
-  tier_c_mvr: "Tier C · MVR, LLM-judged",
-  tier_b: "Tier B · live judging, BYOD",
-  tier_c_extended: "Tier B · live judging, BYOD (legacy key)",
+  tier_a: "Tier A (enforced substrate)",
+  tier_c_mvr: "Tier C (MVR, LLM-judged)",
+  tier_b: "Tier B (live judging, BYOD)",
+  tier_c_extended: "Tier B (live judging, BYOD, legacy key)",
 };
 
 export const PHASE_LABEL: Record<RoundPhase, string> = {
@@ -165,13 +165,13 @@ export const PHASE_LABEL: Record<RoundPhase, string> = {
 
 // Short human cue for what each phase means to a competitor.
 export const PHASE_BLURB: Record<RoundPhase, string> = {
-  scheduled: "not started yet — check in and wait for opening.",
+  scheduled: "not started yet. check in and wait for opening.",
   opening: "round is opening; the prompt drops when build begins.",
-  build: "build window is live — code, then upload before the buzzer.",
+  build: "build window is live. code, then upload before the buzzer.",
   // Build time is up, but uploads stay open through the grace window and the AI stays
   // available for pitch prep on the same budget (format_spec §5.5). Do not say "locked" here:
   // the phase flips to evaluation at the buzzer, minutes before the upload window closes.
-  evaluation: "build time is up — finish your upload, then prep your pitch.",
+  evaluation: "build time is up. finish your upload, then prep your pitch.",
   pitching: "players are pitching their work to the judges.",
   deliberation: "judges are deliberating.",
   judging: "judges are scoring.",
@@ -180,13 +180,14 @@ export const PHASE_BLURB: Record<RoundPhase, string> = {
   cancelled: "this round was cancelled.",
 };
 
-export const SCORE_DIMENSIONS: { key: ScoreType; label: string; axis: "eng" | "comm" }[] = [
-  { key: "technical_execution", label: "Technical execution", axis: "eng" },
-  { key: "creative_coherence", label: "Creative coherence", axis: "eng" },
-  { key: "ux_quality", label: "UX quality", axis: "eng" },
-  { key: "documentation", label: "Documentation", axis: "eng" },
-  { key: "pitch_quality", label: "Pitch quality", axis: "comm" },
-  { key: "cross_examination", label: "Cross-examination", axis: "comm" },
+// The judge console collects only the Communication dimensions. Each judge scores the player's
+// pitch + cross-examination, and rounds/scoring.py weights judges by their judge_specialization
+// (Tester 30 / UI-UX 20 / General 20 / Nontech 30). The objective axis is the fuzzer's slop_score,
+// not a judge-entered facet, so the former engineering facets (technical_execution,
+// creative_coherence, ux_quality, documentation) are retired from the console.
+export const SCORE_DIMENSIONS: { key: ScoreType; label: string }[] = [
+  { key: "pitch_quality", label: "Pitch quality" },
+  { key: "cross_examination", label: "Cross-examination" },
 ];
 
 export const SCORE_LABEL: Record<ScoreType, string> = Object.fromEntries(

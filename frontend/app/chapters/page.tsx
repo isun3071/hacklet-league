@@ -4,7 +4,7 @@ import { getChapters, type Chapter } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Chapters — HackLet League",
+  title: "Chapters, HackLet League",
 };
 
 export default async function ChaptersPage() {
