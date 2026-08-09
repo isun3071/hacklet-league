@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getSession } from "@/lib/auth";
 import { request } from "@/lib/http";
 
 const EMPTY = {
@@ -20,6 +21,13 @@ export default function NewChapterPage() {
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  // Gate the form: a logged-out visitor can't create a chapter (the API 403s), so send them
+  // to sign up / log in first instead of letting them fill the whole form and hit a wall.
+  useEffect(() => {
+    getSession().then((s) => setAuthed(s === 200));
+  }, []);
 
   function set(key: keyof typeof EMPTY, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -40,6 +48,37 @@ export default function NewChapterPage() {
       return;
     }
     setErrors(res.errors.length ? res.errors : ["Could not create chapter."]);
+  }
+
+  if (authed === null) {
+    return (
+      <main className="container block">
+        <p className="body">Loading…</p>
+      </main>
+    );
+  }
+
+  if (!authed) {
+    return (
+      <main className="container block">
+        <h1 className="page-title"># new chapter</h1>
+        <p className="body">
+          you need an account to start a chapter. new chapters get a quick review before they go
+          live.
+        </p>
+        <div className="actions">
+          <Link className="btn" href="/auth/signup">
+            [ sign up ]
+          </Link>
+          <Link className="textlink" href="/auth/login">
+            have an account? log in &rarr;
+          </Link>
+        </div>
+        <p className="note">
+          <Link href="/chapters">&larr; all chapters</Link>
+        </p>
+      </main>
+    );
   }
 
   return (

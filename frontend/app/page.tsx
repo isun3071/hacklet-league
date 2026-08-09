@@ -166,7 +166,26 @@ export default function Home() {
 
       <AsciiRule />
 
-      {/* SECTION 4: CTA / NEWSLETTER SIGNUP */}
+      {/* SECTION 4: ORGANIZER CTA */}
+      <section className="container block" id="host">
+        <h2 className="h2"># want to run one?</h2>
+        <p className="body">
+          HackLet is built to be hosted. start a chapter for your school, club, or company, and
+          run your own rounds. we review new chapters before they go live.
+        </p>
+        <div className="actions">
+          <Link className="btn" href="/chapters/new">
+            [ start a chapter ]
+          </Link>
+          <Link className="textlink" href="/chapters">
+            see existing chapters &rarr;
+          </Link>
+        </div>
+      </section>
+
+      <AsciiRule />
+
+      {/* SECTION 5: CTA / NEWSLETTER SIGNUP */}
       <section className="container block" id="signup">
         <h2 className="h2"># First HackLet coming soon</h2>
         <p className="body">
