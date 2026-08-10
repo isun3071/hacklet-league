@@ -2629,6 +2629,35 @@ def bundle_leaks_secret(ctx, probe) -> bool | None:
     return False
 
 
+# v2.0 FAMILY 1 -- deploy-time "works on my machine" failure. A dev host / private IP / unset env var stringified
+# into a backend URL: the page renders but its data layer is dead for every visitor, invisible to a "does it
+# load" check. Requires the URL form (https?://...), so a bare `("0.0.0.0", PORT)` bind or a `hostname ===
+# 'localhost'` dev-check string does NOT match; the host lookahead rejects `localhosting.com` / `undefined.io`.
+_PRIVATE_HOST = re.compile(
+    r"""https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|"""
+    r"""10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})"""
+    r"""(?::\d+)?(?=[/"'\s)]|$)""", re.I)
+_UNSET_ENV_HOST = re.compile(r"""https?://(?:undefined|null)(?::\d+)?(?=[/"'\s)]|$)""", re.I)
+
+
+def unreachable_backend_reference(ctx, probe) -> bool | None:
+    """DEPLOY-TIME "works on my machine": the shipped client bundle points its backend at a host no visitor can
+    reach -- localhost / 127.0.0.1 / 0.0.0.0 / a private RFC1918 IP (the developer's own machine), or
+    `https://undefined` / `https://null` (an unset NEXT_PUBLIC_/VITE_ build-time env var stringified into the
+    URL). The front page still renders, so the app's data layer being dead for everyone but the developer is
+    invisible to a "does it load" check. Reads the app's OWN served bundle (ethical). N/A when there is no bundle."""
+    blob = _client_bundle(ctx)
+    if not blob.strip():
+        return None
+    private = sorted({m.group(0) for m in _PRIVATE_HOST.finditer(blob)})
+    unset = sorted({m.group(0) for m in _UNSET_ENV_HOST.finditer(blob)})
+    if private or unset:
+        ctx.evidence.update(private_backends=private[:5], unset_env_backends=unset[:5], source="client-bundle")
+        return True
+    ctx.evidence.update(private_backends=[], unset_env_backends=[], scanned_bytes=len(blob))
+    return False
+
+
 def vulnerable_dependency(ctx, probe) -> bool | None:
     """Supply-chain: the app SHIPS a client library with a KNOWN CVE (retire.js-style). Reads the app's OWN
     bundle (ETHICAL — their code, never a third party's server) and fingerprints a curated set by license-
@@ -5337,6 +5366,7 @@ PREDICATES = {
     "backend_schema_disclosed": backend_schema_disclosed,
     "authenticated_backend_readable": authenticated_backend_readable,
     "bundle_leaks_secret": bundle_leaks_secret,
+    "unreachable_backend_reference": unreachable_backend_reference,
     "vulnerable_dependency": vulnerable_dependency,
     "source_map_exposed": source_map_exposed,
     "session_cookie_missing_flag": session_cookie_missing_flag,
@@ -5430,6 +5460,7 @@ _PREDICATE_REASONS = {
                                "root, or database errors naming columns)",
     "authenticated_backend_readable": "any logged-in user reads every other user's data -> broken authenticated-tier RLS/Rules (the IDOR equivalent on a BaaS app; missing per-user row filtering)",
     "bundle_leaks_secret": "a hardcoded SECRET key (Stripe sk_ / OpenAI / AWS secret / GitHub PAT / private key) is shipped in the client JS bundle -> account/DB takeover (public anon/publishable keys are not flagged)",
+    "unreachable_backend_reference": "the shipped client bundle calls a backend no visitor can reach (localhost / a private IP / an unset env var) -> the app renders but its data layer is dead in production",
     "vulnerable_dependency": "the app ships a client library with a KNOWN CVE (retire.js-style: jQuery / AngularJS / Bootstrap / Axios / Moment / Handlebars / DOMPurify) -> supply-chain risk the team chose; upgrade per the finding",
     "source_map_exposed": "a production JS bundle serves its .map -> the original source is reconstructable (business logic, hidden endpoints, and secrets a minified scan misses)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",

@@ -39,6 +39,7 @@ ALL_PROBES = [
     "qa-links-001",  # broken navigation: an internal <a href> lands on a 4xx dead end
     "qa-seo-001",  # missing best-practice meta (viewport / description)
     "qa-http-002",  # HTTP conformance: an HTML response with no declared charset
+    "qa-deploy-001",  # v2.0 Family 1: /config.js ships API_BASE=http://localhost + CDN=https://undefined -> backend dead in prod
 ]
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
@@ -144,8 +145,9 @@ def test_vulnerable_app_accrues_slop():
     # (frequency x severity, see the catalog): security holds its catastrophic per-instance ceiling (40),
     # while qa/perf are priced up for their every-user frequency. On this deliberately security-riddled
     # reference, security still dominates; a realistic janky app (references/qa-janky) leans qa/perf.
-    assert report.axis_slop == {"security": 429, "qa": 152, "performance": 68}
-    assert report.slop_score == 649   # qa 167->152 and total 664->649: the a11y tier re-pricing
+    assert report.axis_slop == {"security": 429, "qa": 186, "performance": 68}   # qa 152->186: +34 for the
+    #                                 new v2.0 Family-1 probe qa-deploy-001 (unreachable-backend), fires once
+    assert report.slop_score == 683   # 649->683: +34 qa-deploy-001. (Earlier: qa 167->152 a11y re-pricing)
                                       # (30/18/10/4 -> 20/12/7/3, see _A11Y_TIER). This reference renders
                                       # critical 1 + serious 2, priced 47 -> 32, and that -15 is the WHOLE
                                       # delta — security 429 and performance 68 are unmoved, which is the
@@ -199,6 +201,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["qa-links-001"] == "not_applicable"  # no <a href> links on the homepage -> nothing to follow
     assert o["qa-seo-001"] == "clean"         # minimal sets viewport + description meta
     assert o["qa-http-002"] == "clean"        # minimal serves text/html; charset=utf-8
+    assert o["qa-deploy-001"] == "clean"      # its bundle references no localhost/private-IP/undefined backend
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-hosthdr-001"] == "clean"    # no endpoint reflects the Host header
     assert o["sec-split-001"] == "not_applicable"  # no form/param surface to inject CRLF into
@@ -226,7 +229,7 @@ def test_cached_profile_freezes_surface_and_reproduces_score(monkeypatch):
     catalog = load_catalog(CATALOG)
     minted = []
     r1 = run(SubprocessDeployer(str(REFS / "vulnerable" / "app.py")), catalog, on_profile=minted.append)
-    assert len(minted) == 1 and r1.slop_score == 649          # cache MISS -> discovered once + handed back
+    assert len(minted) == 1 and r1.slop_score == 683          # cache MISS -> discovered once + handed back
 
     import sloptic.pipeline as pipeline_mod            # PROVE the crawl is skipped on a cache HIT:
     monkeypatch.setattr(pipeline_mod, "discover",             # discover() must never be called with a cached profile
@@ -234,7 +237,7 @@ def test_cached_profile_freezes_surface_and_reproduces_score(monkeypatch):
     seen = []
     r2 = run(SubprocessDeployer(str(REFS / "vulnerable" / "app.py")), catalog,
              cached_profile=minted[0], on_profile=seen.append)
-    assert r2.slop_score == 649 and seen == []                # HIT -> same score, no re-crawl, no re-mint
+    assert r2.slop_score == 683 and seen == []                # HIT -> same score, no re-crawl, no re-mint
     assert r2.axis_slop == r1.axis_slop                       # identical per-axis decomposition too
 
 
