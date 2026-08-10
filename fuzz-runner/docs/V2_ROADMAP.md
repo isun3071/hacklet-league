@@ -21,7 +21,12 @@ full re-grade with the new probes.
 
 ## v1.1 (ship first, do NOT fold into v2.0)
 
-Makes the existing score correct + honest; no new scored dimensions. Mostly done.
+Makes the existing score correct + honest; no new scored dimensions.
+
+**STATUS: SHIPPED to PyPI. v1.1 (injection hardening + the four honesty fixes below + platform_id + the
+passive/active `--passive-only` split), v1.1.1 (pip-first README + the first pip-installable package via
+hatchling + force-included catalog), and v1.2 (bot-challenge / interstitial guard) are all published; curve
+stays 2026.1. sloptic.org is live. The TODO markers below are the historical record of what got done.**
 
 - **Injection hardening (DONE, committed both repos, suite green 870):** cmdi/ssti/lfi/xxe/upload
   moved from LLM-fakeable arithmetic markers to salted `sha256` hash oracles + dose-response +
@@ -155,6 +160,35 @@ violations + React warnings + hydration errors. Two probes below depend on widen
 - Loading state that never resolves (spinner still present after 30s) -- intent-independent, the visible
   symptom of Family 1.
 
+## v2.0 FAMILY 4: modern web-quality standards (published-standard footing, like WCAG)
+
+Cite the standard, not our judgment (OWASP Secure Headers Project; Lighthouse's own audit taxonomy). Non-AI,
+intent-independent, chosen for DECORRELATION from the existing carriers. All SCORED -> each must clear
+`rank_variance.py` (footrule up, |r| down) before it stays; the perf ones especially, since the
+cwv/weight/compress cluster is already ~1.5 effective axes, so they must prove they are not re-measuring
+"heavy page."
+
+Security (OWASP Secure Headers):
+- **Subresource Integrity (SRI)** -- STANDOUT. A third-party `<script src>` / `<link>` without an
+  `integrity=` hash is an unguarded supply-chain risk. Intent-independent, anchorable (script with/without
+  the hash), CONDITIONALLY prevalent (applies only to apps loading third-party resources) -> the middle-band,
+  decorrelated shape we want. Strongest single new security probe.
+- **Permissions-Policy** missing/over-permissive -- anchorable but likely near-universally absent -> a
+  low-variance TAX; price it small (like the header family), do not expect discrimination. Same for
+  **COOP/COEP/CORP** (cross-origin isolation): correct + standardized but so rarely set they are a constant.
+
+Performance (Lighthouse audit taxonomy):
+- **Next-gen image formats** (`uses-webp-images`): JPEG/PNG served where WebP/AVIF would cut bytes. Common,
+  and decorrelated from the existing perf carriers because it is FORMAT, not size or timing.
+- **Render-blocking resources** (`render-blocking-resources`): synchronous CSS/JS in `<head>` blocking first
+  paint. Mostly static-analyzable from the served HTML.
+- **Unminified CSS/JS** (`unminified-css` / `unminified-javascript`): whitespace/newline-ratio heuristic; a
+  distinct hygiene signal from the dev-build probe.
+
+DEPRIORITIZED for this population: a full TLS/transport-quality axis (SSL-Labs style) is intent-independent
+and a genuinely new axis, but at 65% Vercel/Netlify/Cloudflare the TLS is platform-default and uniform ->
+~zero variance here. `security.txt` / robots.txt validity = low-prevalence gates, not differentiators.
+
 ## Never-applied probes (audit + anchor; version-light)
 
 - qa-race-001/002 never applied across 1537 apps -- CORRECT behavior, not a gap: the stack allocates
@@ -168,11 +202,13 @@ violations + React warnings + hydration errors. Two probes below depend on widen
 
 ## Sequence
 
-1. v1.1: parity.py + denominator + release-notes fixes (cheap, independent). cmdi already done.
-2. v16 re-grade -> confirm -> re-freeze 2026.2 -> **tag v1.1**.
-3. v2.0 foundation: LLM-echo authoring template (determinism gate + keep hash + paired canary +
-   7*'7' engine tag).
-4. Family 1 deploy gates (highest ROI, decorrelated).
+0. **v1.1 / 1.1.1 / 1.2 -- DONE, shipped to PyPI, curve 2026.1. sloptic.org live. v2.0 opens now.**
+1. v2.0 foundation: LLM-echo authoring template (determinism gate + keep hash + paired canary +
+   7*'7' engine tag). Contract-preserving (could even be a v1.3).
+2. Family 1 deploy gates (highest ROI, decorrelated).
+3. Family 4 security: **SRI** (+ Permissions-Policy priced as a tax).
+4. Family 4 perf: **next-gen images + render-blocking** (+ unminified) -- validate each against the perf
+   cluster before keeping.
 5. Family 2 decorrelated static a11y (variant-grouped), then browser a11y.
 6. Family 3 advisory + the console-capture check.
 7. race/IDOR anchors on supavulnbase.
