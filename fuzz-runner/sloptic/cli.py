@@ -1,7 +1,8 @@
 """Deploy/target an app, probe it over HTTP, and report a slop score (lower is better).
 
 Default output is a human-readable summary; --failed lists the probes that detected slop; --json
-prints the full machine-readable report. See --help for all options.
+prints the full machine-readable report; --report-card renders the team-facing durability card
+(what was expected, what we saw, what it indicates, how to fix, per finding). See --help.
 """
 from __future__ import annotations
 
@@ -168,10 +169,28 @@ def _score_breakdown_text(report, decay: float = CATEGORY_DECAY) -> str:
     return "\n".join(lines)
 
 
+def _render_card(report, source: str, args) -> None:
+    """Team-facing durability report card. Markdown to stdout (--report-card), or written to a file whose
+    extension picks the format (.html -> a shareable page, else markdown). Reuses the corpus-shaped grade
+    record, so the CLI card is byte-identical to the batch `scripts/report_card.py` output for the same app."""
+    from .reportcard import build_card, to_html, to_markdown
+    card = build_card(_grade_record(report, source), catalog_root=args.catalog, organizer=args.organizer)
+    dest = args.report_card
+    if dest and dest != "-":
+        text = to_html(card) if dest.lower().endswith((".html", ".htm")) else to_markdown(card)
+        pathlib.Path(dest).write_text(text)
+        print(f"  report card written to {dest}")
+    else:
+        print(to_markdown(card))
+
+
 def _print_report(report, source: str, args) -> None:
     if getattr(args, "out", None):
         from .jsonl import append_jsonl
         append_jsonl(args.out, _grade_record(report, source))
+    if getattr(args, "report_card", None) is not None:
+        _render_card(report, source, args)
+        return
     if args.json:
         print(json.dumps(_report_payload(report), indent=2))
         return
@@ -245,6 +264,7 @@ def main() -> None:
               %(prog)s --app references/vulnerable/app.py     # trusted ref, no Docker
               %(prog)s --submission team.zip --harden         # untrusted zip, sandboxed (Docker host)
               %(prog)s --target https://example.com --failed  # an already-running URL
+              %(prog)s --app references/vulnerable/app.py --report-card card.html  # shareable team card
 
             Only fuzz targets you own or are authorized to test.
             """
@@ -286,6 +306,14 @@ def main() -> None:
                      help="append this grade as a JSONL record, then place it on the frozen curve with "
                           "`python scripts/benchmark.py rank --results FILE`")
     out.add_argument("--failed", action="store_true", help="list only the probes that detected slop")
+    out.add_argument("--report-card", metavar="FILE", nargs="?", const="-",
+                     help="render the team durability report card instead of the summary: markdown to stdout "
+                          "(bare --report-card), or to a file (--report-card card.md, or card.html for a "
+                          "shareable page). Per finding: what was expected, what we observed, what it "
+                          "indicates, and how to fix it.")
+    out.add_argument("--organizer", action="store_true",
+                     help="with --report-card, reveal hidden-pool (anti-gaming) findings in full; "
+                          "without it they are an opaque withheld count")
     out.add_argument("-v", "--verbose", action="store_true",
                      help="stream every probe/target outcome as it runs (stderr), and append the "
                           "score breakdown showing the variant-group + within-category dampers")
