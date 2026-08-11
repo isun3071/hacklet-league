@@ -2703,6 +2703,117 @@ def unreachable_backend_reference(ctx, probe) -> bool | None:
     return False
 
 
+# v2.0 FAMILY 1 -- OAuth sign-in dead in prod. The app hands the browser an authorization URL whose
+# redirect_uri points at localhost / a private IP / an unset env var: after the user authenticates, the
+# provider bounces them to a host that does not exist in production, so sign-in is broken for every visitor
+# (invisible to a "does the login button render" check). HSTS / mixed-content / unreachable-backend all miss it.
+_OAUTH_PROVIDER = re.compile(
+    r"accounts\.google\.com/o/oauth2|github\.com/login/oauth/authorize|"
+    r"(?:www\.)?facebook\.com/(?:v[\d.]+/)?dialog/oauth|login\.microsoftonline\.com|"
+    r"appleid\.apple\.com/auth/authorize|[a-z0-9.-]+\.auth0\.com/authorize|"
+    r"[a-z0-9.-]+/oauth2?/(?:v\d/)?authorize|/oauth2?/authorize", re.I)
+_OAUTH_URL = re.compile(r"""https?://[^\s"'<>()]+""")
+_OAUTH_ROUTES = ("/auth/google", "/auth/github", "/login/google", "/login/github", "/api/auth/signin/google",
+                 "/api/auth/signin/github", "/oauth/google", "/oauth/authorize", "/auth/signin", "/.auth/login/google")
+_OAUTH_ROUTEHINT = re.compile(r"/(?:auth|oauth|login|signin|sso)(?:/|$|\?)", re.I)
+_REDIRECT_PARAM = ("redirect_uri", "redirect_url", "callback_url", "redirecturi")
+
+
+def _oauth_redirect_uri(url: str) -> str | None:
+    """The decoded redirect_uri of an OAuth authorization URL, if `url` looks like one (a known provider host,
+    or a redirect_uri alongside client_id / response_type). None otherwise. Unescapes &amp; so an HTML-embedded
+    href parses like a raw Location header."""
+    parsed = urllib.parse.urlparse(url.replace("&amp;", "&"))
+    q = urllib.parse.parse_qs(parsed.query)
+    ru = next((q[k][0] for k in _REDIRECT_PARAM if k in q), None)
+    if ru and (_OAUTH_PROVIDER.search(url) or "client_id" in q or "response_type" in q):
+        return ru
+    return None
+
+
+def oauth_redirect_localhost(ctx, probe) -> bool | None:
+    """DEPLOY-TIME "works on my machine" for sign-in: an OAuth authorization URL the app hands the browser sets
+    redirect_uri to localhost / a private RFC1918 IP / an unset env var (`https://undefined`). After the user
+    authenticates, the provider redirects to a host that does not exist in prod, so sign-in is dead for every
+    visitor. Finds the authorization URL in the served homepage or by following a same-origin auth route ONE hop
+    (never completing the flow, zero payload). Fires only when the redirect_uri host differs from the app's own
+    origin -- a localhost target legitimately using a localhost callback is not punished. N/A when no OAuth flow."""
+    origin_netloc = urllib.parse.urlparse(ctx.base_url).netloc.lower()
+    budget = probe.probe.get("max_attempts", 30)
+    candidates: set[str] = set()
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
+        try:
+            candidates.update(_OAUTH_URL.findall(c.get(_home_path(ctx, probe)).text))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            pass
+        routes = list(dict.fromkeys(list(_OAUTH_ROUTES)
+                                    + [r for r in ctx.profile.routes if _OAUTH_ROUTEHINT.search(r)]))
+        for route in routes[:budget]:
+            try:
+                loc = c.get(route).headers.get("location", "")
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            if loc:
+                candidates.add(loc)
+    found = False
+    for url in candidates:
+        ru = _oauth_redirect_uri(url)
+        if not ru:
+            continue
+        found = True
+        if (_PRIVATE_HOST.search(ru) or _UNSET_ENV_HOST.search(ru)) \
+                and urllib.parse.urlparse(ru).netloc.lower() != origin_netloc:
+            ctx.evidence.update(oauth_redirect_uri=ru, authorize_url=url[:160], origin=ctx.base_url)
+            return True
+    return False if found else None
+
+
+# v2.0 FAMILY 1 -- a PUBLIC origin served over plain http:// with no upgrade to TLS: every visitor's
+# credentials and session cookies cross the network in the clear. HSTS (sec-headers-003) and mixed-content
+# (sec-mixed-001) both assume https and miss a no-TLS origin entirely. A localhost / private-IP / *.local dev
+# or preview target is http by nature, so it is exempt (the "gate to public origins" caveat).
+_LOCAL_HOST = re.compile(
+    r"^(?:localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0\.0\.0\.0|\[?::1\]?|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|"
+    r"[^.]+\.(?:local|test|localhost))$", re.I)
+
+
+def _is_local_host(host: str) -> bool:
+    return bool(_LOCAL_HOST.match(host or ""))
+
+
+def _no_tls_decision(base_url: str, status: int | None, location: str) -> bool | None:
+    """Verdict from the origin + the homepage response, factored out for testing. None = not applicable (already
+    https, or a local/preview host); False = http that upgrades to https (TLS enforced); True = a public origin
+    that serves cleartext http with no upgrade."""
+    o = urllib.parse.urlparse(base_url)
+    if o.scheme != "http" or _is_local_host(o.hostname or ""):
+        return None
+    if status is not None and 300 <= status < 400 and (location or "").lower().startswith("https://"):
+        return False
+    return True
+
+
+def no_tls_origin(ctx, probe) -> bool | None:
+    """DEPLOY-TIME cleartext transport: a PUBLIC origin reached over plain http:// that does not upgrade to
+    https, so credentials / session cookies transit unencrypted. N/A for an https origin (HSTS / mixed-content
+    cover those) or a localhost / private-IP / *.local dev target (http is expected there). Clean when the
+    http origin redirects to https."""
+    o = urllib.parse.urlparse(ctx.base_url)
+    if o.scheme != "http" or _is_local_host(o.hostname or ""):
+        return None                          # fast path: no network for an https or local/preview target
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
+        try:
+            r = c.get(_home_path(ctx, probe))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None                      # unreachable -> can't assess
+    verdict = _no_tls_decision(ctx.base_url, r.status_code, r.headers.get("location", ""))
+    ctx.evidence.update(no_tls=(verdict is True), status=r.status_code, upgrades_to_https=(verdict is False),
+                        origin=ctx.base_url)
+    return verdict
+
+
 def vulnerable_dependency(ctx, probe) -> bool | None:
     """Supply-chain: the app SHIPS a client library with a KNOWN CVE (retire.js-style). Reads the app's OWN
     bundle (ETHICAL — their code, never a third party's server) and fingerprints a curated set by license-
@@ -5470,6 +5581,8 @@ PREDICATES = {
     "authenticated_backend_readable": authenticated_backend_readable,
     "bundle_leaks_secret": bundle_leaks_secret,
     "unreachable_backend_reference": unreachable_backend_reference,
+    "oauth_redirect_localhost": oauth_redirect_localhost,
+    "no_tls_origin": no_tls_origin,
     "vulnerable_dependency": vulnerable_dependency,
     "source_map_exposed": source_map_exposed,
     "session_cookie_missing_flag": session_cookie_missing_flag,
@@ -5565,6 +5678,8 @@ _PREDICATE_REASONS = {
     "authenticated_backend_readable": "any logged-in user reads every other user's data -> broken authenticated-tier RLS/Rules (the IDOR equivalent on a BaaS app; missing per-user row filtering)",
     "bundle_leaks_secret": "a hardcoded SECRET key (Stripe sk_ / OpenAI / AWS secret / GitHub PAT / private key) is shipped in the client JS bundle -> account/DB takeover (public anon/publishable keys are not flagged)",
     "unreachable_backend_reference": "the shipped client bundle calls a backend no visitor can reach (localhost / a private IP / an unset env var) -> the app renders but its data layer is dead in production",
+    "oauth_redirect_localhost": "the OAuth sign-in sets redirect_uri to localhost / a private IP / an unset env var -> after authenticating, the provider bounces the user to a host that doesn't exist in production, so login is dead for every visitor",
+    "no_tls_origin": "the public origin is served over plain http:// with no upgrade to https -> every visitor's credentials and session cookies cross the network in the clear",
     "vulnerable_dependency": "the app ships a client library with a KNOWN CVE (retire.js-style: jQuery / AngularJS / Bootstrap / Axios / Moment / Handlebars / DOMPurify) -> supply-chain risk the team chose; upgrade per the finding",
     "source_map_exposed": "a production JS bundle serves its .map -> the original source is reconstructable (business logic, hidden endpoints, and secrets a minified scan misses)",
     "session_cookie_missing_flag": "session cookie missing the {flag} flag",
