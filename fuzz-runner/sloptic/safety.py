@@ -35,6 +35,7 @@ PASSIVE_PROBES = frozenset({
     "sec-headers-006", "sec-csp-001", "sec-cors-001", "sec-mixed-001", "sec-deps-001", "sec-secrets-001",
     "sec-secrets-002", "sec-exposure-005", "sec-exposure-006",
     "sec-tls-001",   # observes the origin's scheme + whether it upgrades to https (a plain GET, no payload)
+    "sec-sri-001",   # parses the served homepage HTML for cross-origin subresources without integrity (a GET)
 })
 
 # Sends a payload / mutates / induces a fault / hammers / needs accounts / pulls exposed data.

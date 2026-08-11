@@ -5074,6 +5074,58 @@ def mixed_content(ctx, probe) -> bool | None:
     return True if insecure else False
 
 
+# v2.0 FAMILY 4 -- Subresource Integrity (SRI, a W3C recommendation). A CROSS-ORIGIN <script src> / stylesheet
+# loaded without an `integrity=` hash is an unguarded supply-chain risk: if that CDN is compromised or the
+# domain is hijacked, arbitrary code runs in the app's origin with full access to its DOM, cookies, and tokens.
+# Same-origin resources need no SRI (you already control them). Static: parsed from the served HTML.
+def _sri_scan(html: str, page_url: str) -> tuple[list[str], int]:
+    """(cross-origin script/stylesheet URLs that ship WITHOUT integrity=, count of ALL cross-origin such
+    resources). The second value separates 'no third-party resources -> N/A' from 'all of them are protected
+    -> clean'. Only <script src> and <link rel=stylesheet|preload|modulepreload> -- the resource kinds SRI
+    covers; <img>/<iframe> are out of scope (SRI does not apply)."""
+    origin = urllib.parse.urlparse(page_url).netloc.lower()
+    gaps: list[str] = []
+    total = 0
+    tags = [(m.group(1), "src") for m in re.finditer(r"<script\b([^>]*)>", html, re.I)]
+    for m in re.finditer(r"<link\b([^>]*)>", html, re.I):
+        rel = re.search(r"\brel\s*=\s*[\"']?([^\"'>\s]+)", m.group(1), re.I)
+        if rel and rel.group(1).lower() in ("stylesheet", "preload", "modulepreload"):
+            tags.append((m.group(1), "href"))
+    for attrs, urlattr in tags:
+        ref = re.search(r"\b" + urlattr + r"\s*=\s*[\"']([^\"']+)[\"']", attrs, re.I)
+        if not ref:
+            continue
+        p = urllib.parse.urlparse(urllib.parse.urljoin(page_url, ref.group(1).strip()))
+        if p.scheme not in ("http", "https") or not p.netloc or p.netloc.lower() == origin:
+            continue                                     # relative / same-origin -> no SRI needed
+        total += 1
+        if not re.search(r"\bintegrity\s*=\s*[\"']", attrs, re.I):
+            gaps.append(p.geturl())
+    return list(dict.fromkeys(gaps)), total
+
+
+def subresource_integrity_missing(ctx, probe) -> bool | None:
+    """A cross-origin <script>/<stylesheet> loaded WITHOUT Subresource Integrity. If that CDN is compromised or
+    its domain hijacked, arbitrary code runs in the app's origin -- the unguarded supply-chain risk SRI (a W3C
+    recommendation) exists to close. Same-origin resources need no SRI. N/A when the page loads no cross-origin
+    script/stylesheet at all (nothing to guard); clean when every one carries an integrity hash. Static HTML."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(_home_path(ctx, probe))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+    if "html" not in r.headers.get("content-type", "").lower():
+        return None
+    gaps, total = _sri_scan(r.text, str(r.url))
+    if total == 0:
+        return None                                      # no cross-origin subresources -> nothing to protect
+    if gaps:
+        ctx.evidence.update(sri_missing=gaps[:8], cross_origin_subresources=total)
+        return True
+    ctx.evidence.update(sri_missing=[], cross_origin_subresources=total)
+    return False
+
+
 # SEO / discoverability meta — objective presence checks on best-practice head tags. Viewport is the
 # strong one (without it a mobile browser renders at desktop width -> tiny, unusable); description feeds
 # the search snippet. Canonical is deliberately NOT checked: it's correctly absent on single-URL pages.
@@ -5637,6 +5689,7 @@ PREDICATES = {
     "broken_links": broken_links,
     "redirect_loop": redirect_loop,
     "mixed_content": mixed_content,
+    "subresource_integrity_missing": subresource_integrity_missing,
     "seo_meta_missing": seo_meta_missing,
     "http_conformance": http_conformance,
     "slow_first_paint": slow_first_paint,
@@ -5733,6 +5786,7 @@ _PREDICATE_REASONS = {
     "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
     "redirect_loop": "the homepage or a route it links to redirects endlessly (ERR_TOO_MANY_REDIRECTS) -- the page never loads for any visitor",
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
+    "subresource_integrity_missing": "a cross-origin script/stylesheet loads without a Subresource Integrity hash -> a compromised or hijacked CDN can run arbitrary code in the app's origin (supply-chain risk)",
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",

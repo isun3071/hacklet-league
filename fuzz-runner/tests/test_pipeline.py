@@ -114,6 +114,7 @@ def test_vulnerable_app_accrues_slop():
     # served on loopback (http://127.0.0.1), a local host that is http by nature -> N/A (not a public cleartext origin)
     assert o["qa-deploy-003"] == "not_applicable"
     assert o["sec-tls-001"] == "not_applicable"
+    assert o["sec-sri-001"] == "not_applicable"   # the vuln ref loads only same-origin/inline scripts -> nothing to guard
     # sec-mixed-001 is https-gated: over the plain-http reference there's nothing to be "mixed" -> N/A
     # (fire/clean is CI-locked against a self-signed HTTPS server in test_mixed_content):
     assert o["sec-mixed-001"] == "not_applicable"
@@ -213,6 +214,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["qa-deploy-002"] == "clean"      # its homepage resolves and links no route that redirect-loops
     assert o["qa-deploy-003"] == "not_applicable"   # no OAuth flow to inspect
     assert o["sec-tls-001"] == "not_applicable"     # served on loopback (local host) -> not a public http origin
+    assert o["sec-sri-001"] == "not_applicable"     # no cross-origin subresource to guard
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-hosthdr-001"] == "clean"    # no endpoint reflects the Host header
     assert o["sec-split-001"] == "not_applicable"  # no form/param surface to inject CRLF into
