@@ -22,6 +22,7 @@ PASSIVE_PROBES = frozenset({
     # performance -- all measure timing/weight/requests from ordinary loads (no burst)
     "perf-cache-001", "perf-compress-001", "perf-loadtime-001", "perf-weight-001", "perf-weight-002",
     "perf-requests-001", "perf-ttfb-001", "perf-ttfb-002", "perf-ttfb-003", "perf-cwv-001", "perf-cwv-002",
+    "perf-lcp-001", "perf-dom-001", "perf-font-001",   # v2.0 Family 4: render/observe or parse CSS -- no state change
     # qa -- render / static-analyse / GET; nothing submitted, created, or malformed
     "qa-a11y-001", "qa-a11y-002", "qa-links-001", "qa-console-001", "qa-ctype-001", "qa-devbuild-001",
     "qa-http-001", "qa-http-002", "qa-seo-001", "qa-backnav-001", "qa-chunk-001", "qa-deeplink-001",

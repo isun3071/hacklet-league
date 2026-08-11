@@ -1101,6 +1101,51 @@ def console_errors(url: str, headers=None, timeout: float = 12.0) -> dict | None
         return None
 
 
+# v2.0 FAMILY 4 -- page-quality metrics from one render: (1) is the LCP element an <img>, and its loading attr
+# (loading=lazy on the LCP image DELAYS first paint -- a modern anti-pattern the observer catches), and (2) the
+# total DOM node count (an excessive DOM slows layout/style/interaction -- Lighthouse dom-size). The LCP
+# observer is injected BEFORE load so it captures the real paint.
+_METRICS_JS = """(() => {
+  window.__hlm = {lcp_is_img: false, lcp_loading: ''};
+  const obs = (t, cb) => { try { new PerformanceObserver(cb).observe({type: t, buffered: true}); } catch (e) {} };
+  obs('largest-contentful-paint', l => {
+    const es = l.getEntries(); if (!es.length) return;
+    const el = es[es.length - 1].element;
+    window.__hlm.lcp_is_img = !!(el && el.tagName === 'IMG');
+    window.__hlm.lcp_loading = (el && el.getAttribute && (el.getAttribute('loading') || '').toLowerCase()) || '';
+  });
+})()"""
+
+
+def render_metrics(url: str, headers=None, timeout: float = 15.0) -> dict | None:
+    """Render url once and return {lcp_is_img, lcp_loading, dom_nodes}. None if no browser / the render fails."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            b = _launch(pw)
+            if b is None:
+                return None
+            try:
+                page = b.new_page()
+                page.add_init_script(_METRICS_JS)                 # observe LCP from before the page loads
+                _apply_auth(page, url, headers)
+                page.goto(url, timeout=timeout * 1000, wait_until="load")
+                try:
+                    page.wait_for_load_state("networkidle", timeout=6000)   # let the SPA settle so LCP is final
+                except Exception:
+                    page.wait_for_timeout(400)
+                return page.evaluate(
+                    "() => ({lcp_is_img: window.__hlm.lcp_is_img, lcp_loading: window.__hlm.lcp_loading, "
+                    "dom_nodes: document.getElementsByTagName('*').length})")
+            finally:
+                b.close()
+    except Exception:
+        return None
+
+
 # Core Web Vitals — LCP (largest content paint), CLS (layout shift), total blocking time (main-thread
 # jank) — measured by a PerformanceObserver injected BEFORE load, over N renders throttled to a mid-tier
 # device (4x CPU + Slow-4G, Lighthouse's lab profile), so a bad number means bad on a REAL device, not

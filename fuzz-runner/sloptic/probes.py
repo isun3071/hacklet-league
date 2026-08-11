@@ -5190,6 +5190,91 @@ def unminified_assets(ctx, probe) -> bool | None:
     return bool(unmin)
 
 
+# v2.0 FAMILY 4 -- lazy-loading the LCP image. `loading="lazy"` on the element that DEFINES first paint makes
+# the browser defer the one image it should fetch first, delaying LCP for every visitor (~15% of sites do this;
+# Lighthouse flags it). Decorrelated from page weight -- a loading-STRATEGY mistake, not a size one.
+def lcp_image_lazy_loaded(ctx, probe) -> bool | None:
+    """The Largest Contentful Paint element is an <img> marked loading="lazy" -> the browser defers the very
+    image that defines first paint. Browser-gated. N/A when the LCP element isn't an image (nothing to
+    lazy-load) or the render fails; clean when the LCP image loads eagerly."""
+    m = browser.render_metrics(ctx.base_url.rstrip("/") + _home_path(ctx, probe), headers=ctx.headers)
+    if m is None:
+        return None
+    if not m.get("lcp_is_img"):
+        return None                                      # text/other LCP -> no LCP image to mis-load
+    ctx.evidence.update(lcp_is_img=True, lcp_loading=m.get("lcp_loading") or "eager", engine="lcp-observer")
+    return m.get("lcp_loading") == "lazy"
+
+
+# v2.0 FAMILY 4 -- excessive DOM size (Lighthouse dom-size). Too many nodes slow style/layout/interaction on
+# every update, independent of transfer bytes -> decorrelated from the weight carrier. Conservative threshold.
+_DOM_NODE_LIMIT = 1400     # Lighthouse's excessive-DOM threshold; only a genuinely heavy DOM fires
+
+
+def excessive_dom_size(ctx, probe) -> bool | None:
+    """The rendered page carries an excessive DOM (> Lighthouse's ~1400-node threshold): style/layout/interaction
+    cost scales with node count, independent of page weight. Browser-gated. N/A when the render fails."""
+    m = browser.render_metrics(ctx.base_url.rstrip("/") + _home_path(ctx, probe), headers=ctx.headers)
+    if m is None:
+        return None
+    n = m.get("dom_nodes") or 0
+    limit = probe.probe.get("max_nodes", _DOM_NODE_LIMIT)
+    ctx.evidence.update(dom_nodes=n, threshold=limit, engine="dom-count")
+    return n > limit
+
+
+# v2.0 FAMILY 4 -- web font without a non-blocking font-display (FOIT). A @font-face / Google Fonts load with no
+# font-display: swap|optional|fallback leaves text INVISIBLE while the font downloads, then reflows (Lighthouse
+# font-display; ~32% of font pages use a blocking value). Decorrelated: a font-LOADING strategy, not size.
+_FONT_FACE_BLOCK = re.compile(r"@font-face\b[^{]*\{([^}]*)\}", re.I | re.S)
+_FONT_HAS_SRC = re.compile(r"\bsrc\s*:", re.I)
+_GOOD_FONT_DISPLAY = re.compile(r"font-display\s*:\s*(?:swap|optional|fallback)\b", re.I)
+_GFONTS_LINK = re.compile(r"fonts\.googleapis\.com/css2?\?[^\"'<>\s)]+", re.I)
+_GFONTS_DISPLAY = re.compile(r"[?&]display=(?:swap|optional|fallback)\b", re.I)
+
+
+def font_display_missing(ctx, probe) -> bool | None:
+    """A web font loaded WITHOUT a non-blocking font-display (swap/optional/fallback) -> FOIT: text is invisible
+    while the font downloads, then reflows. Checks @font-face in the inline + same-origin CSS and Google Fonts
+    <link>s. N/A when the page loads no web font; clean when every one sets a good display. Static HTML/CSS."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(_home_path(ctx, probe))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+        if "html" not in r.headers.get("content-type", "").lower():
+            return None
+        html = r.text
+        origin = urllib.parse.urlparse(str(r.url)).netloc.lower()
+        blobs = [html]                                   # inline <style> @font-face live here
+        for m in re.finditer(r"<link\b([^>]*)>", html, re.I):
+            if not re.search(r"\brel\s*=\s*[\"']?stylesheet", m.group(1), re.I):
+                continue
+            href = re.search(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", m.group(1), re.I)
+            if href:
+                full = urllib.parse.urljoin(str(r.url), href.group(1).strip())
+                if urllib.parse.urlparse(full).netloc.lower() == origin:
+                    try:
+                        blobs.append(c.get(full).text)
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        pass
+    web_fonts, offenders = 0, []
+    for blob in blobs:
+        for fb in _FONT_FACE_BLOCK.finditer(blob):
+            if _FONT_HAS_SRC.search(fb.group(1)):
+                web_fonts += 1
+                if not _GOOD_FONT_DISPLAY.search(fb.group(1)):
+                    offenders.append("@font-face")
+    for g in _GFONTS_LINK.findall(html):                 # Google Fonts defaults to a blocking display unless set
+        web_fonts += 1
+        if not _GFONTS_DISPLAY.search(g):
+            offenders.append(g[:80])
+    if web_fonts == 0:
+        return None
+    ctx.evidence.update(foit_sources=offenders[:6], web_fonts=web_fonts)
+    return bool(offenders)
+
+
 # SEO / discoverability meta — objective presence checks on best-practice head tags. Viewport is the
 # strong one (without it a mobile browser renders at desktop width -> tiny, unusable); description feeds
 # the search snippet. Canonical is deliberately NOT checked: it's correctly absent on single-URL pages.
@@ -5755,6 +5840,9 @@ PREDICATES = {
     "mixed_content": mixed_content,
     "subresource_integrity_missing": subresource_integrity_missing,
     "unminified_assets": unminified_assets,
+    "lcp_image_lazy_loaded": lcp_image_lazy_loaded,
+    "excessive_dom_size": excessive_dom_size,
+    "font_display_missing": font_display_missing,
     "seo_meta_missing": seo_meta_missing,
     "http_conformance": http_conformance,
     "slow_first_paint": slow_first_paint,
@@ -5853,6 +5941,9 @@ _PREDICATE_REASONS = {
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
     "subresource_integrity_missing": "a cross-origin script/stylesheet loads without a Subresource Integrity hash -> a compromised or hijacked CDN can run arbitrary code in the app's origin (supply-chain risk)",
     "unminified_assets": "a sizeable same-origin .css/.js is shipped to production unminified -> wasted bytes and parse time on every page load",
+    "lcp_image_lazy_loaded": "the largest-contentful-paint image is marked loading=lazy -> the browser defers the very image that defines first paint, delaying it for every visitor",
+    "excessive_dom_size": "the page renders an excessive DOM (over ~1400 nodes) -> style/layout/interaction slow on every update, independent of page weight",
+    "font_display_missing": "a web font loads without font-display: swap/optional/fallback -> text is invisible while the font downloads, then reflows (FOIT)",
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
