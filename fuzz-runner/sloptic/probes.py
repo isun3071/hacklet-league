@@ -5126,6 +5126,70 @@ def subresource_integrity_missing(ctx, probe) -> bool | None:
     return False
 
 
+# v2.0 FAMILY 4 -- unminified CSS/JS shipped to production (Lighthouse unminified-css / unminified-javascript).
+# Wasted bytes + parse time on every load. Distinct from the dev-build probe (an HMR/dev-server client): this is
+# a production asset that simply wasn't minified. Same-origin only (the app's OWN build output; a third-party
+# CDN file is the vendor's concern). Size-gated so a small hand-written script isn't charged.
+_MIN_ASSET_BYTES = 8192     # below this, minification savings are negligible and the file is often hand-authored
+_MINIFY_EXT = re.compile(r"\.(?:js|css)(?:\?|#|$)", re.I)   # (distinct from _ASSET_REF, the perf asset-ref regex)
+
+
+def _minified(text: str) -> bool:
+    """A minified asset packs code onto very long lines; hand/prettier source wraps at ~40-80 chars. True when
+    the average line length is well past any formatted source (>200) -> minified. The wide gap (minified bundles
+    run into the thousands) keeps the middle band unfired rather than guessing."""
+    return len(text) / (text.count("\n") + 1) > 200
+
+
+def _same_origin_assets(html: str, page_url: str) -> list[str]:
+    """Same-origin .css/.js the page references (<script src>, <link rel=stylesheet>). A cross-origin CDN asset
+    is excluded -- minifying the vendor's file is not the app's call."""
+    origin = urllib.parse.urlparse(page_url).netloc.lower()
+    refs = re.findall(r"<script\b[^>]*\bsrc\s*=\s*[\"']([^\"']+)[\"']", html, re.I)
+    for m in re.finditer(r"<link\b([^>]*)>", html, re.I):
+        if re.search(r"\brel\s*=\s*[\"']?stylesheet", m.group(1), re.I):
+            href = re.search(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", m.group(1), re.I)
+            if href:
+                refs.append(href.group(1))
+    out = []
+    for ref in refs:
+        full = urllib.parse.urljoin(page_url, ref.strip())
+        p = urllib.parse.urlparse(full)
+        if p.netloc.lower() == origin and _MINIFY_EXT.search(p.path or ""):
+            out.append(full)
+    return list(dict.fromkeys(out))
+
+
+def unminified_assets(ctx, probe) -> bool | None:
+    """A sizeable SAME-ORIGIN .css/.js asset shipped to production UNMINIFIED -- wasted bytes + parse time on
+    every load (Lighthouse unminified-css / unminified-javascript). Same-origin only; small files are skipped
+    (savings negligible, often hand-written). N/A when the page references no sizeable same-origin script/style.
+    A DISTINCT hygiene signal from the dev-build probe: a production asset the build simply left unminified."""
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
+        try:
+            r = c.get(_home_path(ctx, probe))
+        except (httpx.HTTPError, httpx.InvalidURL):
+            return None
+        if "html" not in r.headers.get("content-type", "").lower():
+            return None
+        unmin, checked = [], 0
+        for url in _same_origin_assets(r.text, str(r.url))[:probe.probe.get("max_attempts", 6)]:
+            try:
+                a = c.get(url)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+            ct = a.headers.get("content-type", "").lower()
+            if not ("javascript" in ct or "css" in ct) or len(a.text) < _MIN_ASSET_BYTES:
+                continue                                 # not a real asset (html error shell) / too small to matter
+            checked += 1
+            if not _minified(a.text):
+                unmin.append(url)
+    if checked == 0:
+        return None                                      # no sizeable same-origin asset -> nothing to assess
+    ctx.evidence.update(unminified=unmin[:6], assets_checked=checked)
+    return bool(unmin)
+
+
 # SEO / discoverability meta — objective presence checks on best-practice head tags. Viewport is the
 # strong one (without it a mobile browser renders at desktop width -> tiny, unusable); description feeds
 # the search snippet. Canonical is deliberately NOT checked: it's correctly absent on single-URL pages.
@@ -5690,6 +5754,7 @@ PREDICATES = {
     "redirect_loop": redirect_loop,
     "mixed_content": mixed_content,
     "subresource_integrity_missing": subresource_integrity_missing,
+    "unminified_assets": unminified_assets,
     "seo_meta_missing": seo_meta_missing,
     "http_conformance": http_conformance,
     "slow_first_paint": slow_first_paint,
@@ -5787,6 +5852,7 @@ _PREDICATE_REASONS = {
     "redirect_loop": "the homepage or a route it links to redirects endlessly (ERR_TOO_MANY_REDIRECTS) -- the page never loads for any visitor",
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
     "subresource_integrity_missing": "a cross-origin script/stylesheet loads without a Subresource Integrity hash -> a compromised or hijacked CDN can run arbitrary code in the app's origin (supply-chain risk)",
+    "unminified_assets": "a sizeable same-origin .css/.js is shipped to production unminified -> wasted bytes and parse time on every page load",
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
     "slow_first_paint": "First Contentful Paint exceeded the gate",
