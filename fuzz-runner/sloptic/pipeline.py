@@ -16,7 +16,7 @@ from . import auth, platform_id, secretscan
 from .aggregate import compute_axis_slop, compute_slop_score, coverage_metrics
 from .deploy import Deployer
 from .discovery import discover, surface_metrics
-from .net import is_bot_challenge, make_client, set_trace_probe, start_trace
+from .net import challenge_onset, is_bot_challenge, make_client, set_trace_probe, start_trace
 from .probes import MATCHERS, PREDICATES, _repro_from_resp, describe
 from .schema import Form, Outcome, Probe, Profile, Report
 
@@ -269,8 +269,8 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
             except Exception:   # best-effort side check: a failed probe fetch must never gate the grade
                 pass
             for i, probe in enumerate(catalog):
-                if trace:
-                    set_trace_probe(probe.id)                  # tag every request this probe makes (fired or not)
+                set_trace_probe(probe.id)                      # tag every request (for --trace AND the always-on
+                #                                                challenge-onset watch); cheap ContextVar set
                 if on_progress:
                     on_progress(i, total, probe, None)              # starting probe i (0-indexed)
                 try:
@@ -299,7 +299,7 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes,
                       axis_slop=compute_axis_slop(outcomes), surface=surface_metrics(profile),
                       coverage=coverage_metrics(outcomes), platform=plat, bot_challenge=challenged,
-                      trace=trace_sink or [])
+                      challenge_onset=(challenge_onset() or "") if challenged else "", trace=trace_sink or [])
     finally:
         deployer.teardown()
 

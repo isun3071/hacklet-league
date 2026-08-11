@@ -8,7 +8,37 @@ import threading
 
 import pytest
 
+from sloptic import net
 from sloptic.net import is_bot_challenge
+
+
+class _R:
+    def __init__(self, status, headers=None):
+        self.status_code = status
+        self.headers = headers or {}
+
+
+def test_challenge_onset_records_the_first_tripping_probe():
+    net.start_trace(False)                                   # resets onset
+    net.set_trace_probe("sec-headers-001")
+    net._watch_challenge(_R(200))                            # a 200 is not a trip
+    assert net.challenge_onset() is None
+    net.set_trace_probe("sec-ratelimit-001")
+    net._watch_challenge(_R(403))                            # the burst probe's request gets 403'd -> onset
+    assert net.challenge_onset() == "sec-ratelimit-001"
+    net.set_trace_probe("perf-load-001")
+    net._watch_challenge(_R(429))                            # FIRST only -> not overwritten
+    assert net.challenge_onset() == "sec-ratelimit-001"
+    net.start_trace(False)
+    assert net.challenge_onset() is None                    # reset per grade
+
+
+def test_challenge_onset_also_catches_cf_mitigated_header():
+    net.start_trace(False)
+    net.set_trace_probe("sec-sqli-004")
+    net._watch_challenge(_R(200, {"cf-mitigated": "challenge"}))
+    assert net.challenge_onset() == "sec-sqli-004"
+    net.start_trace(False)
 
 
 class _Resp:

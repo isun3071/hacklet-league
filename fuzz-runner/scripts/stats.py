@@ -313,6 +313,8 @@ def main():
         return (p.get("host_platform") if isinstance(p, dict) else None) or "unknown"
     challenged = [r for r in recs if r.get("bot_challenge")]
     chal_by_host = Counter(_host_of(r) for r in challenged)
+    # WHICH probe's traffic first tripped the WAF (net.challenge_onset) -> the gate/reorder candidates
+    onset_by_probe = Counter(r["challenge_onset"] for r in challenged if r.get("challenge_onset"))
     host_totals = Counter(_host_of(r) for r in recs)
     challenge_by_host = sorted(
         ((h, n, host_totals[h], round(100 * n / (host_totals[h] or 1), 1)) for h, n in chal_by_host.items()),
@@ -331,7 +333,8 @@ def main():
                        "max": max(scores) if scores else None},
             "bot_challenge": {"n": len(challenged), "pct": round(100 * len(challenged) / (len(recs) or 1), 1),
                               "by_host": {h: {"challenged": n, "total": t, "pct": pct}
-                                          for h, n, t, pct in challenge_by_host}},
+                                          for h, n, t, pct in challenge_by_host},
+                              "tripped_by_probe": dict(onset_by_probe.most_common())},
             "category_concentration": {k: round(v, 1) for k, v in sorted(cat_total.items(), key=lambda x: -x[1])},
             "probe_fire_frequency": {pid: n for pid, n in freq},
             "winners": {"n": len(win_scores), "avg": round(statistics.mean(win_scores), 1) if win_scores else None},
@@ -623,6 +626,9 @@ def main():
               f"({100 * len(challenged) / (len(recs) or 1):.1f}%) served a challenge/interstitial, excluded from the grade")
         print("    by host (challenged / total on platform): "
               + "  ".join(f"{h}={n}/{t}({pct:.0f}%)" for h, n, t, pct in challenge_by_host))
+        if onset_by_probe:   # which probe's traffic first tripped the WAF -> the gate/reorder candidates
+            print("    tripped BY probe (first challenge status): "
+                  + "  ".join(f"{p}={n}" for p, n in onset_by_probe.most_common(8)))
         print()
 
 
