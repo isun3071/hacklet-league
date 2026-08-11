@@ -16,7 +16,11 @@ from . import auth, platform_id, secretscan
 from .aggregate import compute_axis_slop, compute_slop_score, coverage_metrics
 from .deploy import Deployer
 from .discovery import discover, surface_metrics
-from .net import challenge_onset, is_bot_challenge, make_client, set_trace_probe, start_trace
+from .net import challenge_onset, is_bot_challenge, make_client, request_counts, set_trace_probe, start_trace
+
+# A late-challenge grade is kept only if at least this fraction of the catalog ran BEFORE the WAF tripped (so
+# most outcomes saw the real app). Below it, too much of the grade is contaminated -> withhold like an entry challenge.
+_MIN_VALID_FRACTION = 0.6
 from .probes import MATCHERS, PREDICATES, _repro_from_resp, describe
 from .schema import Form, Outcome, Probe, Profile, Report
 
@@ -262,12 +266,13 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
             # the grade instead of scoring the interstitial. The record is flagged bot_challenge -> excluded
             # from the score distribution, never read as a clean grade.
             try:
-                if is_bot_challenge(client.get(origin)):
+                if is_bot_challenge(client.get(origin)):   # challenged from the FIRST fetch -> ungradeable, withhold
                     return Report(slop_score=0, outcomes=[], surface=surface_metrics(profile),
                                   platform=platform_id.classify_live(client, origin),
-                                  bot_challenge=True, trace=trace_sink or [])
+                                  bot_challenge=True, challenge_stage="entry", trace=trace_sink or [])
             except Exception:   # best-effort side check: a failed probe fetch must never gate the grade
                 pass
+            cat_index = {p.id: i for i, p in enumerate(catalog)}
             for i, probe in enumerate(catalog):
                 set_trace_probe(probe.id)                      # tag every request (for --trace AND the always-on
                 #                                                challenge-onset watch); cheap ContextVar set
@@ -284,22 +289,43 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
                 outcomes.extend(probe_outcomes)
                 if on_progress:
                     on_progress(i + 1, total, probe, probe_outcomes)  # done: i+1 probes completed
+                if challenge_onset():   # a CONFIRMED challenge tripped during/before this probe -> STOP: every
+                    break               # request past here hits the interstitial, not the app (and stops hammering)
             # OFF-SCORE diagnostic: identify the hosting platform + AI builder from one origin fetch (headers +
             # served HTML). Inside the client block so it reuses the session; never raises -> never DNFs a grade.
             plat = platform_id.classify_live(client, origin)
-            # END RE-CHECK: our own active traffic (rate-limit hammering, load burst) can trip a DDoS/bot
-            # mitigation MID-grade -- after which later probes read the interstitial and report false cleans.
-            # If the origin is now challenging us, flag the whole grade unreliable.
-            try:
-                challenged = is_bot_challenge(client.get(origin))
-            except Exception:
-                challenged = False
+            onset_probe = challenge_onset()   # a probe id if the WAF tripped MID-grade, else None
+            if not onset_probe:               # no mid-grade trip -> a challenge may still appear only at the END
+                try:
+                    end_challenged = is_bot_challenge(client.get(origin))
+                except Exception:
+                    end_challenged = False
+            else:
+                end_challenged = False
+            req_counts = request_counts() or {}
         if source_dir:   # static source scan (submission zip / --source DIR); absent for a bare --target
             outcomes.append(_source_secret_outcome(source_dir))
+        # RECOVERY: a probe's outcome is trustworthy only if it ran BEFORE the confirmed challenge onset. Keep
+        # the PRE-ONSET outcomes; drop the rest (they ran against the interstitial). Withhold if too few probes
+        # saw the real app (an early trip). An END-only challenge (no mid-grade onset) means every probe ran on
+        # the app -> keep them all. The v17 sample proved such kept grades match clean ones.
+        stage, bot_challenge = "", False
+        if onset_probe:
+            bot_challenge = True
+            onset_idx = cat_index.get(onset_probe, total)
+            if onset_idx < _MIN_VALID_FRACTION * total:   # too little clean data -> ungradeable, like an entry challenge
+                return Report(slop_score=0, outcomes=[], surface=surface_metrics(profile), platform=plat,
+                              bot_challenge=True, challenge_stage="entry", challenge_onset=onset_probe,
+                              request_counts=req_counts, trace=trace_sink or [])
+            outcomes = [o for o in outcomes if cat_index.get(o.probe_id, total) < onset_idx]
+            stage = "late"
+        elif end_challenged:
+            bot_challenge, stage = True, "late"
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes,
                       axis_slop=compute_axis_slop(outcomes), surface=surface_metrics(profile),
-                      coverage=coverage_metrics(outcomes), platform=plat, bot_challenge=challenged,
-                      challenge_onset=(challenge_onset() or "") if challenged else "", trace=trace_sink or [])
+                      coverage=coverage_metrics(outcomes), platform=plat, bot_challenge=bot_challenge,
+                      challenge_stage=stage, challenge_onset=onset_probe or "", request_counts=req_counts,
+                      trace=trace_sink or [])
     finally:
         deployer.teardown()
 

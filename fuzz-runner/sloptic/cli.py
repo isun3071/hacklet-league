@@ -33,7 +33,8 @@ _DEPLOY_FAILURES = (RuntimeError, TimeoutError, subprocess.SubprocessError, OSEr
 def _report_payload(report) -> dict:
     return {"slop_score": report.slop_score, "axis_slop": report.axis_slop,
             "surface": report.surface, "coverage": report.coverage, "platform": report.platform,
-            "bot_challenge": report.bot_challenge, "challenge_onset": report.challenge_onset,
+            "bot_challenge": report.bot_challenge, "challenge_stage": report.challenge_stage,
+            "challenge_onset": report.challenge_onset, "request_counts": report.request_counts,
             "outcomes": [asdict(o) for o in report.outcomes]}
 
 
@@ -47,7 +48,8 @@ def _grade_record(report, source: str) -> dict:
     rec = {"repo": source, "deployed": True, "slop_score": report.slop_score,
            "axis_slop": report.axis_slop, "coverage": report.coverage, "observed_surface": report.surface,
            "platform": report.platform, "bot_challenge": report.bot_challenge,
-           "challenge_onset": report.challenge_onset, "findings": findings}
+           "challenge_stage": report.challenge_stage, "challenge_onset": report.challenge_onset,
+           "request_counts": report.request_counts, "findings": findings}
     # v2.0 Family 2: carry the OFF-SCORE a11y advisory candidates even when a11y is CLEAN (so not in `findings`).
     # The decorrelated apps are exactly the ones clean on the scored a11y carrier but failing an advisory rule,
     # so the re-grade needs their advisory data to measure decorrelation before promoting any of it to the score.
