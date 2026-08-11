@@ -855,10 +855,14 @@ def first_contentful_paint(url: str, headers=None, timeout: float = 12.0) -> flo
 # `incomplete` (needs a human to decide). We take `violations` only, filtered to the WCAG 2 A/AA
 # conformance target (excludes best-practice opinions + aspirational AAA) — so the ingested corpus lands
 # squarely on our objective/intent-independent axis, and `incomplete` is left to the human judge.
-# WCAG 2.0/2.1 A/AA — the established conformance target (ADA / Section 508 / EN 301 549). We omit the
-# newer WCAG 2.2 rules (e.g. target-size), which fire on default-sized controls across most well-built
-# desktop pages and would false-positive; 2.2 can be revisited once we can gauge its precision on real apps.
+# WCAG 2.0/2.1 A/AA — the established conformance target (ADA / Section 508 / EN 301 549), the SCORED set.
 _AXE_WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]
+# v2.0 FAMILY 2: the candidate expansion (WCAG 2.2 AA + axe best-practice: target-size, landmarks, heading
+# order, skip links, ...). Run alongside the scored set but captured OFF-SCORE (see a11y_violations_present),
+# so the next corpus re-grade can measure each rule's DECORRELATION from the existing a11y carrier before any
+# of it is promoted to the score. This is the "gauge its precision on real apps first" the old comment asked
+# for. target-size is enabled explicitly (axe ships it disabled by default).
+_AXE_ADVISORY_TAGS = ["wcag22aa", "best-practice"]
 _AXE_JS_CACHE: str | None = None
 
 
@@ -948,9 +952,9 @@ def _contrast_data(violation) -> list:
 
 
 def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> list | None:
-    """Render url, inject axe-core, and return its WCAG 2 A/AA violations as [{id, impact}] — the
-    gold-standard deterministic a11y ruleset (~100 rules incl. contrast, ARIA, structure). None if no
-    browser or the render fails."""
+    """Render url, inject axe-core, and return its violations as [{id, impact, tags}] — the WCAG 2 A/AA SCORED
+    ruleset (~100 rules incl. contrast, ARIA, structure) PLUS the Family-2 advisory candidates (WCAG 2.2 AA +
+    axe best-practice). `tags` lets the caller partition scored-vs-advisory. None if no browser / render fails."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -970,10 +974,11 @@ def a11y_violations(url: str, headers=None, timeout: float = 12.0) -> list | Non
                     page.wait_for_timeout(300)                    # violations (and the count flaps between runs)
                 page.add_script_tag(content=_axe_js())            # defines window.axe
                 results = page.evaluate(
-                    "() => axe.run(document, {runOnly: {type: 'tag', values: %s}})" % json.dumps(_AXE_WCAG_TAGS))
+                    "() => axe.run(document, {runOnly: {type: 'tag', values: %s}, "
+                    "rules: {'target-size': {enabled: true}}})" % json.dumps(_AXE_WCAG_TAGS + _AXE_ADVISORY_TAGS))
                 out = []
                 for v in results.get("violations", []):
-                    rec = {"id": v["id"], "impact": v.get("impact")}
+                    rec = {"id": v["id"], "impact": v.get("impact"), "tags": v.get("tags") or []}
                     if v["id"] == "color-contrast":
                         # axe fixes this rule's impact at "serious" regardless of HOW unreadable the text is,
                         # so 4.4:1 (a hair under AA) and 1.1:1 (effectively invisible) arrive identical. Keep

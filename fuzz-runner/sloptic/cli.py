@@ -43,9 +43,18 @@ def _grade_record(report, source: str) -> dict:
     (axis_slop, coverage.applied/ran_kinds, observed_surface) drive the per-axis rank, slop_potential and the
     completeness bundle."""
     findings = [asdict(o) for o in report.outcomes if o.outcome == "slop_detected"]
-    return {"repo": source, "deployed": True, "slop_score": report.slop_score,
-            "axis_slop": report.axis_slop, "coverage": report.coverage, "observed_surface": report.surface,
-            "platform": report.platform, "bot_challenge": report.bot_challenge, "findings": findings}
+    rec = {"repo": source, "deployed": True, "slop_score": report.slop_score,
+           "axis_slop": report.axis_slop, "coverage": report.coverage, "observed_surface": report.surface,
+           "platform": report.platform, "bot_challenge": report.bot_challenge, "findings": findings}
+    # v2.0 Family 2: carry the OFF-SCORE a11y advisory candidates even when a11y is CLEAN (so not in `findings`).
+    # The decorrelated apps are exactly the ones clean on the scored a11y carrier but failing an advisory rule,
+    # so the re-grade needs their advisory data to measure decorrelation before promoting any of it to the score.
+    for o in report.outcomes:
+        adv = (o.evidence or {}).get("advisory_a11y")
+        if adv:
+            rec["advisory_a11y"] = adv
+            break
+    return rec
 
 
 def _coverage_text(report) -> str:

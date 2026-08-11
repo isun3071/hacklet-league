@@ -4296,30 +4296,51 @@ def _contrast_level(contrast: list):
     return "minor", worst
 
 
+_A11Y_SCORED_TAGS = frozenset(browser._AXE_WCAG_TAGS)   # WCAG 2 A/AA -> the SCORED set; everything else is advisory
+
+
+def _a11y_scored(v: dict) -> bool:
+    """A violation counts toward the SCORE iff it carries a scored WCAG 2 A/AA tag. The Family-2 candidates
+    (WCAG 2.2 AA / best-practice only) are advisory. Missing tags -> scored, to preserve the pre-expansion set."""
+    tags = set(v.get("tags") or [])
+    return not tags or bool(tags & _A11Y_SCORED_TAGS)
+
+
 def a11y_violations_present(ctx, probe) -> bool:
     """Browser oracle: WCAG 2 A/AA accessibility violations from axe-core (its deterministic `violations`
     set) above the threshold. Browser-gated; axe reports only algorithmically-determinable failures, so
     it stays intent-independent (the `incomplete`/needs-review rules are excluded). The penalty is a
     per-rule severity-tiered SUM (see _a11y_penalty) so a multi-barrier page outscores a single-barrier
-    one and a lone cosmetic issue isn't charged the full exclusion penalty."""
+    one and a lone cosmetic issue isn't charged the full exclusion penalty. The WCAG 2.2 / best-practice
+    candidates ride along as OFF-SCORE `advisory_a11y` (v2.0 Family 2), for re-grade decorrelation analysis:
+    they never touch the fire or the penalty until the corpus proves them decorrelated from this carrier."""
     url = ctx.base_url.rstrip("/") + _home_path(ctx, probe)
     viols = browser.a11y_violations(url, headers=ctx.headers)
     if viols is None:
         return False
+    scored = [v for v in viols if _a11y_scored(v)]
+    advisory = [v for v in viols if not _a11y_scored(v)]
     impacts: dict[str, int] = {}
     worst_shortfall = None
-    for v in viols:
+    for v in scored:
         level = v.get("impact")
         if v["id"] == "color-contrast":
             graded = _contrast_level(v.get("contrast") or [])
             if graded:
                 level, worst_shortfall = graded
         impacts[level] = impacts.get(level, 0) + 1
-    ctx.evidence.update(violations=len(viols), rules=sorted({v["id"] for v in viols})[:15],
+    ctx.evidence.update(violations=len(scored), rules=sorted({v["id"] for v in scored})[:15],
                         impacts=impacts, engine="axe-core", penalty_override=_a11y_penalty(impacts))
     if worst_shortfall is not None:
         ctx.evidence["contrast_shortfall"] = round(worst_shortfall, 2)
-    return len(viols) > probe.probe.get("threshold", 0)
+    if advisory:   # OFF-SCORE: captured for the 2026.3 re-grade to measure decorrelation, never scored here
+        adv_impacts: dict[str, int] = {}
+        for v in advisory:
+            adv_impacts[v.get("impact")] = adv_impacts.get(v.get("impact"), 0) + 1
+        ctx.evidence["advisory_a11y"] = {
+            "rules": sorted({v["id"] for v in advisory})[:20], "impacts": adv_impacts,
+            "note": "v2.0 Family 2 candidate (wcag22aa / best-practice) -- OFF-SCORE, for re-grade decorrelation"}
+    return len(scored) > probe.probe.get("threshold", 0)
 
 
 def dead_controls_present(ctx, probe) -> bool:
