@@ -41,6 +41,8 @@ ALL_PROBES = [
     "qa-http-002",  # HTTP conformance: an HTML response with no declared charset
     "qa-deploy-001",  # v2.0 Family 1: /config.js ships API_BASE=http://localhost + CDN=https://undefined -> backend dead in prod
 ]
+# qa-deploy-002 (redirect loop) is NOT here: like other probes that don't fire on the simple ref, the vuln ref
+# has no looping route, so it grades clean (asserted below) and is wedge-locked in test_redirect_loop.py.
 SURFACE_PROBES = ["sec-sqli-001", "sec-sqli-002", "sec-sqli-003", "sec-xss-001"]
 
 
@@ -106,6 +108,8 @@ def test_vulnerable_app_accrues_slop():
     assert o["qa-a11y-002"] == "slop_detected"
     # qa-links-001: the homepage's <a href="/login"> dead-ends on a 404 (login is POST-only) -> broken nav:
     assert o["qa-links-001"] == "slop_detected"
+    # qa-deploy-002: none of the vuln ref's linked routes redirect-loop (they 404/500/200, not endlessly) -> clean
+    assert o["qa-deploy-002"] == "clean"
     # sec-mixed-001 is https-gated: over the plain-http reference there's nothing to be "mixed" -> N/A
     # (fire/clean is CI-locked against a self-signed HTTPS server in test_mixed_content):
     assert o["sec-mixed-001"] == "not_applicable"
@@ -202,6 +206,7 @@ def test_minimal_app_resolves_surface_probes_na():
     assert o["qa-seo-001"] == "clean"         # minimal sets viewport + description meta
     assert o["qa-http-002"] == "clean"        # minimal serves text/html; charset=utf-8
     assert o["qa-deploy-001"] == "clean"      # its bundle references no localhost/private-IP/undefined backend
+    assert o["qa-deploy-002"] == "clean"      # its homepage resolves and links no route that redirect-loops
     assert o["sec-redirect-001"] == "clean"   # no redirect endpoint reflects an external host
     assert o["sec-hosthdr-001"] == "clean"    # no endpoint reflects the Host header
     assert o["sec-split-001"] == "not_applicable"  # no form/param surface to inject CRLF into

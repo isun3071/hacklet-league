@@ -26,6 +26,7 @@ PASSIVE_PROBES = frozenset({
     "qa-a11y-001", "qa-a11y-002", "qa-links-001", "qa-console-001", "qa-ctype-001", "qa-devbuild-001",
     "qa-http-001", "qa-http-002", "qa-seo-001", "qa-backnav-001", "qa-chunk-001", "qa-deeplink-001",
     "qa-deploy-001",   # static-analyses the already-served client bundle for a dev/private backend URL
+    "qa-deploy-002",   # follows redirects from the homepage/links like a normal visitor (no mutation/payload)
 
     # security -- config/hygiene + leaks OBSERVED in what the app already serves to every visitor (headers,
     # bundle, normal responses, a served source map). No payload, no mutation, no FETCHING of hidden files.

@@ -544,10 +544,16 @@ def _tech_error(c, method, reqfn):
     payload that produced it), else (None, None). Reporting the payload keeps the repro honest: with more than
     one candidate, naming the wrong one hands the auditor a request that does not reproduce. The signature set
     is specific DB strings a validation error or SPA shell can't produce, so a match is a high-confidence
-    leak."""
+    leak. PAIRED CANARY (v2.0 foundation #2): a candidate match is confirmed only if a bare literal with NO SQL
+    syntax does NOT also produce the signature; if it does, the string is reflected/generated (an LLM describing
+    a SQL error, an echoed error template) rather than caused by the quote -> not causally specific -> suppress."""
     for payload in _SQLI_ERROR_PAYLOADS:
         m = _SQL_ERROR.search(_do(c, method, reqfn(payload)).text)
         if m:
+            if _SQL_ERROR.search(_do(c, method, reqfn(_SQLI_NOISE_A)).text):
+                return None, None   # bare literal (no quote) reproduces the error signature -> not attributable (#2)
+            if not _reproduces(lambda: _do(c, method, reqfn(payload)), lambda r: _SQL_ERROR.search(r.text)):
+                return None, None   # the quote's error does not reproduce -> nondeterministic endpoint (#1)
             return m.group(0), payload
     return None, None
 
@@ -575,6 +581,16 @@ def _diverges(a, b) -> bool:
         return True
     hi, lo = max(len(a.text), len(b.text)), min(len(a.text), len(b.text))
     return hi - lo > max(64, hi * 0.15)
+
+
+def _reproduces(send, signal) -> bool:
+    """Determinism gate (v2.0 LLM-echo foundation #1): re-send the IDENTICAL request that just matched; its
+    boolean oracle SIGNAL must reproduce. A content-oracle match on a nondeterministic endpoint (a flaky
+    upstream, per-request generation, an LLM in the response path) does not reproduce -> can't-assess, not a
+    fire. Comparing the SIGNAL (does the DB-error / file-content pattern match), not the raw body, tolerates
+    benign nonces / timestamps / request-ids that vary without moving it. Together with the caller's original
+    send this is the roadmap's 'send each request twice'; `send()` issues it, `signal(resp)` is the feature."""
+    return bool(signal(send()))
 
 
 def _tech_boolean(c, method, reqfn) -> bool:
@@ -1501,6 +1517,17 @@ _LFI_PAYLOADS = (
     "php://filter/convert.base64-encode/resource=/etc/passwd",
 )
 
+# PAIRED CANARY (v2.0 foundation #2): the firing payload with traversal/absolute/encoded/null-byte/php-wrapper
+# SYNTAX stripped -> a bare RELATIVE filename. A genuine include resolves it to a nonexistent local path (./etc/
+# passwd), so the file signature vanishes; an endpoint that REFLECTS or HALLUCINATES the signature keys on the
+# filename token and emits it again for the bare literal -> the canary reproduces the signature -> suppress.
+_LFI_SYNTAX = re.compile(r"\.\.\.\.//|\.\.[\\/]|\.\.%2f|%00.*$|php://filter/[^=]*resource=", re.I)
+
+
+def _lfi_canary(payload: str) -> str:
+    bare = _LFI_SYNTAX.sub("", payload).lstrip("/\\").replace("\\", "/")
+    return re.sub(r"(?i)^[a-z]:/", "", bare) or "etc/passwd"   # drop a leading drive letter (C:/)
+
 
 def path_traversal(ctx, probe) -> bool | None:
     """Path traversal / LFI across forms, discovered query params, common filename params on
@@ -1544,7 +1571,18 @@ def path_traversal(ctx, probe) -> bool | None:
                         if "javascript" in ct or "css" in ct:
                             continue
                         if _LFI_SIG.search(r.text):
-                            ctx.evidence.update(found=True, target=action, field=field)
+                            # paired canary: the bare filename (traversal stripped) must NOT also return the
+                            # file signature; if it does, the content is reflected/hallucinated, not traversed.
+                            cdata = {fn: (_lfi_canary(payload) if fn == field else _XSS_FILLER) for fn in fields}
+                            try:
+                                if _LFI_SIG.search(_xss_send(c, method, action, cdata).text):
+                                    continue   # not caused by traversal -> reflection/hallucination -> suppress (#2)
+                                if not _reproduces(lambda: _xss_send(c, method, action, data),
+                                                   lambda rr: _LFI_SIG.search(rr.text)):
+                                    continue   # file signature does not reproduce -> nondeterministic (#1)
+                            except (httpx.HTTPError, httpx.InvalidURL):
+                                pass       # control probe unreachable -> fall through and fire on direct evidence
+                            ctx.evidence.update(found=True, target=action, field=field, canary_clean=True)
                             return True  # returned the contents of a system file -> traversal/LFI
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -4762,31 +4800,39 @@ def a11y_hard_fails(ctx, probe) -> bool | None:
 _ANCHOR_HREF = re.compile(r"""<a\b[^>]*\bhref\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 
 
-def broken_links(ctx, probe) -> bool | None:
-    """Fetch each same-origin <a href> link on the homepage; fire if one lands on a 4xx dead end. N/A
-    when the page has no internal links to follow."""
-    budget = probe.probe.get("max_attempts", 40)
+def _same_origin_links(c, ctx, probe) -> list[str] | None:
+    """Same-origin <a href> paths on the homepage (deduped, the self-link + logout dropped). None when the
+    target isn't HTML or has no internal links -> the caller returns N/A. Shared by the 4xx dead-link probe and
+    the redirect-loop probe so both crawl the app's declared navigation identically."""
     target = _home_path(ctx, probe)
     base = urllib.parse.urlparse(ctx.base_url)
+    try:
+        r = c.get(target)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return None
+    if "html" not in r.headers.get("content-type", "").lower():
+        return None
+    links = []
+    for href in _ANCHOR_HREF.findall(r.text):
+        href = href.split("#")[0].strip()
+        if not href or href.startswith(("mailto:", "tel:", "javascript:", "data:")):
+            continue
+        if re.search(r"log[-_]?out|sign[-_]?out", href, re.IGNORECASE):
+            continue                                   # never GET a logout link (would drop the session)
+        t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, target), href))
+        if t.netloc == base.netloc and t.path:
+            links.append(t.path + ("?" + t.query if t.query else ""))
+    links = [p for p in dict.fromkeys(links) if p != target]   # dedupe, drop the self-link
+    return links or None
+
+
+def broken_links(ctx, probe) -> bool | None:
+    """Fetch each same-origin <a href> link on the homepage; fire if one lands on a 4xx dead end. N/A
+    when the page has no internal links to follow (5xx is out of scope here -> redirect_loop / crash probes)."""
+    budget = probe.probe.get("max_attempts", 40)
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        try:
-            r = c.get(target)
-        except (httpx.HTTPError, httpx.InvalidURL):
-            return None
-        if "html" not in r.headers.get("content-type", "").lower():
-            return None
-        links = []
-        for href in _ANCHOR_HREF.findall(r.text):
-            href = href.split("#")[0].strip()
-            if not href or href.startswith(("mailto:", "tel:", "javascript:", "data:")):
-                continue
-            if re.search(r"log[-_]?out|sign[-_]?out", href, re.IGNORECASE):
-                continue                                   # never GET a logout link (would drop the session)
-            t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, target), href))
-            if t.netloc == base.netloc and t.path:
-                links.append(t.path + ("?" + t.query if t.query else ""))
-        links = [p for p in dict.fromkeys(links) if p != target]   # dedupe, drop the self-link
-        if not links:
+        links = _same_origin_links(c, ctx, probe)
+        if links is None:
             return None
         for path in links[:budget]:
             try:
@@ -4798,6 +4844,56 @@ def broken_links(ctx, probe) -> bool | None:
                 continue
     ctx.evidence.update(broken=False, links_checked=len(links[:budget]))
     return False
+
+
+# ERR_TOO_MANY_REDIRECTS -- a route redirects without ever resolving (a self-loop, a cycle A->B->A, or an
+# unbounded chain), so a browser hits its ~20-hop redirect cap and shows an error page. The route is
+# unreachable for every visitor. Classic deploy causes: an auth guard that bounces / -> /login -> / when a
+# session cookie can't be set, a trailing-slash loop, or a base-URL/proxy misconfig that flips http<->https.
+_REDIRECT_CAP = 20   # matches the redirect limit real browsers enforce before ERR_TOO_MANY_REDIRECTS
+
+
+def redirect_loop(ctx, probe) -> bool | None:
+    """The homepage or a same-origin route it links to redirects endlessly (cycle or over the browser cap), so
+    a visitor gets ERR_TOO_MANY_REDIRECTS instead of the page. Follows redirects manually, same-origin only
+    (never chasing a redirect off-origin with the caller's auth headers); fires on a revisited URL (cycle) or on
+    exceeding the browser redirect cap. N/A when no reachable entry point / links. A loop is deterministic by
+    construction, so no separate reproduce gate is needed."""
+    cap = probe.probe.get("max_hops", _REDIRECT_CAP)
+    budget = probe.probe.get("max_attempts", 40)
+    base = urllib.parse.urlparse(ctx.base_url)
+    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
+        starts = [_home_path(ctx, probe)]
+        links = _same_origin_links(c, ctx, probe)
+        if links is None and not starts:
+            return None
+        starts += (links or [])[:budget]
+        reachable = False
+        for start in dict.fromkeys(starts):
+            url = urllib.parse.urljoin(ctx.base_url, start)
+            seen: set[str] = set()
+            for _ in range(cap + 1):
+                if urllib.parse.urlparse(url).netloc not in ("", base.netloc):
+                    break                                  # left our origin -> resolves elsewhere, not our loop
+                if url in seen:                            # revisited a URL we already fetched -> cycle
+                    ctx.evidence.update(loop=True, entry=start, hops=len(seen),
+                                        reason="redirect cycle", cycle_to=urllib.parse.urlparse(url).path)
+                    return True
+                seen.add(url)
+                try:
+                    r = c.get(url)
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    break
+                reachable = True
+                if not (300 <= r.status_code < 400 and "location" in r.headers):
+                    break                                  # resolved to a final (non-redirect) response
+                url = urllib.parse.urljoin(url, r.headers["location"])
+            else:
+                ctx.evidence.update(loop=True, entry=start, hops=cap + 1,
+                                    reason="exceeded the browser redirect cap (ERR_TOO_MANY_REDIRECTS)")
+                return True                                # never resolved within the cap -> unbounded chain
+    ctx.evidence.update(loop=False, routes_checked=len(dict.fromkeys(starts)))
+    return False if reachable else None
 
 
 # Mixed content — an HTTPS page that LOADS a subresource over plain http:// . A man-in-the-middle can
@@ -5396,6 +5492,7 @@ PREDICATES = {
     "http_soft_404": http_soft_404,
     "a11y_hard_fails": a11y_hard_fails,
     "broken_links": broken_links,
+    "redirect_loop": redirect_loop,
     "mixed_content": mixed_content,
     "seo_meta_missing": seo_meta_missing,
     "http_conformance": http_conformance,
@@ -5489,6 +5586,7 @@ _PREDICATE_REASONS = {
     "http_soft_404": "a nonexistent static asset returned 2xx instead of 404 (soft-404 -> pollutes caches / crawlers / monitoring)",
     "a11y_hard_fails": "accessibility hard-fail (missing lang / alt / form-control name / page title, or text below the 3:1 contrast floor)",
     "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
+    "redirect_loop": "the homepage or a route it links to redirects endlessly (ERR_TOO_MANY_REDIRECTS) -- the page never loads for any visitor",
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
