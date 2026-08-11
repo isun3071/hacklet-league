@@ -1025,19 +1025,56 @@ _RENDER_HEALTH_JS = r"""() => {
 }"""
 
 
+# v2.0 Family 3 -- widen console capture beyond uncaught throws. A CSP that blocks the app's OWN resource and a
+# React hydration mismatch are real functional breakages a browser reports as console.error (NOT pageerror), so
+# the old pageerror-only hook dropped them (qa-console-001 fired only ~39x on the corpus). Curated to two
+# high-precision classes, NOT all console.error, so library log-spam / benign warnings never register.
+_CSP_VIOLATION = re.compile(r"Content Security Policy|Refused to (?:load|execute|apply|connect|frame)", re.I)
+_HYDRATION_ERROR = re.compile(
+    r"Hydration failed|Text content does not match|error while hydrating|did not match\. Server|"
+    r"Minified React error #(?:418|423|425)", re.I)   # React hydration error codes
+
+
+def _console_failure(text: str, origin: str) -> str | None:
+    """Classify a console.error the pageerror hook misses. A hydration / React error is the app's OWN -> 'first'.
+    A CSP violation is 'first' ONLY when it blocks a SAME-ORIGIN resource (the app's own CSP against its own
+    code); a third-party-only block is the CSP working as intended -> 'third'; an unattributable inline block
+    (no URL -- could be an injected third-party inline the CSP correctly stopped) -> None. Anything else -> None
+    (log spam, a 404'd beacon, a benign lib warning), so this never widens into noise."""
+    if _HYDRATION_ERROR.search(text):
+        return "first"
+    if _CSP_VIOLATION.search(text):
+        urls = re.findall(r"https?://[^\s'\"]+", text)
+        if any(urllib.parse.urlparse(u).netloc == origin for u in urls):
+            return "first"                        # a same-origin resource the app's own CSP blocked -> breakage
+        return "third" if urls else None          # third-party block = CSP working; inline = unattributable -> drop
+    return None
+
+
+def _tally_console(pageerrors: list, console_errors_text: list, origin: str) -> dict:
+    """Fold pageerror throws + curated console.error failures into first/third/total counts. Factored out (pure)
+    for testing. `sources` records how many first-party came from each channel, so a widened fire is auditable."""
+    pe_fp = sum(1 for msg, stack in pageerrors if _first_party_error(msg, stack, origin))
+    classes = [_console_failure(t, origin) for t in console_errors_text]
+    c_fp = sum(1 for c in classes if c == "first")
+    c_tp = sum(1 for c in classes if c == "third")
+    return {"first_party": pe_fp + c_fp, "third_party": (len(pageerrors) - pe_fp) + c_tp,
+            "total": len(pageerrors) + c_fp + c_tp, "sources": {"pageerror": pe_fp, "console": c_fp}}
+
+
 def console_errors(url: str, headers=None, timeout: float = 12.0) -> dict | None:
-    """Render url and capture uncaught JavaScript errors thrown on load (pageerror), split into FIRST-PARTY
-    (the app's own code threw -> a real breakage) and THIRD-PARTY (a widget/analytics script on another
-    origin threw, or the browser sanitized a cross-origin error -> benign noise). Returns
-    {"first_party", "third_party", "total"} or None if no browser / the render fails. Only pageerror is
-    captured, so console.log spam, a 404'd analytics fetch, and a missing source map never register."""
+    """Render url and capture the app's OWN load-time JavaScript failures: uncaught throws (pageerror) PLUS the
+    curated console.error classes a throw hook misses -- a self-blocking CSP and a React hydration mismatch
+    (v2.0 Family 3). Split FIRST-PARTY (real breakage) vs THIRD-PARTY (a cross-origin widget the app renders
+    without -> benign). Returns {first_party, third_party, total, sources, content_len, error_overlay} or None
+    if no browser / render fails. Still ignores console.log spam, a 404'd beacon, and missing source maps."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return None
     origin = urllib.parse.urlparse(url).netloc
     try:
-        errs = []
+        errs, console = [], []
         with sync_playwright() as pw:
             b = _launch(pw)
             if b is None:
@@ -1046,6 +1083,7 @@ def console_errors(url: str, headers=None, timeout: float = 12.0) -> dict | None
                 page = b.new_page()
                 page.on("pageerror", lambda e: errs.append((str(getattr(e, "message", "") or e),
                                                             str(getattr(e, "stack", "") or ""))))
+                page.on("console", lambda m: console.append(m.text) if m.type == "error" else None)
                 _apply_auth(page, url, headers)
                 page.goto(url, timeout=timeout * 1000, wait_until="load")
                 page.wait_for_timeout(500)  # let late/async errors surface
@@ -1055,9 +1093,10 @@ def console_errors(url: str, headers=None, timeout: float = 12.0) -> dict | None
                     health = {}
             finally:
                 b.close()
-        fp = sum(1 for msg, stack in errs if _first_party_error(msg, stack, origin))
-        return {"first_party": fp, "third_party": len(errs) - fp, "total": len(errs),
-                "content_len": health.get("content_len"), "error_overlay": bool(health.get("error_overlay"))}
+        res = _tally_console(errs, console, origin)
+        res["content_len"] = health.get("content_len")
+        res["error_overlay"] = bool(health.get("error_overlay"))
+        return res
     except Exception:
         return None
 

@@ -4189,20 +4189,29 @@ def _console_broken_render(res: dict) -> bool:
 
 
 def console_errors_present(ctx, probe) -> bool:
-    """Browser oracle: the page throws an uncaught JavaScript error FROM ITS OWN CODE on load. A third-party
-    widget/analytics script throwing (cross-origin, browser-sanitized to "Script error.") is common on
-    working apps and does NOT count — only first-party errors are the team's durability failure. The penalty
-    is SCALED by render impact (see _console_broken_render): full when the error visibly broke the page,
+    """Browser oracle: the app's OWN code fails on load -- an uncaught JavaScript throw (pageerror), OR a
+    console.error the throw hook misses: a CSP that blocks its own resource, or a React hydration mismatch
+    (v2.0 Family 3 widening). A third-party widget throwing (cross-origin, browser-sanitized to "Script error.")
+    is common on working apps and does NOT count -- only first-party failures are the team's durability defect.
+    The penalty is SCALED by render impact (see _console_broken_render): full when it visibly broke the page,
     reduced when the app rendered fine despite it (a real but non-fatal defect). Browser-gated."""
     url = ctx.base_url.rstrip("/") + _home_path(ctx, probe)
     res = browser.console_errors(url, headers=ctx.headers)
     if res is None:
         return False   # no browser / render failed -> can't test (browser-gated)
     ctx.evidence.update(js_errors=res["total"], first_party=res["first_party"],
-                        third_party=res["third_party"], engine="pageerror")
+                        third_party=res["third_party"], sources=res.get("sources"),
+                        engine="pageerror+console")
     if res["first_party"] <= 0:
         return False
     broken = _console_broken_render(res)
+    # A console-sourced failure (a self-blocking CSP / a React hydration mismatch) is a weaker, flakier signal
+    # than an uncaught throw, so it counts ONLY when it VISIBLY broke the render (error overlay / near-empty
+    # body). A pageerror throw is high-confidence and fires regardless (scaled down on an intact render). This
+    # also neutralizes a flaky hydration error that didn't break anything -> it won't fire.
+    pe_fp = (res.get("sources") or {}).get("pageerror", res["first_party"])
+    if pe_fp <= 0 and not broken:
+        return False
     ctx.evidence.update(content_len=res.get("content_len"), error_overlay=bool(res.get("error_overlay")),
                         render_broken=broken,
                         penalty_override=probe.penalty if broken else max(1, round(probe.penalty * _CONSOLE_INTACT_SCALE)))
@@ -5729,7 +5738,7 @@ _PREDICATE_REASONS = {
     "slow_first_paint": "First Contentful Paint exceeded the gate",
     "slow_core_web_vitals": "Core Web Vitals poor on the best of N throttled samples (slow LCP / layout shift / main-thread blocking)",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
-    "console_errors_present": "threw an uncaught JavaScript error on load",
+    "console_errors_present": "the app's own code fails on load (an uncaught JS error, a CSP that blocks its own resource, or a React hydration mismatch)",
     "dead_controls_present": "clickable controls wired to nothing (no effect on click) — non-functional UI",
     "a11y_violations_present": "accessibility violations (missing alt / form label / lang / control name)",
     "open_redirect": "a user-controlled parameter redirects to an arbitrary external host",
