@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 
 import httpx
 
-from . import auth, platform_id, secretscan
+from . import auth, platform_id, safety, secretscan
 from .aggregate import compute_axis_slop, compute_slop_score, coverage_metrics
 from .deploy import Deployer
 from .discovery import discover, surface_metrics
@@ -272,6 +272,11 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
                                   bot_challenge=True, challenge_stage="entry", trace=trace_sink or [])
             except Exception:   # best-effort side check: a failed probe fetch must never gate the grade
                 pass
+            # Run low-volume probes FIRST, the high-volume injection/stress tail LAST: on an adaptive-WAF host a
+            # challenge then trips late (during the tail), so the recovery keeps the already-collected outcomes
+            # (it scores only PRE-onset). Stable sort -> catalog order preserved within each tier; a completed
+            # grade's score is order-independent, so this never perturbs a clean grade.
+            catalog = sorted(catalog, key=lambda p: safety.order_weight(p.id))
             cat_index = {p.id: i for i, p in enumerate(catalog)}
             for i, probe in enumerate(catalog):
                 set_trace_probe(probe.id)                      # tag every request (for --trace AND the always-on
