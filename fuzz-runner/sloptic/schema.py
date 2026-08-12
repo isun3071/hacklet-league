@@ -145,6 +145,12 @@ class Report:
     #                                                        grade completed and is VALID -> kept). "" = no challenge.
     challenge_onset: str = ""                              # probe whose traffic first tripped a WAF status (diagnose the trigger)
     request_counts: dict = field(default_factory=dict)     # {probe_id: request count} — which probes send abnormally many
+    blocked_probes: list = field(default_factory=list)     # probes that DID NOT run because a challenge tripped mid-grade
+    #                                                        (a THIRD state distinct from clean/n-a: not tested, not absent-
+    #                                                        surface). A multi-pass grade re-runs these; whatever stays here
+    #                                                        after passes exhaust is honestly UNTESTED -> never a false clean.
+    incomplete_axes: list = field(default_factory=list)    # bundles with >=1 blocked probe -> that axis is PARTIAL, must not
+    #                                                        rank as clean (e.g. "security: partial — N severe edge-blocked")
     trace: list = field(default_factory=list)              # --trace only: every request each probe sent (net.start_trace)
 
     @property

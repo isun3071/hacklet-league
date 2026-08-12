@@ -643,6 +643,11 @@ def main():
               f"   ·   ENTRY (challenged from the start -> withheld): {len(entry_ch)}")
         print("    by host (challenged / total on platform): "
               + "  ".join(f"{h}={n}/{t}({pct:.0f}%)" for h, n, t, pct in challenge_by_host))
+        inc_axis = [r for r in recs if r.get("incomplete_axes")]   # KEPT grades whose severe tail was edge-blocked
+        if inc_axis:
+            axc = Counter(a for r in inc_axis for a in (r.get("incomplete_axes") or []))
+            print(f"    INCOMPLETE axes (grade KEPT but that axis NOT clean-tested, severe edge-blocked): "
+                  f"{len(inc_axis)} apps  ·  " + "  ".join(f"{a}={n}" for a, n in axc.most_common()))
         if onset_by_probe:   # which probe's traffic first tripped the WAF -> the gate/reorder candidates
             print("    tripped BY probe (first challenge status): "
                   + "  ".join(f"{p}={n}" for p, n in onset_by_probe.most_common(8)))

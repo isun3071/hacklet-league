@@ -216,6 +216,12 @@ def _run_probe(probe: Probe, ctx: _Ctx, client: httpx.Client, profile: Profile) 
     return produced
 
 
+def _blocked(probes: list[Probe]) -> tuple[list[str], list[str]]:
+    """Probes a challenge prevented from running -> (their ids, the bundles/axes left INCOMPLETE). The axes are
+    what a consumer needs: a bundle with any blocked probe cannot be presented or ranked as clean."""
+    return [p.id for p in probes], sorted({p.bundle for p in probes})
+
+
 def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_progress=None,
         source_dir=None, seed_features=None, cached_profile=None, on_profile=None, perceive=None,
         browser_register=None, recon: bool = False, auth_crawl: bool = False, trace: bool = False,
@@ -267,9 +273,11 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
             # from the score distribution, never read as a clean grade.
             try:
                 if is_bot_challenge(client.get(origin)):   # challenged from the FIRST fetch -> ungradeable, withhold
+                    bp, ia = _blocked(catalog)              # nothing ran -> the whole battery is blocked
                     return Report(slop_score=0, outcomes=[], surface=surface_metrics(profile),
                                   platform=platform_id.classify_live(client, origin),
-                                  bot_challenge=True, challenge_stage="entry", trace=trace_sink or [])
+                                  bot_challenge=True, challenge_stage="entry",
+                                  blocked_probes=bp, incomplete_axes=ia, trace=trace_sink or [])
             except Exception:   # best-effort side check: a failed probe fetch must never gate the grade
                 pass
             # Run low-volume probes FIRST, the high-volume injection/stress tail LAST: on an adaptive-WAF host a
@@ -315,14 +323,18 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
         # saw the real app (an early trip). An END-only challenge (no mid-grade onset) means every probe ran on
         # the app -> keep them all. The v17 sample proved such kept grades match clean ones.
         stage, bot_challenge = "", False
+        blocked_probes, incomplete_axes = [], []
         if onset_probe:
             bot_challenge = True
             onset_idx = cat_index.get(onset_probe, total)
             if onset_idx < _MIN_VALID_FRACTION * total:   # too little clean data -> ungradeable, like an entry challenge
+                bp, ia = _blocked(catalog)                # nothing usable ran -> the whole battery is blocked
                 return Report(slop_score=0, outcomes=[], surface=surface_metrics(profile), platform=plat,
                               bot_challenge=True, challenge_stage="entry", challenge_onset=onset_probe,
-                              request_counts=req_counts, trace=trace_sink or [])
+                              request_counts=req_counts, blocked_probes=bp, incomplete_axes=ia,
+                              trace=trace_sink or [])
             outcomes = [o for o in outcomes if cat_index.get(o.probe_id, total) < onset_idx]
+            blocked_probes, incomplete_axes = _blocked(catalog[onset_idx:])   # the tail a challenge cut off
             stage = "late"
         elif end_challenged:
             bot_challenge, stage = True, "late"
@@ -330,7 +342,7 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
                       axis_slop=compute_axis_slop(outcomes), surface=surface_metrics(profile),
                       coverage=coverage_metrics(outcomes), platform=plat, bot_challenge=bot_challenge,
                       challenge_stage=stage, challenge_onset=onset_probe or "", request_counts=req_counts,
-                      trace=trace_sink or [])
+                      blocked_probes=blocked_probes, incomplete_axes=incomplete_axes, trace=trace_sink or [])
     finally:
         deployer.teardown()
 

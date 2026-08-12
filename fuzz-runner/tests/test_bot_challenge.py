@@ -128,3 +128,19 @@ def test_pipeline_withholds_grade_on_a_challenge(challenge_url):
     assert report.challenge_stage == "entry"   # challenge from the FIRST fetch -> ungradeable -> withheld (not "late")
     assert report.outcomes == []            # the gauntlet was withheld, not run on the interstitial
     assert report.slop_score == 0           # not a false clean and not false slop: no grade at all
+    # transparency: nothing ran, so the WHOLE battery is blocked and EVERY axis is incomplete -> a score of 0
+    # here must never read as "clean". A severe probe is explicitly on the blocked list, not silently absent.
+    assert set(report.blocked_probes) == {p.id for p in catalog}
+    assert set(report.incomplete_axes) == {"security", "qa", "performance"}
+    assert "sec-cmdi-001" in report.blocked_probes
+
+
+def test_blocked_helper_maps_probes_to_their_axes():
+    from sloptic.catalog import load_catalog
+    from sloptic.pipeline import _blocked
+    catalog = load_catalog(str(pathlib.Path(__file__).resolve().parent.parent / "catalog"))
+    tail = [p for p in catalog if p.id in ("sec-cmdi-001", "sec-ssti-001", "qa-crash-010")]
+    ids, axes = _blocked(tail)
+    assert set(ids) == {"sec-cmdi-001", "sec-ssti-001", "qa-crash-010"}
+    assert set(axes) == {"security", "qa"}   # the bundles those blocked probes belong to
+    assert _blocked([]) == ([], [])          # a fully-completed grade blocks nothing
