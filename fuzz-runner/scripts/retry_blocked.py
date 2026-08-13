@@ -14,6 +14,9 @@ calibration data.
     python scripts/retry_blocked.py --results run.jsonl [--browser-auth] [--concurrency N]
 
 One pass by default (recovers most of the tail on fresh-budget apps; sticky apps stay flagged, honestly).
+Re-fold an already-run retry without re-grading (pure, seconds — e.g. after a merge() fix):
+
+    python scripts/retry_blocked.py --results run.jsonl --remerge
 """
 import argparse
 import hashlib
@@ -144,6 +147,40 @@ def _retry_one(url, blocked, tmpdir, extra_flags, grade_timeout):
         return url, blocked, None   # DNF -> _status reports dnf, merge recovers nothing
 
 
+def _load_jobs(records):
+    """The challenged apps to (re-)fold: (url, blocked_probes), deduped by url (a url is graded once)."""
+    seen, jobs = set(), []
+    for r in records:
+        url = _url_of(r)
+        if r.get("blocked_probes") and url and url not in seen:
+            seen.add(url)
+            jobs.append((url, r.get("blocked_probes")))
+    return jobs
+
+
+def _fold_and_summary(records, collected, tally, merged_file, results_path, retry_file):
+    """Fold every graded retry record into its full-grade record -> .merged.jsonl (main untouched), then
+    print the run summary. Shared by the live retry and --remerge so a fold is byte-identical either way."""
+    bundle_of = {p.id: p.bundle for p in load_catalog(str(_ROOT / "catalog"))}
+    n_recovered = n_fired = n_apps = 0
+    with open(merged_file, "w") as out:
+        for r in records:
+            url = _url_of(r)
+            if r.get("blocked_probes") and collected.get(url) is not None:
+                r = merge(r, collected[url], bundle_of)
+                n_apps += 1
+                n_recovered += len(r["retry"]["recovered"])
+                n_fired += len(r["retry"]["fired"])
+            out.write(json.dumps(r) + "\n")
+    print(f"\nRETRY DONE — apps: FULL={tally['full']}  partial={tally['partial']}  none={tally['none']}  "
+          f"dnf={tally['dnf']}   ·   {n_recovered} probes recovered · {n_fired} NEW findings")
+    if n_fired:
+        print("  ⚠ NEW findings on previously-blocked apps — inspect .merged.jsonl (retry.fired)")
+    if not n_recovered:
+        print("  (NO recovery — every blocked app re-challenged or DNF'd; blocked tails stay flagged)")
+    print(f"  merged -> {merged_file}   ·   raw retry -> {retry_file}   ·   main untouched: {results_path}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="retry the WAF-blocked tail on challenged apps, post-run")
     ap.add_argument("--results", required=True, help="the main run's results .jsonl (never mutated)")
@@ -151,26 +188,34 @@ def main():
     ap.add_argument("--grade-timeout", type=int, default=900, help="per-app subset-grade timeout (s)")
     ap.add_argument("--browser-auth", action="store_true", help="pass through to the grader (MATCH the main run)")
     ap.add_argument("--no-browser", action="store_true", help="pass through to the grader (MATCH the main run)")
+    ap.add_argument("--remerge", action="store_true",
+                    help="skip grading: re-fold the EXISTING <results>.retry.jsonl into .merged.jsonl (use "
+                         "after a merge-logic fix — the fold is pure, so no re-grade is needed)")
     args = ap.parse_args()
 
     records = _read_jsonl(args.results)
-    blocked = [(_url_of(r), r.get("blocked_probes")) for r in records
-               if r.get("blocked_probes") and _url_of(r)]
-    # dedup by url (a url graded once); keep the first blocked list
-    seen, jobs = set(), []
-    for url, bp in blocked:
-        if url not in seen:
-            seen.add(url)
-            jobs.append((url, bp))
+    jobs = _load_jobs(records)
     print(f"blocked apps to retry: {len(jobs)} of {len(records)} records", flush=True)
     if not jobs:
         print("nothing blocked — no retry needed."); return
 
     retry_file = args.results + ".retry.jsonl"
     merged_file = args.results + ".merged.jsonl"
+
+    # --remerge: the retry already ran; just re-fold its records (e.g. after fixing merge()). Pure, seconds.
+    if args.remerge:
+        collected = {_url_of(r): r for r in _read_jsonl(retry_file) if _url_of(r)}
+        if not collected:
+            print(f"no retry records at {retry_file} — run the retry first (without --remerge)."); return
+        print(f"re-merge only: folding {len(collected)} existing retry records from {retry_file}", flush=True)
+        tally = Counter()
+        for url, bp in jobs:
+            tally[_status(bp, collected.get(url))[0]] += 1
+        _fold_and_summary(records, collected, tally, merged_file, args.results, retry_file)
+        return
+
     extra = (["--browser-auth"] if args.browser_auth else []) + (["--no-browser"] if args.no_browser else [])
     tmpdir = tempfile.mkdtemp(prefix="sloptic-retry-")
-
     collected = {}                    # url -> retry record (None on DNF)
     tally = Counter()
     done = 0
@@ -187,31 +232,13 @@ def main():
             with _print_lock:
                 print(f"  [{done}/{len(jobs)}] {mark} {n:>2}/{tot:<2}{note:<28} {url}", flush=True)
 
-    # persist raw retry records (for inspection) + fold into the merged grades (main results untouched)
+    # persist raw retry records (for inspection + later --remerge), then fold into the merged grades
     with open(retry_file, "w") as rf:
         for rec in collected.values():
             if rec is not None:
                 rf.write(json.dumps(rec) + "\n")
-    bundle_of = {p.id: p.bundle for p in load_catalog(str(_ROOT / "catalog"))}
-    n_recovered = n_fired = n_apps = 0
-    with open(merged_file, "w") as out:
-        for r in records:
-            url = _url_of(r)
-            if r.get("blocked_probes") and collected.get(url) is not None:
-                r = merge(r, collected[url], bundle_of)
-                n_apps += 1
-                n_recovered += len(r["retry"]["recovered"])
-                n_fired += len(r["retry"]["fired"])
-            out.write(json.dumps(r) + "\n")
+    _fold_and_summary(records, collected, tally, merged_file, args.results, retry_file)
     shutil.rmtree(tmpdir, ignore_errors=True)
-
-    print(f"\nRETRY DONE — apps: FULL={tally['full']}  partial={tally['partial']}  none={tally['none']}  "
-          f"dnf={tally['dnf']}   ·   {n_recovered} probes recovered · {n_fired} NEW findings")
-    if n_fired:
-        print("  ⚠ NEW findings on previously-blocked apps — inspect .merged.jsonl (retry.fired)")
-    if not n_recovered:
-        print("  (NO recovery — every blocked app re-challenged or DNF'd; blocked tails stay flagged)")
-    print(f"  merged -> {merged_file}   ·   raw retry -> {retry_file}   ·   main untouched: {args.results}")
 
 
 if __name__ == "__main__":

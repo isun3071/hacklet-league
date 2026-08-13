@@ -2,12 +2,14 @@
 orchestration needs live URLs (can't unit-test), but the MERGE is pure and must be exactly right: it moves
 recovered probes out of `blocked`, clears an axis only when its whole blocked share came back, adds any new
 findings, and recomputes the score, while an empty retry reproduces the record untouched."""
+import json
 import pathlib
 import sys
+from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from retry_blocked import _status, _to_outcome, merge  # noqa: E402
+from retry_blocked import _fold_and_summary, _load_jobs, _status, _to_outcome, merge  # noqa: E402
 
 from sloptic.aggregate import compute_slop_score  # noqa: E402
 
@@ -125,3 +127,28 @@ def test_dnf_retry_recovers_nothing():
     assert m["incomplete_axes"] == ["security"]                     # still incomplete
     assert m["retry"]["recovered"] == []                           # nothing recovered
     assert m["slop_score"] == main["slop_score"]
+
+
+def test_load_jobs_dedups_by_url_and_skips_unblocked():
+    recs = [{"repo": "https://a", "blocked_probes": ["sec-cmdi-001"]},
+            {"repo": "https://a", "blocked_probes": ["sec-cmdi-001"]},   # dup url -> once
+            {"repo": "https://b", "blocked_probes": []},                 # not blocked -> skip
+            {"repo": "local-ingest-id", "blocked_probes": ["sec-cmdi-001"]},  # non-url repo -> skip
+            {"repo": "https://c", "blocked_probes": ["sec-ssti-001"]}]
+    assert [u for u, _ in _load_jobs(recs)] == ["https://a", "https://c"]
+
+
+def test_fold_and_summary_folds_blocked_and_copies_the_rest(tmp_path):
+    # the shared fold (also the --remerge path): a blocked app with a clean-recovery retry record is folded
+    # (block cleared, retry key added); an app that was never blocked is written back untouched.
+    main = [{"repo": "https://blk", "blocked_probes": ["sec-cmdi-001"], "findings": [], "slop_score": 7,
+             "incomplete_axes": ["security"], "axis_slop": {"security": 7}},
+            {"repo": "https://clean", "findings": [], "slop_score": 5}]     # never blocked
+    collected = {"https://blk": _retry([], [])}                            # tail ran, nothing fired
+    out = tmp_path / "m.jsonl"
+    _fold_and_summary(main, collected, Counter(), str(out), "run.jsonl", "run.retry.jsonl")
+    rows = [json.loads(x) for x in out.read_text().splitlines()]
+    assert rows[0]["blocked_probes"] == [] and rows[0]["incomplete_axes"] == []   # folded
+    assert rows[0]["retry"]["recovered"] == ["sec-cmdi-001"]
+    assert rows[0]["slop_score"] == 7                                             # clean recovery -> exact
+    assert rows[1] == main[1]                                                     # unblocked app untouched
