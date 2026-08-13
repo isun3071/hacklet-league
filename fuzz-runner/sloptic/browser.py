@@ -274,7 +274,7 @@ def await_streamlit(page, budget_s: float = 60.0) -> str:
 def render_routes(base_url: str, paths, headers=None, timeout: float = 12.0,
                   total_timeout: float = 60.0, interact: bool = True,
                   interact_routes: int = 6, net_sink: list | None = None,
-                  script_sink: list | None = None) -> dict[str, str]:
+                  script_sink: list | None = None, meta_sink: dict | None = None) -> dict[str, str]:
     """Render each same-origin path in ONE reused browser session and return {path: rendered_DOM}.
     Paths that fail to load are omitted; {} if no browser is available. A single launch is amortized
     across all routes — a launch-per-route helper would relaunch (and re-warm) the browser each time.
@@ -321,7 +321,9 @@ def render_routes(base_url: str, paths, headers=None, timeout: float = 12.0,
                         page.goto(url, timeout=timeout * 1000, wait_until="load")
                         if idx == 0 and _looks_streamlit(page, url):
                             # websocket-rendered SPA: wake + wait for the real app, bounded by the crawl deadline
-                            await_streamlit(page, budget_s=max(8.0, deadline - time.monotonic()))
+                            st_state = await_streamlit(page, budget_s=max(8.0, deadline - time.monotonic()))
+                            if meta_sink is not None:      # rendered|error|stuck -> the record's shell_only signal
+                                meta_sink["render_state"] = st_state
                         else:
                             page.wait_for_timeout(300)  # let client JS paint the route's forms/inputs
                         dom = page.content()

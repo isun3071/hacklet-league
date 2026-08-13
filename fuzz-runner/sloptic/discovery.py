@@ -1050,6 +1050,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             routes.setdefault(ep.path, None)
 
     browser_ok = False
+    render_state = None        # Streamlit render outcome (rendered|error|stuck) -> the capture-based shell_only signal
     backend_tables: list = []  # managed-backend tables the app's own runtime traffic read (RLS probe input)
     host_tiers: dict = {}     # off-score: where the app's runtime traffic goes (same-origin / BaaS / vendor /
     if render is not None:    # other off-origin) — populated from the observed net once the browser render runs
@@ -1071,8 +1072,11 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             _auth = _crawl_auth_headers(base_url, forms)
             if _auth:
                 render_headers = {**(headers or {}), **_auth}
+        render_meta: dict = {}
         rendered = render(base_url, [start_path], headers=render_headers,   # .js URLs (native ESM import() chunks a
-                          net_sink=observed_net, script_sink=observed_scripts) or {}   # static <script> scan can't see)
+                          net_sink=observed_net, script_sink=observed_scripts,
+                          meta_sink=render_meta) or {}   # static <script> scan can't see; meta = Streamlit state
+        render_state = render_meta.get("render_state")
         if rendered:
             browser_ok = True  # a real render returned HTML -> the browser actually launched/works
             any_response = True
@@ -1270,7 +1274,7 @@ def discover(base_url: str, render=None, max_pages: int = MAX_PAGES, max_depth: 
             pass
     return Profile(base_url=base_url, landing_path=landing_path, routes=list(routes), forms=forms,
                    capabilities=capabilities, endpoints=endpoints, host_tiers=host_tiers,
-                   backend_tables=backend_tables)
+                   backend_tables=backend_tables, render_state=render_state)
 
 
 def surface_metrics(profile: Profile) -> dict:
@@ -1357,4 +1361,5 @@ def surface_metrics(profile: Profile) -> dict:
         "catch_all": bool(caps.get("catch_all")),    # phantom server-side surface was suppressed (soft-404/SPA)
         "host_tiers": profile.host_tiers,            # off-score: backend-tier map (where runtime traffic GOES) —
                                                      # batch-aggregates to size the SPA off-origin gap (Move 2)
+        "render_state": profile.render_state,        # Streamlit: rendered|error|stuck (None = not a canvas-shell host)
     }
