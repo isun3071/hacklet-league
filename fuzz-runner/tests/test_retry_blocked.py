@@ -16,8 +16,11 @@ BUNDLE = {"sec-cmdi-001": "security", "sec-ssti-001": "security", "sec-idor-002"
 
 
 def _f(pid, cat, pen, bundle="security", vg=None):
-    return {"probe_id": pid, "bundle": bundle, "category": cat, "outcome": "slop_detected",
-            "penalty": pen, "variant_group_id": vg, "target": "", "reason": "", "evidence": {}}
+    # Mirror the PRODUCTION finding serialization (deploy_and_grade.py _record): the variant group is stored
+    # under "group", and there is NO "outcome" key (every finding is a fired slop). Earlier fixtures used the
+    # dataclass field name "variant_group_id", so they never exercised the key merge() actually parses.
+    return {"probe_id": pid, "bundle": bundle, "category": cat, "penalty": pen, "group": vg,
+            "target": "", "reason": "", "count": 1, "targets": [], "evidence": {}}
 
 
 def _scored(findings, blocked, incomplete):
@@ -76,6 +79,31 @@ def test_status_separates_full_partial_none_dnf():
     assert _status(blocked, {"deployed": True, "slop_score": 0, "blocked_probes": blocked})[0] == "none"  # re-tripped at once
     assert _status(blocked, {"deployed": False})[0] == "dnf"                 # grade failed
     assert _status(blocked, None)[0] == "dnf"
+
+
+def test_variant_group_collapses_through_the_serialized_group_key():
+    # REGRESSION: the serialized key is "group", not "variant_group_id". One flaw probed via several SQLi
+    # syntaxes (same group) must count ONCE at its max penalty on recompute — not once per variant. If merge
+    # reads the wrong key the group scatters into singles and every recovered app with multi-variant findings
+    # inflates (here 40 -> 78).
+    main = _scored([], ["sec-sqli-001"], ["security"])
+    retry = _retry([], [_f("sec-sqli-001", "sql-injection", 40, vg="sqli"),
+                        _f("sec-sqli-002", "sql-injection", 40, vg="sqli"),
+                        _f("sec-sqli-003", "sql-injection", 40, vg="sqli")])
+    m = merge(main, retry, BUNDLE)
+    assert m["slop_score"] == 40                       # one group fire, not 3 (would be 78 with decay)
+
+
+def test_clean_recovery_preserves_the_exact_stored_score():
+    # A clean recovery adds no finding -> the merged score must be main's stored value EXACTLY (not a
+    # from-scratch recompute, which drifts off the deduped findings). Stored score is deliberately offset
+    # from what the findings recompute to, to prove merge kept the stored number rather than recomputing.
+    main = _scored([_f("sec-headers-001", "security-headers", 6)], ["sec-cmdi-001"], ["security"])
+    main["slop_score"] = 999                            # a value the findings do NOT recompute to
+    m = merge(main, _retry([], []), BUNDLE)
+    assert m["slop_score"] == 999                       # preserved, not recomputed
+    assert m["blocked_probes"] == []                    # coverage still updates
+    assert m["incomplete_axes"] == []
 
 
 def test_retry_never_invents_a_block_outside_the_original():

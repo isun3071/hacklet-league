@@ -62,9 +62,13 @@ def _url_of(rec):
 
 
 def _to_outcome(f):
+    # PRODUCTION serialization (deploy_and_grade.py) stores the variant group under "group" and writes NO
+    # "outcome" key (findings are all fired). Read "group" first — reading the dataclass field name
+    # `variant_group_id` here silently dropped every group, so from-scratch recompute stopped collapsing
+    # multi-syntax findings (5 SQLi variants scored as 5, not 1) and inflated the merged score.
     return Outcome(probe_id=f.get("probe_id", ""), bundle=f.get("bundle", ""), category=f.get("category", ""),
                    outcome=f.get("outcome", "slop_detected"), penalty=f.get("penalty", 0) or 0,
-                   variant_group_id=f.get("variant_group_id"), target=f.get("target", ""),
+                   variant_group_id=f.get("group") or f.get("variant_group_id"), target=f.get("target", ""),
                    reason=f.get("reason", ""), evidence=f.get("evidence") or {})
 
 
@@ -85,12 +89,18 @@ def merge(main_rec, retry_rec, bundle_of):
     still_blocked = set(retry_rec.get("blocked_probes") or []) if _graded(retry_rec) else set(main_blocked)
     still_blocked &= set(main_blocked)                              # never invent a block the main run didn't have
     recovered = [p for p in main_blocked if p not in still_blocked]  # ran in the retry (clean OR fired)
-    findings = list(main_rec.get("findings") or []) + list((retry_rec or {}).get("findings") or [])
-    outs = [_to_outcome(f) for f in findings]
+    new_findings = list((retry_rec or {}).get("findings") or [])
+    findings = list(main_rec.get("findings") or []) + new_findings
     merged = dict(main_rec)
     merged["findings"] = findings
-    merged["slop_score"] = compute_slop_score(outs)
-    merged["axis_slop"] = compute_axis_slop(outs)
+    # A CLEAN recovery (tail ran, nothing fired) changes COVERAGE, not the score — keep main's exact stored
+    # slop_score/axis_slop. Only a genuine new finding recomputes. (Serialized findings are deduped by
+    # (probe_id, reason) with a `count`, so a from-scratch recompute can drift a point or two off the
+    # pipeline's score; recomputing only when the retry actually fired keeps the 700+ clean recoveries exact.)
+    if new_findings:
+        outs = [_to_outcome(f) for f in findings]
+        merged["slop_score"] = compute_slop_score(outs)
+        merged["axis_slop"] = compute_axis_slop(outs)
     merged["blocked_probes"] = sorted(still_blocked)
     merged["incomplete_axes"] = sorted({bundle_of[p] for p in still_blocked if p in bundle_of})
     merged["retry"] = {
