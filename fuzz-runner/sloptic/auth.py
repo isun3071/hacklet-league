@@ -598,12 +598,26 @@ _PROVIDER_SESSION = ("auth0",)
 # JS-readable (judging it would report a false hygiene failure), a refresh token is not the access session,
 # and an email/verification token is not a login. Exclusions win over hints.
 _NOT_SESSION = ("csrf", "xsrf", "antiforgery", "anti-forgery", "authenticity", "verification", "verify",
-                "refresh")
+                "refresh", "code-verifier", "code_verifier", "clerk_db_jwt", "taboola")
 # `authenticity` was missing and is a pre-existing FP vector this file's own precision test caught: Rails names
 # its CSRF token `authenticity_token`, which contains "token" and so matched as a session. is_csrf_field already
 # listed it for FORM fields (_CSRF_FIELD_HINTS) while the COOKIE check did not — the two lists had drifted. A
 # CSRF cookie is deliberately JS-readable, so judging one reports a false "missing HttpOnly" on an app doing
 # nothing wrong, which is precisely what these exclusions exist to prevent.
+#
+# The last four were the ENTIRE sec-session-001 fire set on the v18 corpus (23/23 findings, a 100%-FP probe),
+# all client-readable-BY-DESIGN vendor cookies namespaced into the auth family but NOT the app's session:
+#   `code-verifier`  Supabase/PKCE `sb-<ref>-auth-token-code-verifier` — the pre-login OAuth nonce (9 apps).
+#                    The real session is a JWT in localStorage, which sec-session-005 already judges. The SDK
+#                    MUST read the verifier from JS to complete the code exchange, so HttpOnly is impossible.
+#   `clerk_db_jwt`   Clerk's dev-instance handshake cookie `__clerk_db_jwt[_suffix]` (13 apps). Clerk's real
+#                    session is `__session` (HttpOnly, and still judged); the db-jwt is JS-read by the FAPI
+#                    client by design. Matched here only via the "jwt" hint.
+#   `taboola`        `taboola_session_id`, a third-party ad-network tracker (1 app) — session-NAMED but not an
+#                    app login at all. Matched via the "session" hint.
+# The verifier/db-jwt were selected because `session_cookie()` prefers a token-shaped value and their opaque
+# base64url bodies pass `_token_shaped`, so nothing downstream rescued the pick. Same bar as every other entry
+# here: added only after being VERIFIED on live findings, never speculatively.
 
 
 def _is_session_cookie(name: str) -> bool:
