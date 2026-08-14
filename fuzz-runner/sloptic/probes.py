@@ -583,6 +583,21 @@ def _diverges(a, b) -> bool:
     return hi - lo > max(64, hi * 0.15)
 
 
+def _boolean_split(t, f) -> bool:
+    """A DIRECTIONAL boolean-blind split. `col='1' OR '1'='1'` (TRUE) selects EVERY row; `col='1' OR '1'='2'`
+    (FALSE) selects only the col='1' subset — so TRUE returns a SUPERSET of FALSE and a genuine split has the
+    TRUE body DOMINATING FALSE: a status flip (rows vs none), or, at equal status, a TRUE body no smaller than
+    FALSE. The retired symmetric `_diverges` also fired when a fuzzy search returned a different-SIZED hit per
+    query STRING with no ordering — roadio's geocoder answered FALSE='1'='2' with 2023B (Guatemala) > TRUE with
+    312B (Iceland), a v18 false positive. Requiring the direction rejects that while still catching a real
+    result-set gate (the reversed case is not how `OR 1=1` vs `OR 1=2` behaves)."""
+    if not _diverges(t, f):
+        return False
+    if t.status_code != f.status_code:
+        return True                       # a true/false STATUS flip (both payloads are quote-shaped) is SQL-specific
+    return len(t.text) >= len(f.text)     # equal status -> TRUE (all rows) must be at least as large as FALSE
+
+
 def _reproduces(send, signal) -> bool:
     """Determinism gate (v2.0 LLM-echo foundation #1): re-send the IDENTICAL request that just matched; its
     boolean oracle SIGNAL must reproduce. A content-oracle match on a nondeterministic endpoint (a flaky
@@ -594,17 +609,25 @@ def _reproduces(send, signal) -> bool:
 
 
 def _tech_boolean(c, method, reqfn) -> bool:
-    """Strict boolean-blind, gated on the endpoint's own NOISE FLOOR. First send two DIFFERENT inert benign
-    values; if THEY already diverge, the output is content-driven (an LLM/TTS/proxy varies with the input),
-    not a SQL result set, so a true/false split is meaningless -> suppress (error-based still runs). Only on a
-    stable endpoint: fire when the structurally-identical TRUE vs FALSE pair (one boolean apart) diverges AND
-    the split REPRODUCES on a second independent pair (rejects one-off flakiness). This is the differential-
-    control form of the causal-specificity invariant above — a content-reflective endpoint can't fake it."""
+    """Strict boolean-blind, gated THREE ways against the AI-corpus confounds — a content-reflective search or
+    an LLM in the response path can fake a true/false split, and both did on v18 (0/2 scored boolean fires were
+    real). (1) NOISE FLOOR: two DIFFERENT inert benign values; if THEY already diverge the output is content-
+    driven (an LLM/TTS/proxy varies with the input) -> suppress (error-based still runs). (2) DETERMINISM: the
+    SAME payload sent twice must reproduce — guardian's /api/case-update feeds new_status_label to an LLM that
+    writes fresh guidance each call, so identical requests diverge; its true/false gap is generation variance,
+    not a boolean, and the old 'reproduce on a second pair' passed because ANY two LLM outputs differ. (3)
+    DIRECTIONAL SPLIT: TRUE (OR 1=1, every row) must DOMINATE FALSE (OR 1=2, a subset), reproduced on a second
+    pair — roadio's geocoder returned a different-sized place per string (FALSE > TRUE, the wrong direction) and
+    tripped the old symmetric divergence. This is the differential-control form of the causal-specificity
+    invariant above; the three gates together are what a content-reflective endpoint cannot fake."""
     if _diverges(_do(c, method, reqfn(_SQLI_NOISE_A)), _do(c, method, reqfn(_SQLI_NOISE_B))):
-        return False   # content-reflective / non-deterministic endpoint -> the differential oracle is confounded
-    if not _diverges(_do(c, method, reqfn(_SQLI_TRUE)), _do(c, method, reqfn(_SQLI_FALSE))):
-        return False
-    return _diverges(_do(c, method, reqfn(_SQLI_TRUE)), _do(c, method, reqfn(_SQLI_FALSE)))  # reproduce the split
+        return False   # (1) content-reflective endpoint -> the differential oracle is confounded
+    true1 = _do(c, method, reqfn(_SQLI_TRUE))
+    if _diverges(true1, _do(c, method, reqfn(_SQLI_TRUE))):
+        return False   # (2) identical requests already diverge -> generative/LLM endpoint, not a SQL result set
+    if not _boolean_split(true1, _do(c, method, reqfn(_SQLI_FALSE))):
+        return False   # (3) TRUE must select a SUPERSET of FALSE, not merely differ in size (rejects the geocoder)
+    return _boolean_split(_do(c, method, reqfn(_SQLI_TRUE)), _do(c, method, reqfn(_SQLI_FALSE)))  # reproduce the split
 
 
 # UNION is CUT from api_sqli: its oracle (a concatenated marker appears in the body) is unsalvageable on an
