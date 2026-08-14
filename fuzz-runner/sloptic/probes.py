@@ -22,7 +22,7 @@ from dataclasses import replace
 
 import httpx
 
-from . import auth, baas, browser, depscan, oob, perf, secretscan
+from . import auth, baas, browser, depscan, lighthouse, oob, perf, secretscan
 from .net import make_client, request_counts
 from .schema import Endpoint
 from .discovery import _CATCHALL_PROBE, _body_sig
@@ -5311,9 +5311,18 @@ def excessive_dom_size(ctx, probe) -> bool | None:
 # font-display; ~32% of font pages use a blocking value). Decorrelated: a font-LOADING strategy, not size.
 _FONT_FACE_BLOCK = re.compile(r"@font-face\b[^{]*\{([^}]*)\}", re.I | re.S)
 _FONT_HAS_SRC = re.compile(r"\bsrc\s*:", re.I)
+# A @font-face FOITs only if it actually FETCHES a font file (`url(...)`). A `src: local("Arial")` block with no
+# url() is a next/font metric-adjust FALLBACK (size-adjust / ascent-override over an already-installed system
+# font) -> zero network fetch, physically cannot FOIT. Requiring url() kills the dominant perf-font FP: next/font
+# emits one such fallback per font, and counting them was ~90% of this probe's fires on the v18 corpus.
+_FONT_HAS_URL = re.compile(r"\burl\s*\(", re.I)
 _GOOD_FONT_DISPLAY = re.compile(r"font-display\s*:\s*(?:swap|optional|fallback)\b", re.I)
 _GFONTS_LINK = re.compile(r"fonts\.googleapis\.com/css2?\?[^\"'<>\s)]+", re.I)
-_GFONTS_DISPLAY = re.compile(r"[?&]display=(?:swap|optional|fallback)\b", re.I)
+# `display=swap` WITHOUT anchoring on a literal `?`/`&` before it: a Google-Fonts link whose separator is HTML-
+# encoded (`&amp;display=`) or JS/JSON-encoded (`&display=`, matched because the scan runs over the whole
+# HTML incl. RSC/flight blobs) IS correctly configured, but the old `[?&]display=` anchor flagged it as FOIT.
+# De-anchoring is safe: `display=` only appears as a query param inside a captured googleapis URL.
+_GFONTS_DISPLAY = re.compile(r"display=(?:swap|optional|fallback)\b", re.I)
 
 
 def font_display_missing(ctx, probe) -> bool | None:
@@ -5344,7 +5353,7 @@ def font_display_missing(ctx, probe) -> bool | None:
     web_fonts, offenders = 0, []
     for blob in blobs:
         for fb in _FONT_FACE_BLOCK.finditer(blob):
-            if _FONT_HAS_SRC.search(fb.group(1)):
+            if _FONT_HAS_SRC.search(fb.group(1)) and _FONT_HAS_URL.search(fb.group(1)):
                 web_fonts += 1
                 if not _GOOD_FONT_DISPLAY.search(fb.group(1)):
                     offenders.append("@font-face")
@@ -5859,7 +5868,69 @@ def http_response_splitting(ctx, probe) -> bool | None:
     return False if tested else None
 
 
+# ------------------------------------------------------------------ Lighthouse-backed perf (v2.0) ----------
+# The perf axis reads Lighthouse (pinned 13.4.1, throttled, median-of-N) instead of the hand-rolled probes it
+# replaces (they ran 60-90% FP). ONE generic predicate; each perf YAML names the audit(s) + mode. The per-app
+# MEDIAN report is run once by the pipeline and cached on ctx.lighthouse. Tiering (Ian: "a 0 should be hard to
+# get") reuses Lighthouse's own score bands: green (>=0.9) = pass, orange (0.5-0.9) = HALF penalty, red (<0.5) =
+# FULL, carried via penalty_override (the same per-fire override the a11y probes use; pipeline caps at 250).
+_LH_PASS, _LH_FAIL = 0.9, 0.5
+
+
+def _lh_mult(score):
+    """Deduction multiplier for a Lighthouse score: None (green/pass) | 0.5 (orange) | 1.0 (red/fail)."""
+    if score is None or score >= _LH_PASS:
+        return None
+    return 1.0 if score < _LH_FAIL else 0.5
+
+
+def lighthouse_audit(ctx, probe) -> bool | None:
+    """Generic Lighthouse-backed perf predicate. probe.probe config:
+        audit / audits : one or more Lighthouse audit ids; the WORST drives the tier
+        mode: 'score'   -> tier on Lighthouse's own 0-1 score band (green/orange/red)
+              'numeric' -> tier on numericValue vs `needs_above` / `fail_above`
+    N/A when the pipeline captured no Lighthouse result (unreachable url / run failed) or the audit does not
+    apply to the page. Fires True with a tiered penalty_override; False (clean) when the app passes."""
+    rep = getattr(ctx, "lighthouse", None)
+    if not rep:
+        ctx.evidence["na_reason"] = "no lighthouse result (url unreachable or the run failed)"
+        return None
+    spec = probe.probe
+    ids = spec.get("audits") or ([spec["audit"]] if spec.get("audit") else [])
+    au = lighthouse.audits(rep)
+    found = [(aid, au[aid]) for aid in ids if aid in au]
+    if not found:
+        ctx.evidence["na_reason"] = "lighthouse audit(s) %s not applicable to this page" % ids
+        return None
+    base, runs = probe.penalty, rep.get("runs")
+    if spec.get("mode", "score") == "score":
+        aid, a = min(found, key=lambda x: x[1].get("score") if x[1].get("score") is not None else 1.0)
+        mult = _lh_mult(a.get("score"))
+        if mult is None:
+            return False
+        ctx.evidence.update(audit=aid, score=round(a.get("score"), 2), runs=runs, display=a.get("displayValue", ""),
+                            tier=("fail" if mult == 1.0 else "needs-improvement"),
+                            penalty_override=max(1, round(base * mult)))
+        return True
+    aid, a = max(found, key=lambda x: x[1].get("numericValue") or 0)   # numeric: worst = the largest value
+    num = a.get("numericValue")
+    if num is None:
+        ctx.evidence["na_reason"] = "lighthouse audit %s has no numericValue" % aid
+        return None
+    if spec.get("fail_above") is not None and num >= spec["fail_above"]:
+        mult = 1.0
+    elif spec.get("needs_above") is not None and num >= spec["needs_above"]:
+        mult = 0.5
+    else:
+        return False
+    ctx.evidence.update(audit=aid, value=round(num), runs=runs, display=a.get("displayValue", ""),
+                        tier=("fail" if mult == 1.0 else "needs-improvement"),
+                        penalty_override=max(1, round(base * mult)))
+    return True
+
+
 PREDICATES = {
+    "lighthouse_audit": lighthouse_audit,
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
     "xss_injectable": xss_injectable,
