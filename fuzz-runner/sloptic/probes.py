@@ -5908,22 +5908,21 @@ def lighthouse_audit(ctx, probe) -> bool | None:
         mult = _lh_mult(a.get("score"))
         if mult is None:
             return False
-        ctx.evidence.update(audit=aid, score=round(a.get("score"), 2), runs=runs, display=a.get("displayValue", ""),
+        ctx.evidence.update(audit=aid, score=round(a.get("score"), 2), runs=runs, versions=rep.get("versions"), display=a.get("displayValue", ""),
                             tier=("fail" if mult == 1.0 else "needs-improvement"),
                             penalty_override=max(1, round(base * mult)))
         return True
     aid, a = max(found, key=lambda x: x[1].get("numericValue") or 0)   # numeric: worst = the largest value
     num = a.get("numericValue")
-    if num is None:
-        ctx.evidence["na_reason"] = "lighthouse audit %s has no numericValue" % aid
-        return None
+    if num is None:   # count-based audit (network-requests) carries the value as the length of details.items
+        num = len((a.get("details") or {}).get("items") or [])
     if spec.get("fail_above") is not None and num >= spec["fail_above"]:
         mult = 1.0
     elif spec.get("needs_above") is not None and num >= spec["needs_above"]:
         mult = 0.5
     else:
         return False
-    ctx.evidence.update(audit=aid, value=round(num), runs=runs, display=a.get("displayValue", ""),
+    ctx.evidence.update(audit=aid, value=round(num), runs=runs, versions=rep.get("versions"), display=a.get("displayValue", ""),
                         tier=("fail" if mult == 1.0 else "needs-improvement"),
                         penalty_override=max(1, round(base * mult)))
     return True
@@ -6031,6 +6030,7 @@ _MATCHER_REASONS = {
 }
 
 _PREDICATE_REASONS = {
+    "lighthouse_audit": "a Lighthouse performance audit is below its passing threshold",
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",

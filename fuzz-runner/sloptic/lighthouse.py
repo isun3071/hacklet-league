@@ -11,6 +11,7 @@ shell the `lighthouse` Node CLI instead (a later runner, same audit shape).
 """
 import json
 import os
+import statistics
 import subprocess
 import tempfile
 
@@ -23,6 +24,11 @@ PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 # break the mapping + shift the frozen curve. NB: the PSI path CANNOT pin — Google runs whatever version it
 # runs — so for a reproducible score the local pinned runner is actually MORE deterministic than PSI.
 LIGHTHOUSE_VERSION = "13.4.1"
+
+# Median-of-N over the timing metrics: the config audits are single-run byte-stable, but FCP/CLS/speed-index
+# swing run-to-run (measured: SI 4x, CLS band-flips), so the score is a MEDIAN of this many runs. Settable;
+# 3 tames a single pathological run (median ignores the outlier), the corpus freeze can raise it.
+DEFAULT_RUNS = 3
 
 # Audit ids the perf axis maps onto — VERIFIED against a live 13.4.1 response (do not trust from memory; they
 # rename). score: 1=pass, <1=needs-improvement, 0=fail; scoreDisplayMode: metricSavings | informative | numeric.
@@ -128,3 +134,53 @@ def metric_ms(psi: dict, audit_id: str) -> float | None:
     """A metric audit's numericValue (ms for timings, unitless for CLS)."""
     a = audits(psi).get(audit_id) or {}
     return a.get("numericValue")
+
+
+def chrome_version(chrome_path: str = "/usr/bin/google-chrome") -> str | None:
+    """The Chrome the trace ran on — the SECOND version variable (Lighthouse pinned isn't enough: a Chrome
+    auto-update shifts the metrics). Stamped into the grade so a bump is detectable -> a re-freeze signal."""
+    try:
+        out = subprocess.run([chrome_path, "--version"], capture_output=True, text=True, timeout=10).stdout
+        return out.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def versions(chrome_path: str = "/usr/bin/google-chrome") -> dict:
+    """The exact toolchain a perf grade was produced with. A change here means the frozen curve should re-run."""
+    return {"lighthouse": LIGHTHOUSE_VERSION, "chrome": chrome_version(chrome_path)}
+
+
+def measure(url: str, *, runs: int = DEFAULT_RUNS, runner=None, **kw) -> dict:
+    """Run Lighthouse `runs` times and return ONE consolidated report whose every audit carries the MEDIAN
+    score + numericValue across the runs. The config audits (font/dom/weight/minify) are already stable so the
+    median is a no-op there; it's the timing metrics (FCP/CLS/speed-index) and the savings-based audits
+    (cache-insight) that this stabilizes. `runner` defaults to run_local (the pinned, deterministic path);
+    pass fetch_psi for the live path. Raises PSIError only if EVERY run fails. Shaped like a PSI response so the
+    accessors read it, plus `runs` = how many actually succeeded."""
+    run = runner or run_local
+    reports = []
+    for _ in range(max(1, runs)):
+        try:
+            reports.append(run(url, **kw))
+        except PSIError:
+            pass
+    if not reports:
+        raise PSIError(f"all {runs} lighthouse runs failed for {url}")
+    all_audits = [audits(r) for r in reports]
+    merged: dict = {}
+    for aid in set().union(*(set(a) for a in all_audits)):
+        entries = [a[aid] for a in all_audits if aid in a]
+        out = dict(entries[-1])                                   # keep title/details/displayMode from a real run
+        nums = [e["numericValue"] for e in entries if e.get("numericValue") is not None]
+        scores = [e["score"] for e in entries if e.get("score") is not None]
+        if nums:
+            out["numericValue"] = statistics.median(nums)
+        if scores:
+            out["score"] = statistics.median(scores)
+        merged[aid] = out
+    cat_scores = [s for r in reports if (s := perf_score(r)) is not None]
+    lhr = dict(_lhr(reports[0]))
+    lhr["audits"] = merged
+    lhr["categories"] = {"performance": {"score": statistics.median(cat_scores) if cat_scores else None}}
+    return {"lighthouseResult": lhr, "runs": len(reports), "versions": versions()}
