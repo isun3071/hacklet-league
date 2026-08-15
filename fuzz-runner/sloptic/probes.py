@@ -5904,6 +5904,7 @@ _MATCHER_REASONS = {
 
 _PREDICATE_REASONS = {
     "lighthouse_audit": "a Lighthouse performance audit is below its passing threshold",
+    "lighthouse_perf_score": "the overall Lighthouse performance score is below a perfect 100 (slop = its distance from 100)",
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",
     "xss_injectable": "an input reflects unescaped into HTML (XSS: script / img / svg / attribute / stored)",
