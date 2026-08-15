@@ -5145,8 +5145,18 @@ def seo_meta_missing(ctx, probe) -> bool | None:
 # encoding (mojibake), and it's a UTF-7 XSS surface in old engines. (A "HEAD must not return a body"
 # check was dropped: a spec-compliant HTTP client discards the HEAD body, so it isn't observable without
 # raw-socket work — not worth it for this low-impact tail.)
+# A page declares its encoding via the Content-Type HEADER *or* a <meta charset>/<meta http-equiv=content-type>
+# in the document -- both are valid per the HTML spec, and the meta form is how virtually every HTML5 page does
+# it. The browser's encoding prescan only reads the first 1024 bytes, so a meta beyond that is not honored (still
+# a real ambiguity). Checking the header alone made this ~89% false: 57 of 64 v18 fires declared charset by meta.
+_META_CHARSET = re.compile(rb"<meta[^>]+charset", re.I)   # matches <meta charset=..> AND http-equiv content-type
+_CHARSET_PRESCAN = 1024                                   # the HTML spec's encoding-sniffing window, in bytes
+
+
 def http_conformance(ctx, probe) -> bool | None:
-    """Fire on an HTML response served without a declared charset. N/A on a non-HTML homepage."""
+    """Fire on an HTML response served with NO declared charset in EITHER the Content-Type header or a <meta>
+    in the document's first 1024 bytes (the browser's encoding-prescan window) -> the browser must GUESS the
+    encoding. N/A on a non-HTML homepage."""
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
         try:
             r = c.get(_home_path(ctx, probe))
@@ -5155,9 +5165,11 @@ def http_conformance(ctx, probe) -> bool | None:
     ctype = r.headers.get("content-type", "").lower()
     if "text/html" not in ctype:
         return None                                       # only HTML documents declare a page charset
-    has_charset = "charset=" in ctype
-    ctx.evidence.update(charset=has_charset)
-    return not has_charset
+    header_cs = "charset=" in ctype
+    meta_cs = bool(_META_CHARSET.search(r.content[:_CHARSET_PRESCAN]))
+    ctx.evidence.update(charset=header_cs or meta_cs,
+                        charset_via=("header" if header_cs else "meta" if meta_cs else None))
+    return not (header_cs or meta_cs)
 
 
 # Crash-resistance — a ROBUST app rejects malformed input with a 4xx (400/413/422); a FRAGILE one lets
