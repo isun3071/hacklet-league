@@ -5770,8 +5770,8 @@ def lighthouse_audit(ctx, probe) -> bool | None:
         if mult is None:
             return False
         ctx.evidence.update(audit=aid, score=round(a.get("score"), 2), runs=runs, versions=rep.get("versions"), display=a.get("displayValue", ""),
-                            tier=("fail" if mult == 1.0 else "needs-improvement"),
-                            penalty_override=max(1, round(base * mult)))
+                            tier=("fail" if mult == 1.0 else "needs-improvement"), report_only=bool(spec.get("report_only")),
+                            penalty_override=0 if spec.get("report_only") else max(1, round(base * mult)))
         return True
     aid, a = max(found, key=lambda x: x[1].get("numericValue") or 0)   # numeric: worst = the largest value
     num = a.get("numericValue")
@@ -5784,13 +5784,38 @@ def lighthouse_audit(ctx, probe) -> bool | None:
     else:
         return False
     ctx.evidence.update(audit=aid, value=round(num), runs=runs, versions=rep.get("versions"), display=a.get("displayValue", ""),
-                        tier=("fail" if mult == 1.0 else "needs-improvement"),
-                        penalty_override=max(1, round(base * mult)))
+                        tier=("fail" if mult == 1.0 else "needs-improvement"), report_only=bool(spec.get("report_only")),
+                        penalty_override=0 if spec.get("report_only") else max(1, round(base * mult)))
     return True
+
+
+def lighthouse_perf_score(ctx, probe) -> bool | None:
+    """The perf axis's SCORING probe: slop = round((1 - overall_perf_score) * 100 * scale) -- i.e. the app's
+    DISTANCE from a perfect Lighthouse score (a 100 -> 0 slop, an 84 -> 16, a 25 -> 75). Lighthouse already did
+    the scoring off its own calibrated weights; we just invert the headline into slop instead of re-summing the
+    per-audit tiers (which double-counted metrics the headline already weighed, and penalized apps Lighthouse
+    itself rates fast). `scale` (default 1.0) is the one dial if the axis ever needs to weigh less. The metric
+    breakdown rides along in evidence as OFF-SCORE diagnostics. N/A when there is no Lighthouse result."""
+    rep = getattr(ctx, "lighthouse", None)
+    if not rep:
+        ctx.evidence["na_reason"] = "no lighthouse result (url unreachable or the run failed)"
+        return None
+    score = lighthouse.perf_score(rep)      # 0..1, Lighthouse's own weighted headline
+    if score is None:
+        ctx.evidence["na_reason"] = "lighthouse produced no overall performance score"
+        return None
+    scale = probe.probe.get("scale", 1.0)
+    slop = round((1.0 - score) * 100 * scale)
+    ctx.evidence.update(performance=round(score * 100), runs=rep.get("runs"), versions=rep.get("versions"),
+                        metrics=lighthouse.metric_breakdown(rep),
+                        tier=("good" if score >= 0.90 else "needs-improvement" if score >= 0.50 else "poor"),
+                        penalty_override=slop)
+    return slop > 0
 
 
 PREDICATES = {
     "lighthouse_audit": lighthouse_audit,
+    "lighthouse_perf_score": lighthouse_perf_score,
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
     "xss_injectable": xss_injectable,

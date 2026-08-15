@@ -9,5 +9,7 @@ applicability:
   requires: [lighthouse]
 probe:
   predicate: lighthouse_audit
+  report_only: true   # OFF-SCORE: fires as a per-metric diagnostic finding at 0 penalty;
+                      # the perf axis is scored once on the overall headline (perf-lighthouse-001).
   audit: speed-index
   mode: score

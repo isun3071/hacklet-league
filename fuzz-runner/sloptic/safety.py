@@ -20,6 +20,7 @@ live catalog exactly, so every probe (new ones included) must be consciously pla
 # What a normal visitor/browser does: read the served page, assets, bundle, headers, config; follow links.
 PASSIVE_PROBES = frozenset({
     # performance -- all measure timing/weight/requests from ordinary loads (no burst)
+    "perf-lighthouse-001",   # reads the already-computed Lighthouse report (an ordinary throttled page load)
     "perf-cache-001", "perf-loadtime-001", "perf-weight-001",
     "perf-requests-001", "perf-ttfb-001", "perf-cwv-001", "perf-cwv-002",
     "perf-lcp-001", "perf-dom-001", "perf-font-001",   # v2.0 Family 4: render/observe or parse CSS -- no state change

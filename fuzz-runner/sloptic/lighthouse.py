@@ -125,9 +125,29 @@ def audits(psi: dict) -> dict:
 
 
 def perf_score(psi: dict) -> float | None:
-    """The overall performance category score in [0,1] (None if absent)."""
+    """The overall performance category score in [0,1] (None if absent). Lighthouse's OWN weighted headline
+    (LCP/TBT/CLS/FCP/speed-index blended with its calibrated weights) — the perf axis scores off THIS, inverted
+    to slop, rather than re-summing the per-audit breakdown (which double-counted metrics Lighthouse already weighed)."""
     cats = _lhr(psi).get("categories") or {}
     return (cats.get("performance") or {}).get("score")
+
+
+# The metrics behind the headline, surfaced for OFF-SCORE reporting: a slow app still sees WHICH metric to fix,
+# but is charged once on the weighted overall score, not once per metric.
+BREAKDOWN_AUDITS = ("first-contentful-paint", "largest-contentful-paint", "total-blocking-time",
+                    "cumulative-layout-shift", "speed-index", "server-response-time")
+
+
+def metric_breakdown(psi: dict) -> dict:
+    """{audit_id: displayValue} for the key metrics behind the overall score (Lighthouse's formatted strings,
+    e.g. '4.3 s' / '0.21'). Diagnostic detail only — the score comes from perf_score, not from these."""
+    au = audits(psi)
+    out: dict[str, str] = {}
+    for aid in BREAKDOWN_AUDITS:
+        dv = (au.get(aid) or {}).get("displayValue")
+        if dv:
+            out[aid] = dv
+    return out
 
 
 def metric_ms(psi: dict, audit_id: str) -> float | None:

@@ -59,3 +59,17 @@ def test_na_when_no_report_or_audit_absent():
     ctx = _Ctx(_rep({"other": {"score": 1}}))
     assert lighthouse_audit(ctx, _Probe(6, audit="font-display-insight")) is None
     assert "not applicable" in ctx.evidence["na_reason"]
+
+
+def test_report_only_still_fires_but_at_zero_penalty():
+    # the 11 per-audit perf probes are OFF-SCORE: they fire (a per-metric diagnostic finding) but add 0 slop,
+    # because the axis is scored once on the overall headline (perf-lighthouse-001).
+    ctx = _Ctx(_rep({"largest-contentful-paint": {"score": 0.03}}))
+    p = _Probe(28, audits=["largest-contentful-paint"], mode="score", report_only=True)
+    assert lighthouse_audit(ctx, p) is True                 # still fires -> visible as a finding
+    assert ctx.evidence["tier"] == "fail" and ctx.evidence["report_only"] is True
+    assert ctx.evidence["penalty_override"] == 0            # ...but charges nothing
+    # numeric mode honors it too
+    ctx = _Ctx(_rep({"dom-size-insight": {"numericValue": 3000}}))
+    pn = _Probe(7, audit="dom-size-insight", mode="numeric", needs_above=1400, fail_above=2200, report_only=True)
+    assert lighthouse_audit(ctx, pn) is True and ctx.evidence["penalty_override"] == 0
