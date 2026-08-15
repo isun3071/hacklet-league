@@ -4731,6 +4731,14 @@ def a11y_hard_fails(ctx, probe) -> bool | None:
     the ratio math). Each DISTINCT hard-fail contributes its severity tier to a SUM (see _a11y_penalty /
     _STATIC_A11Y_IMPACT), matching the browser axe probe's model so a multi-barrier page outscores a
     single-barrier one and the score doesn't jump when the browser is on vs off. N/A on a non-HTML page."""
+    # DEFER TO AXE when the browser ran. qa-a11y-001 (axe on the RENDERED DOM) covers the SAME flaw (shared
+    # variant_group_id) and is authoritative; this static pre-JS-HTML pass is blind to CSS-hidden and JS-labeled
+    # controls, so it over-reports control-no-accessible-name -- and because the variant group scores the MAX of
+    # its members, that inflated value OVERRODE axe's accurate lower one (+1093 pts across ~88 v18 hosts). So
+    # this is a browser-OFF FALLBACK only: when axe ran, read N/A rather than double-count / override it.
+    if ctx.profile.capabilities.get("browser"):
+        ctx.evidence["na_reason"] = "browser ran -> axe (qa-a11y-001) on the rendered DOM is authoritative"
+        return None
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
         try:
             r = c.get(_home_path(ctx, probe))
