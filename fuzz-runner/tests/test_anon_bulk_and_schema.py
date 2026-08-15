@@ -230,6 +230,24 @@ def test_user_owned_records_with_distinct_emails_still_fire():
     assert hit is True and "submitted_by_email" in ev["sensitive_columns"]
 
 
+def test_anon_readable_patient_records_still_fire():
+    # interim-pc04 /api/patient: 44 rows of name + real dob + diagnosis, readable to a stranger -> PHI leak. The
+    # dob values are real dates, distinct per row, and there is no listing marker -> not a directory -> fires.
+    rows = [{"id": i, "name": "Pat %d" % i, "dob": "19%02d-05-12" % (50 + i), "diagnosis": "dx%d" % i}
+            for i in range(44)]
+    hit, ev = _run({"/api/x": (200, rows)})
+    assert hit is True and "dob" in ev["sensitive_columns"]
+
+
+def test_candidate_records_with_an_ownership_column_still_fire():
+    # intelliview-liard /api/get-responses: candidate emails + interview transcripts. `candidateId` is a per-user
+    # ownership column (normalises to an ownership marker) -> not a directory -> fires on the distinct emails.
+    rows = [{"id": i, "candidateEmail": "cand%d@gmail.com" % i, "candidateId": "c%d" % i,
+             "interviewType": "tech"} for i in range(13)]
+    hit, ev = _run({"/api/x": (200, rows)})
+    assert hit is True and "candidateEmail" in ev["sensitive_columns"]
+
+
 # ---------------------------------------------------------------- schema disclosure
 
 # the signature segment must be >= 8 chars: probes._JWT requires it, and a 3-char "sig" meant
