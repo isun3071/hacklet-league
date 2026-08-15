@@ -392,6 +392,13 @@ def _bearer_token(resp: httpx.Response) -> str | None:
     return None
 
 
+# a CREDENTIAL-rejection phrase (for an HTML login answer), deliberately NOT matching a generic server-error
+# page like nginx "400 Bad Request" / "403 Forbidden" -- those are the request/server saying no, not the app
+# rejecting credentials (geoiq /users/login served a bare nginx 400 and read as a login surface).
+_AUTH_REJECT_PHRASE = re.compile(r"invalid|incorrect|unauthor|wrong\s+(?:password|credential|email|user)|"
+                                 r"\bcredential|login\s+failed|authentication\s+failed", re.I)
+
+
 def find_json_login(client: httpx.Client, root: str = ""):
     """Probe common JSON login endpoints with a wrong-creds body; return (path, creds, response) for
     the first that behaves like a REAL login, else (None, None, None). Lets the rate-limit probe reach
@@ -431,9 +438,23 @@ def find_json_login(client: httpx.Client, root: str = ""):
         if r.status_code in (404, 405, 501):
             continue
         ct = r.headers.get("content-type", "").lower()
-        # a genuine login rejects wrong creds (400/401/403/422) or answers in JSON; a static SPA returns
-        # 200 text/html (its shell) for everything — that's not a login surface, so keep looking.
-        if r.status_code in (400, 401, 403, 422) or "json" in ct:
+        body = ""
+        try:
+            body = r.text[:5000]
+        except Exception:
+            pass
+        rejects = bool(_AUTH_REJECT_PHRASE.search(body))
+        # A login SURFACE is one that REJECTS wrong creds. Three shapes are NOT that, each a v18 json-login FP:
+        #   - a 2xx SUCCESS body (usaii /api/sessions -> 201 {"sessionId":...}): it ACCEPTED the garbage creds,
+        #     so it is not a rejection to rate-limit. A 2xx qualifies ONLY if the body itself says it rejected
+        #     them (some real logins answer 200 + {"error":"invalid credentials"}).
+        #   - a redirect (3xx): a platform auth handoff, not the app rejecting creds.
+        #   - a bare server-error page (nginx "400 Bad Request" text/html): the SERVER rejected the request
+        #     shape, not the APP rejecting credentials (geoiq /users/login).
+        if r.status_code in (400, 401, 403, 422):
+            if "json" in ct or rejects:
+                return path, creds, r
+        elif 200 <= r.status_code < 300 and rejects:
             return path, creds, r
     return None, None, None
 

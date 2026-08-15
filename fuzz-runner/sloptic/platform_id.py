@@ -28,7 +28,7 @@ _SUFFIX_PLATFORM = {
     "github.io": "github-pages", "herokuapp.com": "heroku", "run.app": "google-cloud-run", "deno.dev": "deno",
     "replit.app": "replit", "repl.co": "replit", "surge.sh": "surge", "glitch.me": "glitch",
     "koyeb.app": "koyeb", "adaptable.app": "adaptable", "streamlit.app": "streamlit", "cyclic.app": "cyclic",
-    "lovable.app": "lovable", "lovableproject.com": "lovable", "bolt.host": "bolt",
+    "lovable.app": "lovable", "lovableproject.com": "lovable", "bolt.host": "bolt", "base44.app": "base44",
 }
 # suffixes that are ALSO an AI builder's own hosting (host and builder are the same origin)
 _BUILDER_SUFFIX = {"lovable.app": "lovable", "lovableproject.com": "lovable", "bolt.host": "bolt"}
@@ -101,8 +101,9 @@ def classify(base_url: str, headers: dict | None, html: str | None) -> dict:
     suf_plat = _platform_by_suffix(host)
     if suf_plat:
         signals.append("suffix:" + suf_plat)
-        if not hp:
-            hp = suf_plat            # no leaking header (custom domain masked, or a plain static host) -> suffix
+        if not hp or suf_plat == "base44":   # base44 apps run ON render and leak x-render-origin-server, but a
+            hp = suf_plat                     # *.base44.app host IS a base44 platform app -> the suffix is
+            #                                   authoritative over the leaked backend header (else it reads render)
 
     # --- builder (from served markup; a builder can sit on any host) ---
     builder = _builder_by_suffix(host)
@@ -133,7 +134,8 @@ def classify(base_url: str, headers: dict | None, html: str | None) -> dict:
 # PaaS that runs the team's container (railway / render / fly / heroku / replit) is NOT here: there the app
 # owns its own rate-limiting + capacity, so those probes stay live.
 _EDGE_MANAGED_HOSTS = frozenset({"vercel", "netlify", "cloudflare-pages", "cloudflare-workers", "firebase",
-                                 "github-pages", "amplify"})
+                                 "github-pages", "amplify", "base44"})   # base44 = a BaaS platform (like firebase):
+#                        it OWNS auth + scaling, so its /api/auth/login rate-limiting is the vendor's, not the team's
 _EDGE_CDNS = frozenset({"cloudflare", "fastly", "cloudfront"})
 
 

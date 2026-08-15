@@ -14,6 +14,7 @@ _CAT = {p.id: p for p in load_catalog(default_catalog_dir())}
 def test_edge_managed_hosts_vs_self_hosted():
     for plat in ({"host_platform": "vercel", "edge": None}, {"host_platform": "netlify", "edge": None},
                  {"host_platform": "cloudflare-pages", "edge": None}, {"host_platform": "firebase", "edge": None},
+                 {"host_platform": "base44", "edge": None},             # a BaaS platform: it owns auth + scaling
                  {"host_platform": "unknown", "edge": "cloudflare"}):   # any WAF-CDN-fronted origin
         assert edge_managed(plat) is True, plat
     for plat in ({"host_platform": "railway", "edge": None}, {"host_platform": "render", "edge": None},
@@ -24,6 +25,13 @@ def test_edge_managed_hosts_vs_self_hosted():
 def test_classify_flags_vercel_from_headers():
     assert edge_managed(classify("https://app.vercel.app", {"x-vercel-id": "abc"}, None)) is True
     assert edge_managed(classify("https://app.up.railway.app", {}, None)) is False
+
+
+def test_classify_flags_base44_as_managed_by_suffix():
+    # base44's /api/auth/login is the platform's endpoint (identical across every base44 app), so its
+    # rate-limiting is the vendor's -> the hosting-layer probes go N/A, like firebase.
+    plat = classify("https://cheerful-mind-match-flow.base44.app", {}, None)
+    assert plat["host_platform"] == "base44" and edge_managed(plat) is True
 
 
 def test_gate_makes_the_two_probes_na_on_managed_edge_only():

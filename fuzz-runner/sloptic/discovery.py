@@ -386,7 +386,7 @@ _MULTI_SUFFIX = {
     "onrender.com", "render.com", "herokuapp.com", "railway.app", "fly.dev", "workers.dev", "run.app",
     "deno.dev", "koyeb.app", "cyclic.app", "adaptable.app", "glitch.me", "replit.app",
     "modal.run", "hf.space", "ondigitalocean.app", "azurewebsites.net", "elasticbeanstalk.com",
-    "pythonanywhere.com",
+    "pythonanywhere.com", "base44.app",
 }
 # Self-hosting PaaS where teams deploy their OWN BACKEND -> an off-origin host here is the app's responsibility
 # (the outsourced-backend case: probe it). Excludes pure frontend/static hosts (vercel/netlify/github.io), whose
