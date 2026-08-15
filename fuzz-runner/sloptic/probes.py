@@ -224,9 +224,13 @@ def response_leaks_secret(resp, arg=None) -> bool:
 # (***, xxxx, [REDACTED]) and the OpenAPI spec's own schema examples are excluded.
 _CRED_FIELD = re.compile(
     r'"(?:password|passwd|pwd|hashed_password|password_hash|pwd_hash|user_password|'
-    r'plaintext_password)"\s*:\s*"(?!\s*(?:\*{2,}|x{4,}|redacted|hidden|\.{3})\s*")[^"]{2,}"',
+    r'plaintext_password)"\s*:\s*"(?!\s*(?:\*{2,}|x{4,}|redacted|hidden|\.{3})\s*")([^"]{2,})"',
     re.IGNORECASE,
 )
+# a UI/i18n LABEL, not a credential: a `/api/translate`-style strings endpoint returns "password":"Password" /
+# "Enter your password". A phrase of words ending in "password" (letters+spaces only) or a bullet placeholder is
+# a label; a real value ("EdyDemo6717!", "P@ssw0rd") has digits/symbols and is NOT excluded.
+_CRED_LABEL = re.compile(r"^(?:[a-z]+\s)*passwords?$|^[•●·*]+$", re.IGNORECASE)
 _CRED_HASH = re.compile(
     r"\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}"   # bcrypt
     r"|\$argon2(?:id|i|d)\$"                # argon2
@@ -249,7 +253,11 @@ def response_leaks_credentials(resp, arg=None) -> bool:
         return False
     if _OPENAPI_DOC.search(body[:4000]):
         return False  # a served spec naming a "password" field in its schema isn't a data leak
-    return bool(_CRED_FIELD.search(body) or _CRED_HASH.search(body))
+    if _CRED_HASH.search(body):
+        return True   # a password HASH in the body is unambiguous
+    # a populated "password":"<value>" -- but only if the value is a real credential, not a UI/i18n label
+    # ("password":"Password" from a /api/translate strings endpoint). A real value (EdyDemo6717!) still fires.
+    return any(not _CRED_LABEL.match(m.group(1).strip()) for m in _CRED_FIELD.finditer(body))
 
 
 # Files that must never be served at the webroot (deploying with .env / .git present is classic
@@ -5618,7 +5626,7 @@ def decompression_bomb(ctx, probe) -> bool | None:
             try:
                 r = c.post(path, content=bomb, headers=gz_ct)
             except httpx.TimeoutException:
-                if s_small < 500:                      # 10KB fine, 50MB HUNG -> size-driven exhaustion (provable)
+                if 200 <= s_small < 300:               # 10KB ACCEPTED, 50MB HUNG -> size-driven exhaustion (provable)
                     ctx.evidence.update(decompression_capped=False, endpoint=path, signal="timeout",
                                         control_status=s_small, expanded_mb=50,
                                         repro=_dos_repro(ctx, path, "hung decompressing 50MB (10KB control -> %d)" % s_small))
@@ -5627,11 +5635,12 @@ def decompression_bomb(ctx, probe) -> bool | None:
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
             # Fire only on PROVABLE evidence. accepted (2xx): the app took a 50MB body -> no size cap <=50MB.
-            # exhausted (5xx a 10KB control doesn't trigger): the SIZE crashed it. A 4xx is NOT scored: 413 is
-            # a proven size cap (defended); a generic 400/422 is INCONCLUSIVE (a cap OR a post-decompression
-            # content failure — indistinguishable at a safe size), and we don't fire on inconclusive evidence
-            # (precision-favoring; FN is the safe error). This retires the old 413-only rule that fired on a 400.
-            exhausted = r.status_code >= 500 and s_small < 500
+            # exhausted (5xx where a 10KB control was ACCEPTED 2xx): the SIZE crashed a live handler. The 10KB
+            # control MUST be 2xx -- if it 404s/400s, the endpoint isn't a live body handler and the 50MB 500 is
+            # infra rejecting a huge upload to a dead/wrong route, not decompression exhaustion (v18: /ingest &
+            # /api/ingest 404 controls, /api/auth/login 400). A 4xx bomb is NOT scored (413 = a proven cap;
+            # 400/422 = inconclusive). Precision-favoring; FN is the safe error.
+            exhausted = r.status_code >= 500 and 200 <= s_small < 300
             accepted = 200 <= r.status_code < 400
             if exhausted or accepted:
                 ctx.evidence.update(decompression_capped=False, endpoint=path, status=r.status_code,

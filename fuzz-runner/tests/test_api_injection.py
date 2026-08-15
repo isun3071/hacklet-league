@@ -220,6 +220,8 @@ def _resp(text, status=200, ctype="application/json"):
 def test_credential_leak_fires_on_password_field_and_hash():
     assert response_leaks_credentials(_resp('{"user":"a","password":"hunter2"}')) is True
     assert response_leaks_credentials(_resp('{"pw":"$2b$12$' + "a" * 53 + '"}')) is True  # bcrypt hash
+    # a real leaked credential with symbols/digits still fires (edy /api/pedidos leaked "EdyDemo6717!")
+    assert response_leaks_credentials(_resp('{"user":"a","password":"EdyDemo6717!"}')) is True
 
 
 def test_credential_leak_precision_no_false_positives():
@@ -235,6 +237,9 @@ def test_credential_leak_precision_no_false_positives():
     # a JS bundle's Angular password-toggle (hide?"password":"text") is code, not a data leak
     js = 'x("type",n.hide?"password":"text"),l(2)'
     assert response_leaks_credentials(_resp(js, ctype="application/javascript")) is False
+    # an i18n / UI LABEL from a /api/translate strings endpoint is not a credential (wayfinder's FP)
+    assert response_leaks_credentials(_resp('{"password":"Password","passwordPlaceholder":"x"}')) is False
+    assert response_leaks_credentials(_resp('{"password":"Enter your password"}')) is False
 
 
 def test_data_exposure_probe_fires_on_leaky_endpoint():
