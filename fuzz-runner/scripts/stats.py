@@ -25,7 +25,7 @@ sys.path.insert(0, str(_ROOT))
 
 from sloptic.aggregate import CATEGORY_DECAY, _damped_total  # noqa: E402
 from sloptic.catalog import load_catalog  # noqa: E402
-from sloptic.eligibility import is_shell_only, is_ungradeable_challenge  # noqa: E402
+from sloptic.eligibility import is_shell_only, is_ungradeable_challenge, is_wrong_owner  # noqa: E402
 from sloptic.schema import Outcome  # noqa: E402
 
 
@@ -153,7 +153,8 @@ def _is_graded(r):
     show as a spurious '0' in the descriptive distribution; a RENDERED Streamlit is a real grade and stays)."""
     return (r.get("deployed") and "slop_score" in r and r.get("functional") is not False
             and not r.get("recon")   # recon records carry host_tiers only (no probes) -> not a real grade
-            and not is_ungradeable_challenge(r) and not is_shell_only(r))
+            and not is_ungradeable_challenge(r) and not is_shell_only(r)
+            and not is_wrong_owner(r))   # S3/Jira/no-code/editor: graded the third party, not the submission
 
 
 def main():

@@ -139,6 +139,45 @@ _EDGE_MANAGED_HOSTS = frozenset({"vercel", "netlify", "cloudflare-pages", "cloud
 _EDGE_CDNS = frozenset({"cloudflare", "fastly", "cloudfront"})
 
 
+# WRONG-OWNER hosts: a graded URL that is NOT the team's own engineered web app, so a black-box grade measures
+# the third party / platform, not the submission (the v18 audit's cross-cutting wrong-owner root cause). Two
+# tiers. TIER 1 -- a third-party product / raw storage / a slide deck / an EDITOR url: never a team's app.
+# TIER 2 -- a no-code SITE/app builder whose surface (headers/auth/perf/rate-limit) is the PLATFORM's config,
+# not the team's engineering (same reason edge_managed / SHELL_ONLY exclude). Deliberately NOT here (first-party):
+# tiiny.site (the team uploads their OWN built dist), and AI-code-GENERATORS that emit owned code -- base44.app,
+# a DEPLOYED lovable.app, bolt -- plus every real code host (vercel/netlify/render/railway/fly/github-pages/...).
+_WRONG_OWNER_SUFFIX = {
+    # TIER 1: third-party products / raw storage / presentations / designs
+    "atlassian.net": "atlassian", "sharepoint.com": "sharepoint",
+    "notion.site": "notion", "notion.so": "notion",
+    "withgoogle.com": "google-product", "docs.google.com": "google-product",
+    "sites.google.com": "google-product", "drive.google.com": "google-product",
+    "gamma.app": "presentation", "gamma.site": "presentation", "canva.site": "design-tool",
+    # TIER 2: no-code site/app builders (the surface is the platform's, not the team's)
+    "softr.app": "no-code-site", "wixsite.com": "no-code-site", "wix.com": "no-code-site",
+    "wix-vibe.com": "no-code-site", "wix-vibe-site.com": "no-code-site",
+    "framer.app": "no-code-site", "framer.website": "no-code-site", "framer.media": "no-code-site",
+    "carrd.co": "no-code-site", "glide.page": "no-code-site", "glideapp.io": "no-code-site",
+    "bubbleapps.io": "no-code-site", "retool.app": "no-code-site",
+}
+
+
+def wrong_owner_host(host: str) -> str | None:
+    """The wrong-owner CATEGORY of a host (a third-party/platform surface that isn't the team's engineered app),
+    else None. Pure over the host, so it classifies both live grades and stored records."""
+    h = (host or "").split("/")[0].split(":")[0].lower().rstrip(".")
+    if not h:
+        return None
+    if h.startswith("id-preview--") and h.endswith("lovable.app"):
+        return "editor-preview"          # the Lovable EDITOR, not the deployed app (the real deploy is elsewhere)
+    if h == "s3.amazonaws.com" or ".s3." in h or (h.startswith("s3-") and h.endswith(".amazonaws.com")):
+        return "s3-bucket"               # raw object storage (NOT elasticbeanstalk/EC2 -- those run the team's app)
+    for suf, cat in _WRONG_OWNER_SUFFIX.items():
+        if h == suf or h.endswith("." + suf):
+            return cat
+    return None
+
+
 def edge_managed(plat: dict) -> bool:
     """True when the host provides edge DDoS/rate-limiting/scaling the app inherits (a managed-edge platform, or
     ANY origin fronted by a WAF CDN). Used to gate the hosting-layer probes off -- test the config, not the vendor."""
