@@ -8,7 +8,8 @@ Input is the JSONL that `deploy_and_grade.py --record FILE` appends (one line pe
     uv run python scripts/stats.py results.jsonl --audit sec-sqli-004   # every app + evidence for one probe
     uv run python scripts/stats.py results.jsonl --json                 # machine-readable summary
 
-Reports: (a) deploy-success rate (hackathon reproducibility), (b) slop-score distribution + histogram
+Reports: (a) deploy-success rate (hackathon reproducibility), (a2) per-hackathon breakdown (source
+attribution -> subs / deploy% / graded / median slop / winners), (b) slop-score distribution + histogram
 + category concentration + most-frequent findings, (c) per-probe fire-frequency, (d) winners vs
 non-winners, (e) anomalies flagged for hand-verification (the surprising 0s and the surprising
 outliers — where fuzzer bugs and genuinely interesting apps both hide).
@@ -157,6 +158,46 @@ def _is_graded(r):
             and not is_wrong_owner(r))   # S3/Jira/no-code/editor: graded the third party, not the submission
 
 
+def _slop_stats(xs):
+    """median / mean / (population) stdev of a score list -- None where the sample is too small to define one
+    (stdev needs >=2). pstdev matches section (b)'s overall spread."""
+    return {"median": round(statistics.median(xs), 1) if xs else None,
+            "mean": round(statistics.mean(xs), 1) if xs else None,
+            "stdev": round(statistics.pstdev(xs), 1) if len(xs) >= 2 else None}
+
+
+def by_hackathon(recs):
+    """Roll the per-record Devpost hackathon slug up into per-hackathon stats: submissions, deploy% (REPO apps
+    only -- URL apps aren't deploy-tested), graded count, slop median/mean/stdev, winner count, and the winners'
+    own median/mean. Sorted by submission count. The slug is already on every record (run_batch threads it via
+    --meta); this is the breakdown over it. Winner stats are over the GRADED winners (a DNF winner has no score),
+    while `winners` is the full winner-flagged count of the cohort."""
+    agg = defaultdict(lambda: {"subs": 0, "repo": 0, "deployed": 0, "graded": [], "winners": 0, "win_scores": []})
+    for r in recs:
+        d = agg[r.get("hackathon") or "(unlabeled)"]
+        d["subs"] += 1
+        if _source(r) == "repo":
+            d["repo"] += 1
+            d["deployed"] += 1 if r.get("deployed") else 0
+        won = r.get("winner") is True
+        if won:
+            d["winners"] += 1
+        if _is_graded(r):
+            d["graded"].append(r["slop_score"])
+            if won:
+                d["win_scores"].append(r["slop_score"])
+    rows = []
+    for h, d in agg.items():
+        s, w = _slop_stats(d["graded"]), _slop_stats(d["win_scores"])
+        rows.append({"hackathon": h, "subs": d["subs"], "graded": len(d["graded"]),
+                     "deploy_pct": round(100 * d["deployed"] / d["repo"]) if d["repo"] else None,
+                     "median_slop": s["median"], "mean_slop": s["mean"], "stdev_slop": s["stdev"],
+                     "winners": d["winners"], "winner_graded": len(d["win_scores"]),
+                     "winner_median": w["median"], "winner_mean": w["mean"]})
+    rows.sort(key=lambda x: -x["subs"])
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser(description="Aggregate deploy_and_grade results into auditable statistics.")
     ap.add_argument("results", help="the JSONL from deploy_and_grade --record")
@@ -243,6 +284,10 @@ def main():
     # entry-challenge withholds, so the winner comparison isn't contaminated and its min can't disagree with (b).
     win_scores = [r["slop_score"] for r in win_all if _is_graded(r)]
     non_scores = [r["slop_score"] for r in non_all if _is_graded(r)]
+
+    # ---- (a2) by hackathon: the source-hackathon attribution rolled up into per-hackathon stats ----
+    hk_rows = by_hackathon(recs)
+    hk_ranked = [r for r in hk_rows if r["graded"] >= 10 and r["median_slop"] is not None]  # min-n so a 1-app slug can't top it
 
     # ---- (e) anomalies ----
     mean = statistics.mean(scores) if scores else 0
@@ -358,6 +403,7 @@ def main():
                               "tripped_by_probe": dict(onset_by_probe.most_common())},
             "category_concentration": {k: round(v, 1) for k, v in sorted(cat_total.items(), key=lambda x: -x[1])},
             "probe_fire_frequency": {pid: n for pid, n in freq},
+            "by_hackathon": hk_rows,
             "winners": {"n": len(win_scores), "avg": round(statistics.mean(win_scores), 1) if win_scores else None},
             "non_winners": {"n": len(non_scores), "avg": round(statistics.mean(non_scores), 1) if non_scores else None},
             "anomalies": {"zeros": [r["repo"] for r in zeros], "thin": [r["repo"] for r in thin],
@@ -410,6 +456,21 @@ def main():
     if disputed:   # veto: LLM called it broken but discovery kept real surface + no deterministic signal agreed
         print(f"    DISPUTED-BROKEN (veto): {len(disputed)} app(s) the audit called broken but that KEPT real "
               f"surface — SCORED (not DNF'd on the LLM alone), FLAGGED for human review")
+
+    # (a2)
+    def _f(v):   # a stat cell: em-dash when undefined (too small a sample), else one decimal
+        return "—" if v is None else f"{v:.1f}"
+    print(f"\n(a2) BY HACKATHON  ({len(hk_rows)} hackathons — source attribution)   [slop = whole cohort · w.* = winners only]")
+    print(f"     {'hackathon':<32}{'subs':>5}{'grd':>5}{'med':>7}{'mean':>7}{'sd':>6}{'win':>5}{'w.grd':>6}{'w.med':>7}{'w.mean':>8}")
+    for row in hk_rows:
+        print(f"     {row['hackathon'][:32]:<32}{row['subs']:>5}{row['graded']:>5}"
+              f"{_f(row['median_slop']):>7}{_f(row['mean_slop']):>7}{_f(row['stdev_slop']):>6}"
+              f"{row['winners']:>5}{row['winner_graded']:>6}{_f(row['winner_median']):>7}{_f(row['winner_mean']):>8}")
+    if hk_ranked:   # which hackathons produced the sloppiest / cleanest apps (min 10 graded, so it's not noise)
+        top = sorted(hk_ranked, key=lambda x: -x["median_slop"])[:3]
+        bot = sorted(hk_ranked, key=lambda x: x["median_slop"])[:3]
+        print("     sloppiest (median slop, n≥10 graded): " + ", ".join(f"{r['hackathon']} {r['median_slop']}" for r in top))
+        print("     cleanest  (median slop, n≥10 graded): " + ", ".join(f"{r['hackathon']} {r['median_slop']}" for r in bot))
 
     # (b)
     print(f"\n(b) SLOP-SCORE DISTRIBUTION  (all graded apps)")
