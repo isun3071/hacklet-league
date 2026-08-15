@@ -1095,6 +1095,8 @@ def deep_link_shell(ctx, probe) -> bool | None:
     routes = [r for r in ctx.profile.routes
               if r not in ("/", "") and not r.startswith(("/_next/", "/static/", "/assets/"))
               and not _DL_API_ROUTE.search(r)                              # /api,/v1,/graphql,... = endpoint, not a view
+              and "/api/" not in r.lower()                                 # a MID-PATH api call (/x/api/feedback) too
+              and "index.htm" not in r.split("?")[0].lower()               # the entry alias, not a deep-link sub-view
               and r.split("?")[0].rstrip("/") not in endpoint_paths        # discovered as an API endpoint -> not a view
               and not r.split("?")[0].lower().endswith(_DL_NONVIEW_EXT)]    # a JS/media/doc asset, not a view
     if not routes:

@@ -1306,12 +1306,23 @@ def _fp_sim(a: frozenset, b: frozenset) -> float:
     return len(a & b) / len(u) if u else 0.0
 
 
+# A route that renders a LOGIN/auth screen is auth-GATED (working correctly), not a broken deep link -- and when
+# the app gates everything, the nonexistent-route fallback renders that same login screen, so a gated route
+# matches it and reads as "broken". The blank-shell case (route+fallback both render the empty shell, no login)
+# is the REAL broken deep link. This separates them: 9 of 16 sampled v18 fires were auth-gated, 7 genuinely broken.
+_LOGIN_SCREEN_JS = """() => {
+  const t = (document.body ? document.body.innerText : '').toLowerCase();
+  return !!document.querySelector('input[type=password]')
+      || /\\b(sign in|log in|login|signin|sign up|forgot password|continue with)\\b/.test(t);
+}"""
+
+
 def deep_link_broken(base_url: str, routes, headers=None, timeout: float = 12.0, max_routes: int = 8):
     """FRESH-navigate (goto, not in-app) to a guaranteed-nonexistent route to capture the app's FALLBACK render
     (home / 404 / blank), then fresh-navigate to each discovered route; return ('broken', route) for the first
     that renders ~identically to the fallback (>= 0.92 word-set similarity -> no route-specific content, so a
-    shared/bookmarked link is dead), else ('ok', None) or ('inconclusive', None). Tests the bookmarked-link
-    path a catch-all host's 200 shell hides from an HTTP-only check."""
+    shared/bookmarked link is dead) AND is not merely an auth gate, else ('ok', None) or ('inconclusive', None).
+    Tests the bookmarked-link path a catch-all host's 200 shell hides from an HTTP-only check."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -1343,6 +1354,11 @@ def deep_link_broken(base_url: str, routes, headers=None, timeout: float = 12.0,
                         continue                            # this route rendered blank (slow load?) -> skip, conservative
                     tested += 1
                     if _fp_sim(fp_r, fp_bogus) >= 0.92:     # renders the same as a nonexistent route
+                        is_login = False
+                        with contextlib.suppress(Exception):
+                            is_login = bool(page.evaluate(_LOGIN_SCREEN_JS))
+                        if is_login:
+                            continue                         # a login/auth screen -> auth-gated, not a dead deep link
                         return ("broken", route)
                 return (("ok" if tested else "inconclusive"), None)
             finally:
