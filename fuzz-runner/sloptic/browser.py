@@ -1256,8 +1256,13 @@ def back_button_broken(base_url: str, headers=None, timeout: float = 12.0):
                 _apply_auth(page, base_url, headers)
                 detail = {}
                 page.goto(base_url.rstrip("/") + "/", timeout=timeout * 1000, wait_until="load")
+                with contextlib.suppress(Exception):
+                    page.wait_for_load_state("networkidle", timeout=5000)  # let the SPA finish painting BEFORE we
+                page.wait_for_timeout(300)                                  # fingerprint -> a reproducible entry view
                 url_a, fa = page.url.rstrip("/"), _view_fp(page)
                 detail["entry_url"] = url_a
+                if len(fa) < 3:
+                    return "inconclusive", detail    # entry rendered ~nothing (partial/blank) -> can't judge restoration
                 host = urllib.parse.urlparse(base_url).netloc
                 link, href_used = None, None
                 with contextlib.suppress(Exception):
@@ -1288,9 +1293,21 @@ def back_button_broken(base_url: str, headers=None, timeout: float = 12.0):
                     return "inconclusive", detail                       # the click didn't change the view
                 with contextlib.suppress(Exception):
                     page.go_back(timeout=5000)
-                    page.wait_for_load_state("load", timeout=5000)
+                    page.wait_for_load_state("networkidle", timeout=5000)   # settle the restored view before comparing
                     page.wait_for_timeout(300)
                 url_c, fc = page.url.rstrip("/"), _view_fp(page)
+                # AUTH-GATED back: the app sent Back to a real login FORM (a visible password field) or to an auth
+                # URL -> the gate intercepted, so we never observe whether Back restores the prior view -> N/A, not
+                # a 'dead back button'. NB: key on the password FIELD, not "log in" TEXT -- nearly every landing
+                # page has a "Log in" nav button (toyota's marketing page, findmyseat), and matching that text
+                # over-suppressed normal pages. The replaceState-skip (Back -> about:blank) and view-stuck-on-B
+                # defects have no password field and no auth URL, so they still fire below.
+                on_login_form = False
+                with contextlib.suppress(Exception):
+                    on_login_form = bool(page.evaluate("() => !!document.querySelector('input[type=password]')"))
+                if on_login_form or _AUTH_URL.search(url_c):
+                    detail["auth_gated_on_back"] = True
+                    return "inconclusive", detail
                 content_restored = len(fc & a_only) >= len(fc & b_only)
                 detail.update(after_back_url=url_c, url_restored=(url_c == url_a), content_restored=content_restored)
                 # restored = the entry URL is back AND A's distinctive content returned (not still showing B's)
@@ -1315,6 +1332,10 @@ _LOGIN_SCREEN_JS = """() => {
   return !!document.querySelector('input[type=password]')
       || /\\b(sign in|log in|login|signin|sign up|forgot password|continue with)\\b/.test(t);
 }"""
+
+# a URL that IS an auth route -- back-navigating to it means the app gated the Back nav (qa-backnav-001), which
+# we cannot score as a "dead back button": we never got to observe whether Back restores the prior view.
+_AUTH_URL = re.compile(r"/(?:login|log-?in|signin|sign-?in|sign_in|auth|register|signup|sign-?up)\b", re.I)
 
 
 def deep_link_broken(base_url: str, routes, headers=None, timeout: float = 12.0, max_routes: int = 8):
