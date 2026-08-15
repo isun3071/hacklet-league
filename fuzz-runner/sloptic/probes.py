@@ -3168,6 +3168,68 @@ def _record_collections(resp):
     return [(k, rows) for k, rows in out if rows]
 
 
+_ANON_BULK_VALUE_SAMPLE = 25   # rows to sample for value-type + variance checks (JSON collections are homogeneous)
+
+# A curated listing of PUBLIC entities (places / orgs / resources) returns bulk records with an address, a phone
+# or an org email, and that is not a personal-data leak: those contacts are meant to be published. The tell is a
+# place/listing column (a Google Places id, a scrape `dataSource`, opening `hours`, a `category`) AND the ABSENCE
+# of any per-user ownership column. If a row is owned by a user (uid / created_by / candidate / patient /
+# submitted_by ...), it is user data whatever else it carries, so an ownership column VETOES the directory verdict.
+_DIRECTORY_MARKERS = {"googleplaceid", "googlemapsurl", "mapsurl", "placeid", "datasource", "website", "hours",
+                      "openinghours", "category", "categories", "rating", "googlerating", "verified",
+                      "departments", "services", "eligibility", "amenities", "cuisine"}
+_OWNERSHIP_MARKERS = {"uid", "userid", "owner", "ownerid", "createdby", "createdbyid", "account", "accountid",
+                      "customer", "customerid", "candidate", "candidateid", "patient", "patientid", "submittedby",
+                      "submittedbyuid", "submittedbyid", "author", "authorid", "member", "memberid"}
+
+
+def _norm_col(c: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", c.lower())
+
+
+def _is_public_directory(cols: list[str]) -> bool:
+    """True when the collection reads as a published listing of public entities, not a dump of user records: a
+    directory-marker column is present and NO per-user ownership column is (ownership vetoes -> it is user data)."""
+    norm = {_norm_col(c) for c in cols}
+    if norm & _OWNERSHIP_MARKERS:
+        return False
+    return bool(norm & _DIRECTORY_MARKERS)
+
+
+def _values_match_sensitive_type(col: str, vals: list) -> bool:
+    """The column NAME matched `_SENSITIVE_COLUMN`; confirm at least one VALUE is actually of that type. A column
+    merely NAMED like PII is not a leak: `tokens_total` holds LLM token COUNTS (ints), `phones` holds ARPAbet
+    phonemes (['Y','AE1']), `phone_bedtime_habit` holds a survey enum. Value-level is provable; name-level is a
+    guess -- and the whole probe bills 40 points, so it must key on the evidence, not the label."""
+    c = col.lower()
+    scalars = [v for v in vals if isinstance(v, (str, int, float)) and not isinstance(v, bool)]
+    if not scalars:
+        return False        # values are lists / dicts / bools / null -> not a scalar identifier (phones=['Y','AE1'])
+    strs = [str(v) for v in scalars]
+    if "email" in c or "mail" in c:
+        return any("@" in s and "." in s.split("@")[-1] for s in strs)
+    if re.search(r"ssn|social", c):
+        return any(sum(ch.isdigit() for ch in s) == 9 for s in strs)
+    if "credit" in c or "card" in c:
+        return any(13 <= sum(ch.isdigit() for ch in s) <= 19 for s in strs)
+    if "phone" in c:
+        def _phoneish(s: str) -> bool:
+            digits = sum(ch.isdigit() for ch in s)
+            body = re.sub(r"[\s()+.-]", "", s)          # a real number is mostly digits after formatting chars
+            return 7 <= digits <= 15 and digits >= len(body) - 1
+        return any(_phoneish(s) for s in strs)
+    if "token" in c or "secret" in c or "key" in c or "stripe" in c:
+        # an opaque credential (a JWT, an sk_live_..., a UUID), not a counter: a mixed-alnum string >= 12 chars,
+        # never a plain integer -- this is what separates `access_token` from `tokens_total`
+        return any(isinstance(v, str) and len(v) >= 12 and any(ch.isdigit() for ch in v)
+                   and any(ch.isalpha() for ch in v) for v in scalars)
+    if "dob" in c or "birth" in c:
+        return any(sum(ch.isdigit() for ch in s) >= 4 and any(sep in s for sep in "-/.") for s in strs)
+    # name / address / password: type-validation is weak (any string looks valid), so accept a non-empty string
+    # here and let `_is_public_directory` handle the public-address / public-org-contact case.
+    return any(isinstance(v, str) and v.strip() for v in scalars)
+
+
 def anon_bulk_data_exposed(ctx, probe) -> bool | None:
     """An ANONYMOUS request returning bulk records with PII / financial / credential columns.
 
@@ -3201,8 +3263,20 @@ def anon_bulk_data_exposed(ctx, probe) -> bool | None:
             for key, rows in collections:
                 if len(rows) < _ANON_BULK_MIN_RECORDS:
                     continue
-                cols = sorted({c for row in rows[:5] for c in row})
-                hits = [c for c in cols if _SENSITIVE_COLUMN.search(c)]
+                sample = rows[:_ANON_BULK_VALUE_SAMPLE]
+                cols = sorted({c for row in sample for c in row})
+                if _is_public_directory(cols):
+                    continue      # a published listing of public places/orgs, not a dump of personal records
+                hits = []
+                for c in cols:
+                    if not _SENSITIVE_COLUMN.search(c):
+                        continue
+                    vals = [row[c] for row in sample if row.get(c) not in (None, "")]
+                    if not _values_match_sensitive_type(c, vals):
+                        continue  # named like PII, but the values are not (tokens_total=ints, phones=phonemes)
+                    if len({str(v).strip().lower() for v in vals}) < 2:
+                        continue  # one value shared across every row = a config / org contact, not per-user data
+                    hits.append(c)
                 if not hits:
                     continue      # bulk but not sensitive: a catalog, an index, a public profile list
                 ctx.evidence.update(anon_readable=True, endpoint=path, collection=key or "(top level)",
