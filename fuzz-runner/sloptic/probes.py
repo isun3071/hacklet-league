@@ -2881,12 +2881,37 @@ def vulnerable_dependency(ctx, probe) -> bool | None:
 _SOURCEMAP_URL = re.compile(r"//[#@]\s*sourceMappingURL=(\S+)")
 
 
+# A .map that reconstructs only VENDORED source (React, Next's polyfills, axios) is not a disclosure: that code
+# is already public on npm and carries none of the app's business logic or secrets. In the v18 corpus 114 of 164
+# fires (69%) were exactly this -- 104 the identical Next.js chunk `a6dad97d9634a72d.js.map` (one source, a
+# node_modules polyfill) and 10 the base44 platform `badge.js` widget (one app file, `src/badge/badge.ts`). The
+# finding must key on the app's OWN source, so exclude vendored paths and require >= 2 app-authored code files.
+_VENDOR_SOURCE = ("node_modules/", "/webpack/runtime/", "webpack://webpack/", "/dist/build/polyfills/")
+_SOURCE_CODE_EXT = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".coffee")
+_MIN_APP_SOURCES = 2   # the badge widget exposes exactly 1 app file; the smallest real leak in v18 exposed 3
+
+
+def _app_source_files(sources) -> list[str]:
+    """The app-authored CODE files in a sourcemap's `sources`: not under node_modules / a bundler runtime /
+    a framework polyfill, and an actual source extension (a .png/.css asset is not a business-logic leak)."""
+    out = []
+    for s in sources or []:
+        if not isinstance(s, str):
+            continue
+        low = s.lower()
+        if any(v in low for v in _VENDOR_SOURCE):
+            continue
+        if low.rsplit("?", 1)[0].endswith(_SOURCE_CODE_EXT):
+            out.append(s)
+    return out
+
+
 def source_map_exposed(ctx, probe) -> bool | None:
     """SPA-native info-disclosure: a production bundle ships its .map, so anyone can reconstruct the ORIGINAL
     source — business logic, hidden endpoints, and (the real risk) hardcoded secrets a minified scan misses.
     For each same-origin .js bundle, fetch the //# sourceMappingURL target (or the conventional <bundle>.map);
-    fire only on a REAL sourcemap (JSON with sources/sourcesContent), never a soft-404 shell (innocence check).
-    N/A when there are no .js bundles to check."""
+    fire only on a REAL sourcemap (JSON with sources/sourcesContent) that reconstructs the APP's OWN source, never
+    a soft-404 shell or a purely-vendored map (React/Next/a platform widget). N/A when there are no .js bundles."""
     js = [r for r in (["/"] + ctx.profile.routes) if r.split("?")[0].endswith(".js")]
     if not js:
         return None
@@ -2907,10 +2932,15 @@ def source_map_exposed(ctx, probe) -> bool | None:
                 sm = r.json()
             except ValueError:
                 continue
-            if isinstance(sm, dict) and sm.get("version") and ("sources" in sm or "sourcesContent" in sm):
-                ctx.evidence.update(bundle=path, source_map=mp, sources=len(sm.get("sources") or []),
-                                    reconstructable=bool(sm.get("sourcesContent")))
-                return True
+            if not (isinstance(sm, dict) and sm.get("version") and ("sources" in sm or "sourcesContent" in sm)):
+                continue
+            app = _app_source_files(sm.get("sources"))
+            if len(app) < _MIN_APP_SOURCES:
+                continue                      # vendored-only (React/Next) or a platform widget -> not app source
+            ctx.evidence.update(bundle=path, source_map=mp, sources=len(sm.get("sources") or []),
+                                app_sources=len(app), app_source_sample=app[:6],
+                                reconstructable=bool(sm.get("sourcesContent")))
+            return True
     return False
 
 
