@@ -9,7 +9,8 @@ Input is the JSONL that `deploy_and_grade.py --record FILE` appends (one line pe
     uv run python scripts/stats.py results.jsonl --json                 # machine-readable summary
 
 Reports: (a) deploy-success rate (hackathon reproducibility), (a2) per-hackathon breakdown (source
-attribution -> subs / deploy% / graded / median slop / winners), (b) slop-score distribution + histogram
+attribution -> subs / deploy% / graded / median slop / winners), (b) slop-score distribution + histogram,
+(b2) Lighthouse performance score (0-100, the perf-axis score surfaced),
 + category concentration + most-frequent findings, (c) per-probe fire-frequency, (d) winners vs
 non-winners, (e) anomalies flagged for hand-verification (the surprising 0s and the surprising
 outliers — where fuzzer bugs and genuinely interesting apps both hide).
@@ -164,6 +165,22 @@ def _slop_stats(xs):
     return {"median": round(statistics.median(xs), 1) if xs else None,
             "mean": round(statistics.mean(xs), 1) if xs else None,
             "stdev": round(statistics.pstdev(xs), 1) if len(xs) >= 2 else None}
+
+
+def lighthouse_scores(recs):
+    """The Lighthouse performance score (0-100) across records that carry it -> {'performance': {n, median, mean,
+    min, max}} (values None when none do). This is the score the perf axis already grades on, surfaced for the
+    report. (Accessibility is NOT here on purpose: a11y is scored by the qa-a11y axe probes, not Lighthouse.)
+    Records graded before the Lighthouse cutover have no score, so the caller skips the section when n=0."""
+    xs = []
+    for r in recs:
+        lh = (r.get("observed_surface") or {}).get("lighthouse")
+        if isinstance(lh, dict) and lh.get("performance") is not None:
+            xs.append(lh["performance"])
+    return {"performance": {"n": len(xs),
+                            "median": round(statistics.median(xs)) if xs else None,
+                            "mean": round(statistics.mean(xs), 1) if xs else None,
+                            "min": min(xs) if xs else None, "max": max(xs) if xs else None}}
 
 
 def by_hackathon(recs):
@@ -404,6 +421,7 @@ def main():
             "category_concentration": {k: round(v, 1) for k, v in sorted(cat_total.items(), key=lambda x: -x[1])},
             "probe_fire_frequency": {pid: n for pid, n in freq},
             "by_hackathon": hk_rows,
+            "lighthouse_scores": lighthouse_scores(graded),
             "winners": {"n": len(win_scores), "avg": round(statistics.mean(win_scores), 1) if win_scores else None},
             "non_winners": {"n": len(non_scores), "avg": round(statistics.mean(non_scores), 1) if non_scores else None},
             "anomalies": {"zeros": [r["repo"] for r in zeros], "thin": [r["repo"] for r in thin],
@@ -489,6 +507,13 @@ def main():
     for pid, n in freq[:10]:
         b, c = probe_meta[pid]
         print(f"      {pid:20} {n:>3}/{len(graded)} apps   {b}/{c}")
+
+    # (b2) Lighthouse PERFORMANCE score — 0-100, the number the perf axis grades on, surfaced here. Absent on a
+    # pre-Lighthouse-cutover corpus, so the section self-skips. (a11y is scored by qa-a11y, not shown here.)
+    s = lighthouse_scores(graded)["performance"]
+    if s["n"]:
+        print(f"\n(b2) LIGHTHOUSE PERFORMANCE (0-100)")
+        print(f"     median {s['median']}  mean {s['mean']}  min {s['min']}  max {s['max']}  (n {s['n']})")
 
     # (c)
     print(f"\n(c) PER-PROBE FIRE-FREQUENCY  (# of the {len(graded)} graded apps each probe fired on)")

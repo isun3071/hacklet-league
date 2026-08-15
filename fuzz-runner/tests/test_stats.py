@@ -7,7 +7,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from stats import _is_graded, by_hackathon  # noqa: E402
+from stats import _is_graded, by_hackathon, lighthouse_scores  # noqa: E402
 
 from sloptic.eligibility import is_ungradeable_challenge  # noqa: E402
 
@@ -89,3 +89,13 @@ def test_by_hackathon_labels_missing_slug_and_excludes_ungraded_from_slop():
     assert rows["(unlabeled)"]["median_slop"] == 30 and rows["(unlabeled)"]["stdev_slop"] is None
     assert rows["x"]["graded"] == 0 and rows["x"]["median_slop"] is None   # DNF doesn't count toward slop
     assert rows["x"]["winner_median"] is None
+
+
+def test_lighthouse_scores_summarize_performance_and_empty_otherwise():
+    def _lh(perf):
+        return _rec(observed_surface={"lighthouse": {"performance": perf}})
+    recs = [_lh(90), _lh(60), _lh(None), _rec()]   # last two lack a perf score / any lighthouse block
+    s = lighthouse_scores(recs)["performance"]
+    assert s["n"] == 2 and s["median"] == 75 and s["min"] == 60 and s["max"] == 90   # median(60,90)
+    # a pre-Lighthouse corpus (no scores) -> n=0, all None -> the (b2) section self-skips
+    assert lighthouse_scores([_rec(), _rec()])["performance"]["n"] == 0

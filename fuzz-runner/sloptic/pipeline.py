@@ -365,8 +365,12 @@ def run(deployer: Deployer, catalog: list[Probe], render=None, headers=None, on_
             stage = "late"
         elif end_challenged:
             bot_challenge, stage = True, "late"
+        surface = surface_metrics(profile)
+        if ctx.lighthouse:   # capture the Lighthouse performance score (0-100) onto the record -- the perf axis
+            perf = lighthouse.perf_score(ctx.lighthouse)   # already grades on it; this surfaces it for the stats.
+            surface["lighthouse"] = {"performance": round(perf * 100) if perf is not None else None}
         return Report(slop_score=compute_slop_score(outcomes), outcomes=outcomes,
-                      axis_slop=compute_axis_slop(outcomes), surface=surface_metrics(profile),
+                      axis_slop=compute_axis_slop(outcomes), surface=surface,
                       coverage=coverage_metrics(outcomes), platform=plat, bot_challenge=bot_challenge,
                       challenge_stage=stage, challenge_onset=onset_probe or "", request_counts=req_counts,
                       blocked_probes=blocked_probes, incomplete_axes=incomplete_axes, trace=trace_sink or [])
