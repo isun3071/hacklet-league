@@ -271,20 +271,6 @@ def await_streamlit(page, budget_s: float = 60.0) -> str:
     return "stuck"
 
 
-def _await_if_shell(page, url: str, budget_s: float = 12.0) -> None:
-    """Post-goto hook for the MEASURING renders (perf): if this is a websocket-rendered shell host (Streamlit),
-    wait for the real app to paint so the metric reflects the app, not the framework shell. No-op otherwise
-    (cheap gate first). The server is already warm here — discovery's render woke it — so a rendered app paints
-    in a few seconds; the budget is SHORT on purpose (this runs in EVERY perf render, and web_vitals runs it
-    per sample) so a genuinely-STUCK Streamlit app can't stack 45s x N waits and blow the grade timeout — it
-    just measures the shell, which is excluded from the curve anyway (render_state was set once in discovery)."""
-    if budget_s <= 0:
-        return   # caller opted out (discovery already found this app error/stuck -> don't re-wait, just measure)
-    try:
-        if _looks_streamlit(page, url):
-            await_streamlit(page, budget_s=budget_s)
-    except Exception:
-        pass
 
 
 def render_routes(base_url: str, paths, headers=None, timeout: float = 12.0,
@@ -902,32 +888,6 @@ def inert_controls(url: str, headers=None, timeout: float = 12.0, max_controls: 
         return None
 
 
-def first_contentful_paint(url: str, headers=None, timeout: float = 12.0, shell_await: bool = True) -> float | None:
-    """Render url and return First Contentful Paint in milliseconds (the user-facing 'time to see
-    something' metric). None if no browser, render fails, or nothing ever paints."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        return None
-    try:
-        with sync_playwright() as pw:
-            b = _launch(pw)
-            if b is None:
-                return None
-            try:
-                page = b.new_page()
-                _apply_auth(page, url, headers)
-                page.goto(url, timeout=timeout * 1000, wait_until="load")
-                _await_if_shell(page, url, budget_s=12.0 if shell_await else 0.0)  # skip if discovery found it dead
-                page.wait_for_timeout(2500)  # allow delayed/contentful paint to occur
-                return page.evaluate(
-                    "() => { const e = performance.getEntriesByName('first-contentful-paint')[0];"
-                    " return e ? e.startTime : null; }"
-                )
-            finally:
-                b.close()
-    except Exception:
-        return None
 
 
 # Accessibility is graded with axe-core (Deque), the gold-standard WCAG engine, injected into the render.
@@ -1197,34 +1157,6 @@ _METRICS_JS = """(() => {
 })()"""
 
 
-def render_metrics(url: str, headers=None, timeout: float = 15.0, shell_await: bool = True) -> dict | None:
-    """Render url once and return {lcp_is_img, lcp_loading, dom_nodes}. None if no browser / the render fails."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        return None
-    try:
-        with sync_playwright() as pw:
-            b = _launch(pw)
-            if b is None:
-                return None
-            try:
-                page = b.new_page()
-                page.add_init_script(_METRICS_JS)                 # observe LCP from before the page loads
-                _apply_auth(page, url, headers)
-                page.goto(url, timeout=timeout * 1000, wait_until="load")
-                _await_if_shell(page, url, budget_s=12.0 if shell_await else 0.0)  # skip if discovery found it dead
-                try:
-                    page.wait_for_load_state("networkidle", timeout=6000)   # let the SPA settle so LCP is final
-                except Exception:
-                    page.wait_for_timeout(400)
-                return page.evaluate(
-                    "() => ({lcp_is_img: window.__hlm.lcp_is_img, lcp_loading: window.__hlm.lcp_loading, "
-                    "dom_nodes: document.getElementsByTagName('*').length})")
-            finally:
-                b.close()
-    except Exception:
-        return None
 
 
 # Core Web Vitals — LCP (largest content paint), CLS (layout shift), total blocking time (main-thread
@@ -1245,41 +1177,6 @@ _VITALS_JS = """(() => {
 _CWV_THROTTLE = {"offline": False, "latency": 150, "downloadThroughput": 200_000, "uploadThroughput": 93_750}
 
 
-def web_vitals(url: str, headers=None, timeout: float = 25.0, samples: int = 3, shell_await: bool = True) -> list | None:
-    """Sample Core Web Vitals over N throttled renders; return [{lcp_ms, cls, tbt_ms}] per run (the caller
-    scores off the player-favorable edge). None if no browser or the render fails."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        return None
-    try:
-        with sync_playwright() as pw:
-            b = _launch(pw)
-            if b is None:
-                return None
-            try:
-                out = []
-                for _ in range(samples):
-                    page = b.new_page()
-                    try:
-                        cdp = page.context.new_cdp_session(page)
-                        cdp.send("Network.enable")
-                        cdp.send("Network.emulateNetworkConditions", _CWV_THROTTLE)
-                        cdp.send("Emulation.setCPUThrottlingRate", {"rate": 4})
-                        page.add_init_script(script=_VITALS_JS)   # observers up before any page script
-                        _apply_auth(page, url, headers)
-                        page.goto(url, timeout=timeout * 1000, wait_until="load")
-                        _await_if_shell(page, url, budget_s=12.0 if shell_await else 0.0)  # skip if discovery found it dead
-                        page.wait_for_timeout(2000)   # let LCP finalize + late layout shifts settle (throttled)
-                        v = page.evaluate("() => window.__hlv")
-                        out.append({"lcp_ms": round(v["lcp"]), "cls": round(v["cls"], 3), "tbt_ms": round(v["tbt"])})
-                    finally:
-                        page.close()
-                return out
-            finally:
-                b.close()
-    except Exception:
-        return None
 
 
 def dom_xss_executes(base_url: str, paths, params=("q",), max_attempts: int = 24,

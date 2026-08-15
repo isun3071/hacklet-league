@@ -22,7 +22,7 @@ from dataclasses import replace
 
 import httpx
 
-from . import auth, baas, browser, depscan, lighthouse, oob, perf, secretscan
+from . import auth, baas, browser, depscan, lighthouse, oob, secretscan
 from .net import make_client, request_counts
 from .schema import Endpoint
 from .discovery import _CATCHALL_PROBE, _body_sig
@@ -97,9 +97,6 @@ _DEBUG_FINGERPRINT = re.compile(
 
 # ---- declarative matchers -------------------------------------------------------------------
 
-def ttfb_at_least(resp, arg) -> bool:
-    # This matcher uses one sample; the production TTFB path samples N and takes the median.
-    return resp.elapsed.total_seconds() >= float(arg)
 
 
 def response_contains(resp, arg) -> bool:
@@ -187,25 +184,6 @@ def response_server_error(resp, arg=None) -> bool:
     return resp.status_code in (500, 502, 503, 504)
 
 
-def response_uncompressed(resp, arg=1024) -> bool:
-    # Slop: a sizeable TEXT response served with no Content-Encoding (gzip/br/deflate) -> wasted
-    # bandwidth and slower loads. Gate on size — small bodies don't benefit from compression, so a
-    # server that skips them is correct, not slop. httpx always sends Accept-Encoding and keeps the
-    # Content-Encoding header, so its presence means the server compressed.
-    if not _policy_applies(resp):
-        return False
-    ctype = resp.headers.get("content-type", "").lower()
-    if not any(t in ctype for t in ("text/", "javascript", "json", "xml", "svg")):
-        return False
-    # `identity` is HTTP's explicit token for "no transformation applied" (RFC 9110 8.4.1), so the header
-    # being PRESENT is not evidence of compression — its VALUE is. Measured on supavulnbase's perf-001
-    # fixture, which serves 124,879 bytes of text/plain with `content-encoding: identity` even when we send
-    # `Accept-Encoding: gzip, deflate, br`: their verify.sh asserts it is uncompressed and passes, and we
-    # read the header, saw it existed and reported clean.
-    enc = resp.headers.get("content-encoding", "").strip().lower()
-    if enc and enc != "identity":
-        return False
-    return len(resp.content) > int(arg)
 
 
 # sec-headers-006 (X-Powered-By) scope: presence is only a MEANINGFUL leak when the VALUE discloses more
@@ -304,14 +282,12 @@ def response_is_git_head(resp, arg=None) -> bool:
 
 
 MATCHERS = {
-    "ttfb_at_least": ttfb_at_least,
     "response_contains": response_contains,
     "response_missing_header": response_missing_header,
     "response_missing_clickjacking_defense": response_missing_clickjacking_defense,
     "response_csp_weak": response_csp_weak,
     "response_cors_misconfigured": response_cors_misconfigured,
     "response_server_error": response_server_error,
-    "response_uncompressed": response_uncompressed,
     "response_has_header": response_has_header,
     "response_is_aws_credentials": response_is_aws_credentials,
     "response_leaks_secret": response_leaks_secret,
@@ -4200,26 +4176,6 @@ def _served(ctx, path: str) -> bool:
         return False
 
 
-def slow_first_paint(ctx, probe) -> bool:
-    """Browser oracle: render and read First Contentful Paint; slop if it exceeds the gate — the
-    user-facing 'slow app' signal (client render delay, distinct from server TTFB). Browser-gated.
-    Measures the declared page if served, else the homepage (real apps don't serve the reference path)."""
-    target = _home_path(ctx, probe)
-    if not _served(ctx, target):
-        target = _landing(ctx)
-    url = ctx.base_url.rstrip("/") + target
-    # median of N renders, not one sample: FCP is wall-clock timing (JIT warmup, CPU/network jitter),
-    # so a single sample near the gate flips between runs -> non-deterministic score. The isinstance
-    # filter also drops any non-numeric value a hostile page could inject (would raise TypeError).
-    _sa = _shell_ok(ctx)
-    samples = [browser.first_contentful_paint(url, headers=ctx.headers, shell_await=_sa) for _ in range(3)]
-    vals = [s for s in samples if isinstance(s, (int, float))]
-    if not vals:
-        return False
-    fcp = statistics.median(vals)
-    threshold = probe.probe.get("threshold_ms", 1000)
-    ctx.evidence.update(fcp_ms=round(fcp), threshold_ms=threshold)
-    return fcp > threshold
 
 
 def _shell_ok(ctx) -> bool:
@@ -4230,28 +4186,6 @@ def _shell_ok(ctx) -> bool:
     return getattr(getattr(ctx, "profile", None), "render_state", None) not in ("error", "stuck")
 
 
-def slow_core_web_vitals(ctx, probe) -> bool:
-    """Browser oracle: Core Web Vitals (LCP / CLS / total blocking time) sampled over N device-throttled
-    renders and scored off the PLAYER-FAVORABLE EDGE (best-of-N) against Google's POOR thresholds (set
-    beyond the normal variance band) -- so the app has to be poor even on its BEST run to fire, and
-    measurement variance can only ever help the player. Browser-gated."""
-    target = _home_path(ctx, probe)
-    if not _served(ctx, target):
-        target = _landing(ctx)
-    url = ctx.base_url.rstrip("/") + target
-    samples = browser.web_vitals(url, headers=ctx.headers, samples=probe.probe.get("samples", 3),
-                                 shell_await=_shell_ok(ctx))
-    if not samples:
-        return False
-    best_lcp = min(s["lcp_ms"] for s in samples)   # lower is better -> take the player's best run
-    best_cls = min(s["cls"] for s in samples)
-    best_tbt = min(s["tbt_ms"] for s in samples)
-    bad = {"LCP": best_lcp > probe.probe.get("lcp_ms", 4000),   # Google "poor": LCP>4s / CLS>0.25 / TBT>600ms
-           "CLS": best_cls > probe.probe.get("cls", 0.25),
-           "TBT": best_tbt > probe.probe.get("tbt_ms", 600)}
-    ctx.evidence.update(best_lcp_ms=best_lcp, best_cls=best_cls, best_tbt_ms=best_tbt,
-                        samples=len(samples), failed=[k for k, v in bad.items() if v])
-    return any(bad.values())
 
 
 _CONSOLE_INTACT_SCALE = 0.4   # an uncaught error that DIDN'T visibly break the render is a real defect but not
@@ -4699,168 +4633,8 @@ def load_resilience(ctx, probe) -> bool:
     return med > 0.1
 
 
-# Performance rubric (see perf.py): measure objective primitives on the homepage and grade against the
-# tiered, published thresholds. `tier` = "profile" (tight, standardized-sandbox) or "ceiling" (absolute,
-# environment-robust); the two are separate catalog probes sharing a variant_group -> the worse tier
-# fires once. The homepage is the representative always-present target (real apps have no /heavy).
-# Subresources a browser AUTO-LOADS: src on media/script tags + href on <link> (stylesheet/preload).
-# Deliberately NOT <a href> — those are user navigations, not page assets, and blindly GETting them can
-# fire a destructive link (e.g. DVWA's <a href="logout.php"> would log the grader's session out mid-run,
-# de-authenticating every probe after it). Also the correct definition for page-weight / request-count.
-_ASSET_REF = re.compile(
-    r"""<(?:(?:img|script|iframe|embed|audio|video|source|track)\b[^>]*\bsrc|link\b[^>]*\bhref)"""
-    r"""\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 
 
-def _page_weight(c, base_url, path="/"):
-    """(total bytes, request count) for the homepage + up to 40 same-origin CSS/JS/img/media assets."""
-    try:
-        r = c.get(path)
-    except (httpx.HTTPError, httpx.InvalidURL):
-        return 0, 0
-    total, reqs = len(r.content), 1
-    if "html" not in r.headers.get("content-type", "").lower():
-        return total, reqs                      # non-HTML homepage (JSON API) -> just the body
-    base = urllib.parse.urlparse(base_url)
-    assets = []
-    for ref in _ASSET_REF.findall(r.text):
-        ref = ref.split("#")[0].strip()
-        if not ref or ref.startswith(("data:", "javascript:", "mailto:", "tel:")):
-            continue
-        t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, path), ref))
-        if t.netloc == base.netloc and t.path:
-            # KEEP THE QUERY. `dot.png?v=11` and `dot.png?v=12` are two round trips and two cache entries,
-            # and cache-busting query strings are precisely how bundlers version assets — so stripping the
-            # query before the dedupe below collapsed a chatty page into a tidy one. Measured on
-            # supavulnbase's perf-003 fixture: 60 statically-referenced `dot.png?v=N` links counted as ONE
-            # request against a threshold of 50, so perf-requests-001 read clean on a page built to fail it.
-            assets.append(t.path + ("?" + t.query if t.query else ""))
-    uniq = list(dict.fromkeys(assets))
-    reqs += len(uniq)                         # request count = homepage + EVERY referenced asset
-    for a in uniq[:40]:                       # fetch a bounded subset for the weight number
-        try:
-            total += len(c.get(a).content)
-        except (httpx.HTTPError, httpx.InvalidURL):
-            continue
-    return total, reqs
-
-
-def perf_ttfb(ctx, probe) -> bool:
-    """Homepage time-to-first-byte (server compute) exceeds the tier threshold — MEDIAN of 3 samples, per
-    perf.sample_ttfb, which rejects a cold-start/GC outlier. This said "p90 over samples", which is not what
-    the code does and is the opposite kind of statistic: p90 leans INTO the tail this deliberately discards."""
-    thresh = perf.TTFB_CEILING if probe.probe.get("tier") == "ceiling" else perf.TTFB_PROFILE
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        sample = perf.sample_ttfb(c, _home_path(ctx, probe))
-    ctx.evidence.update(ttfb_s=round(sample, 3), threshold_s=thresh,
-                        tier=probe.probe.get("tier", "profile"))
-    return sample >= thresh
-
-
-def perf_page_weight(ctx, probe) -> bool:
-    """Total homepage transfer weight (HTML + critical assets) exceeds the tier threshold."""
-    thresh = perf.WEIGHT_CEILING if probe.probe.get("tier") == "ceiling" else perf.WEIGHT_PROFILE
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        weight = _page_weight(c, ctx.base_url, _home_path(ctx, probe))[0]
-    ctx.evidence.update(weight_bytes=weight, threshold_bytes=thresh,
-                        tier=probe.probe.get("tier", "profile"))
-    return weight >= thresh
-
-
-def perf_request_count(ctx, probe) -> bool:
-    """The homepage needs more than the profile's round-trip budget to render (too chatty)."""
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        reqs = _page_weight(c, ctx.base_url, _home_path(ctx, probe))[1]
-    ctx.evidence.update(requests=reqs, threshold=perf.REQUESTS_PROFILE)
-    return reqs > perf.REQUESTS_PROFILE
-
-
-def perf_load_time(ctx, probe) -> bool:
-    """Computed end-to-end load time on the published profile crosses the absolute abandonment ceiling
-    (~5s) -> most users leave. Deterministic: TTFB + weight/bandwidth + round-trips."""
-    target = _home_path(ctx, probe)
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        ttfb = perf.sample_ttfb(c, target, n=3)
-        weight, reqs = _page_weight(c, ctx.base_url, target)
-    load_time = perf.computed_load_time(ttfb, weight, reqs)
-    ctx.evidence.update(load_time_s=round(load_time, 2), ttfb_s=round(ttfb, 3), weight_bytes=weight,
-                        requests=reqs, ceiling_s=perf.LOADTIME_CEILING)
-    return load_time >= perf.LOADTIME_CEILING
-
-
-# Caching — a static asset (JS/CSS/image/font) that carries no cache validators forces a full refetch
-# on every page load; a validator the server won't honor with a 304 is decorative. Static assets only:
-# HTML documents legitimately go uncached, so checking them would false-fire.
-_STATIC_EXT = (".js", ".mjs", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-               ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".webm")
-_STATIC_CTYPE = ("javascript", "css", "image/", "font/", "application/font", "svg")
-
-
-def _static_assets(c, base_url, path="/"):
-    """Same-origin static-asset paths (by extension) referenced by the homepage's src/href attrs."""
-    try:
-        r = c.get(path)
-    except (httpx.HTTPError, httpx.InvalidURL):
-        return []
-    if "html" not in r.headers.get("content-type", "").lower():
-        return []                                   # a JSON/asset homepage references no page assets
-    base = urllib.parse.urlparse(base_url)
-    out = []
-    for ref in _ASSET_REF.findall(r.text):
-        ref = ref.split("#")[0].strip()
-        if not ref or ref.startswith(("data:", "javascript:", "mailto:", "tel:")):
-            continue
-        t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, path), ref))
-        if t.netloc != base.netloc or not t.path.lower().endswith(_STATIC_EXT):
-            continue
-        out.append(t.path + ("?" + t.query if t.query else ""))
-    return list(dict.fromkeys(out))
-
-
-def caching_ineffective(ctx, probe) -> bool | None:
-    """Fetch each same-origin static asset and check it is actually cacheable: it must carry a validator
-    (ETag / Last-Modified) or explicit freshness (Cache-Control max-age / Expires), must not say
-    no-store, and any validator it advertises must yield a 304 on revalidation (else it's decorative and
-    saves nothing). Fires on the first asset that fails. N/A when the page references no static asset."""
-    budget = probe.probe.get("max_attempts", 20)
-    tested = False
-    n_assets = 0
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        for path in _static_assets(c, ctx.base_url, _home_path(ctx, probe)):
-            if budget <= 0:
-                break
-            budget -= 1
-            try:
-                r = c.get(path)
-            except (httpx.HTTPError, httpx.InvalidURL):
-                continue
-            ctype = r.headers.get("content-type", "").lower()
-            if r.status_code != 200 or not any(t in ctype for t in _STATIC_CTYPE):
-                continue                            # 404/redirect or an SPA catch-all HTML shell -> not an asset
-            tested = True
-            n_assets += 1
-            cc = r.headers.get("cache-control", "").lower()
-            etag, lastmod = r.headers.get("etag", ""), r.headers.get("last-modified", "")
-            has_fresh = any(k in cc for k in ("max-age", "public", "immutable")) or "expires" in r.headers
-            if "no-store" in cc:
-                ctx.evidence.update(cacheable=False, asset=path, issue="no-store")
-                return True                         # actively un-cacheable -> refetched every load
-            if not (etag or lastmod or has_fresh):
-                ctx.evidence.update(cacheable=False, asset=path, issue="no-validator")
-                return True                         # no caching affordance at all
-            try:                                    # decorative validator: advertised but not honored
-                if etag and c.get(path, headers={"If-None-Match": etag}).status_code != 304:
-                    ctx.evidence.update(cacheable=False, asset=path, issue="etag-not-honored")
-                    return True
-                if not etag and lastmod and \
-                        c.get(path, headers={"If-Modified-Since": lastmod}).status_code != 304:
-                    ctx.evidence.update(cacheable=False, asset=path, issue="last-modified-not-honored")
-                    return True
-            except (httpx.HTTPError, httpx.InvalidURL):
-                continue
-    if tested:
-        ctx.evidence.update(cacheable=True, assets_checked=n_assets)
-    return False if tested else None
 
 
 _SOFT404_EXT = (".js", ".css", ".png", ".webp", ".svg", ".woff2")
@@ -5212,80 +4986,13 @@ def subresource_integrity_missing(ctx, probe) -> bool | None:
 # a production asset that simply wasn't minified. Same-origin only (the app's OWN build output; a third-party
 # CDN file is the vendor's concern). Size-gated so a small hand-written script isn't charged.
 _MIN_ASSET_BYTES = 8192     # below this, minification savings are negligible and the file is often hand-authored
-_MINIFY_EXT = re.compile(r"\.(?:js|css)(?:\?|#|$)", re.I)   # (distinct from _ASSET_REF, the perf asset-ref regex)
 
 
-def _minified(text: str) -> bool:
-    """A minified asset packs code onto very long lines; hand/prettier source wraps at ~40-80 chars. True when
-    the average line length is well past any formatted source (>200) -> minified. The wide gap (minified bundles
-    run into the thousands) keeps the middle band unfired rather than guessing."""
-    return len(text) / (text.count("\n") + 1) > 200
-
-
-def _same_origin_assets(html: str, page_url: str) -> list[str]:
-    """Same-origin .css/.js the page references (<script src>, <link rel=stylesheet>). A cross-origin CDN asset
-    is excluded -- minifying the vendor's file is not the app's call."""
-    origin = urllib.parse.urlparse(page_url).netloc.lower()
-    refs = re.findall(r"<script\b[^>]*\bsrc\s*=\s*[\"']([^\"']+)[\"']", html, re.I)
-    for m in re.finditer(r"<link\b([^>]*)>", html, re.I):
-        if re.search(r"\brel\s*=\s*[\"']?stylesheet", m.group(1), re.I):
-            href = re.search(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", m.group(1), re.I)
-            if href:
-                refs.append(href.group(1))
-    out = []
-    for ref in refs:
-        full = urllib.parse.urljoin(page_url, ref.strip())
-        p = urllib.parse.urlparse(full)
-        if p.netloc.lower() == origin and _MINIFY_EXT.search(p.path or ""):
-            out.append(full)
-    return list(dict.fromkeys(out))
-
-
-def unminified_assets(ctx, probe) -> bool | None:
-    """A sizeable SAME-ORIGIN .css/.js asset shipped to production UNMINIFIED -- wasted bytes + parse time on
-    every load (Lighthouse unminified-css / unminified-javascript). Same-origin only; small files are skipped
-    (savings negligible, often hand-written). N/A when the page references no sizeable same-origin script/style.
-    A DISTINCT hygiene signal from the dev-build probe: a production asset the build simply left unminified."""
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        try:
-            r = c.get(_home_path(ctx, probe))
-        except (httpx.HTTPError, httpx.InvalidURL):
-            return None
-        if "html" not in r.headers.get("content-type", "").lower():
-            return None
-        unmin, checked = [], 0
-        for url in _same_origin_assets(r.text, str(r.url))[:probe.probe.get("max_attempts", 6)]:
-            try:
-                a = c.get(url)
-            except (httpx.HTTPError, httpx.InvalidURL):
-                continue
-            ct = a.headers.get("content-type", "").lower()
-            if not ("javascript" in ct or "css" in ct) or len(a.text) < _MIN_ASSET_BYTES:
-                continue                                 # not a real asset (html error shell) / too small to matter
-            checked += 1
-            if not _minified(a.text):
-                unmin.append(url)
-    if checked == 0:
-        return None                                      # no sizeable same-origin asset -> nothing to assess
-    ctx.evidence.update(unminified=unmin[:6], assets_checked=checked)
-    return bool(unmin)
 
 
 # v2.0 FAMILY 4 -- lazy-loading the LCP image. `loading="lazy"` on the element that DEFINES first paint makes
 # the browser defer the one image it should fetch first, delaying LCP for every visitor (~15% of sites do this;
 # Lighthouse flags it). Decorrelated from page weight -- a loading-STRATEGY mistake, not a size one.
-def lcp_image_lazy_loaded(ctx, probe) -> bool | None:
-    """The Largest Contentful Paint element is an <img> marked loading="lazy" -> the browser defers the very
-    image that defines first paint. Browser-gated. N/A when the LCP element isn't an image (nothing to
-    lazy-load) or the render fails; clean when the LCP image loads eagerly."""
-    m = browser.render_metrics(ctx.base_url.rstrip("/") + _home_path(ctx, probe), headers=ctx.headers,
-                               shell_await=_shell_ok(ctx))
-    if m is None:
-        return None
-    if not m.get("lcp_is_img"):
-        return None                                      # text/other LCP -> no LCP image to mis-load
-    ctx.evidence.update(lcp_is_img=True, lcp_loading=m.get("lcp_loading") or "eager", engine="lcp-observer")
-    return m.get("lcp_loading") == "lazy"
 
 
 # v2.0 FAMILY 4 -- excessive DOM size (Lighthouse dom-size). Too many nodes slow style/layout/interaction on
@@ -5293,78 +5000,10 @@ def lcp_image_lazy_loaded(ctx, probe) -> bool | None:
 _DOM_NODE_LIMIT = 1400     # Lighthouse's excessive-DOM threshold; only a genuinely heavy DOM fires
 
 
-def excessive_dom_size(ctx, probe) -> bool | None:
-    """The rendered page carries an excessive DOM (> Lighthouse's ~1400-node threshold): style/layout/interaction
-    cost scales with node count, independent of page weight. Browser-gated. N/A when the render fails."""
-    m = browser.render_metrics(ctx.base_url.rstrip("/") + _home_path(ctx, probe), headers=ctx.headers,
-                               shell_await=_shell_ok(ctx))
-    if m is None:
-        return None
-    n = m.get("dom_nodes") or 0
-    limit = probe.probe.get("max_nodes", _DOM_NODE_LIMIT)
-    ctx.evidence.update(dom_nodes=n, threshold=limit, engine="dom-count")
-    return n > limit
 
 
-# v2.0 FAMILY 4 -- web font without a non-blocking font-display (FOIT). A @font-face / Google Fonts load with no
-# font-display: swap|optional|fallback leaves text INVISIBLE while the font downloads, then reflows (Lighthouse
-# font-display; ~32% of font pages use a blocking value). Decorrelated: a font-LOADING strategy, not size.
-_FONT_FACE_BLOCK = re.compile(r"@font-face\b[^{]*\{([^}]*)\}", re.I | re.S)
-_FONT_HAS_SRC = re.compile(r"\bsrc\s*:", re.I)
-# A @font-face FOITs only if it actually FETCHES a font file (`url(...)`). A `src: local("Arial")` block with no
-# url() is a next/font metric-adjust FALLBACK (size-adjust / ascent-override over an already-installed system
-# font) -> zero network fetch, physically cannot FOIT. Requiring url() kills the dominant perf-font FP: next/font
-# emits one such fallback per font, and counting them was ~90% of this probe's fires on the v18 corpus.
-_FONT_HAS_URL = re.compile(r"\burl\s*\(", re.I)
-_GOOD_FONT_DISPLAY = re.compile(r"font-display\s*:\s*(?:swap|optional|fallback)\b", re.I)
-_GFONTS_LINK = re.compile(r"fonts\.googleapis\.com/css2?\?[^\"'<>\s)]+", re.I)
-# `display=swap` WITHOUT anchoring on a literal `?`/`&` before it: a Google-Fonts link whose separator is HTML-
-# encoded (`&amp;display=`) or JS/JSON-encoded (`&display=`, matched because the scan runs over the whole
-# HTML incl. RSC/flight blobs) IS correctly configured, but the old `[?&]display=` anchor flagged it as FOIT.
-# De-anchoring is safe: `display=` only appears as a query param inside a captured googleapis URL.
-_GFONTS_DISPLAY = re.compile(r"display=(?:swap|optional|fallback)\b", re.I)
 
 
-def font_display_missing(ctx, probe) -> bool | None:
-    """A web font loaded WITHOUT a non-blocking font-display (swap/optional/fallback) -> FOIT: text is invisible
-    while the font downloads, then reflows. Checks @font-face in the inline + same-origin CSS and Google Fonts
-    <link>s. N/A when the page loads no web font; clean when every one sets a good display. Static HTML/CSS."""
-    with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=True) as c:
-        try:
-            r = c.get(_home_path(ctx, probe))
-        except (httpx.HTTPError, httpx.InvalidURL):
-            return None
-        if "html" not in r.headers.get("content-type", "").lower():
-            return None
-        html = r.text
-        origin = urllib.parse.urlparse(str(r.url)).netloc.lower()
-        blobs = [html]                                   # inline <style> @font-face live here
-        for m in re.finditer(r"<link\b([^>]*)>", html, re.I):
-            if not re.search(r"\brel\s*=\s*[\"']?stylesheet", m.group(1), re.I):
-                continue
-            href = re.search(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", m.group(1), re.I)
-            if href:
-                full = urllib.parse.urljoin(str(r.url), href.group(1).strip())
-                if urllib.parse.urlparse(full).netloc.lower() == origin:
-                    try:
-                        blobs.append(c.get(full).text)
-                    except (httpx.HTTPError, httpx.InvalidURL):
-                        pass
-    web_fonts, offenders = 0, []
-    for blob in blobs:
-        for fb in _FONT_FACE_BLOCK.finditer(blob):
-            if _FONT_HAS_SRC.search(fb.group(1)) and _FONT_HAS_URL.search(fb.group(1)):
-                web_fonts += 1
-                if not _GOOD_FONT_DISPLAY.search(fb.group(1)):
-                    offenders.append("@font-face")
-    for g in _GFONTS_LINK.findall(html):                 # Google Fonts defaults to a blocking display unless set
-        web_fonts += 1
-        if not _GFONTS_DISPLAY.search(g):
-            offenders.append(g[:80])
-    if web_fonts == 0:
-        return None
-    ctx.evidence.update(foit_sources=offenders[:6], web_fonts=web_fonts)
-    return bool(offenders)
 
 
 # SEO / discoverability meta — objective presence checks on best-practice head tags. Viewport is the
@@ -5981,25 +5620,14 @@ PREDICATES = {
     "load_resilience": load_resilience,
     "crash_resistance": crash_resistance,
     "declared_constraint_unenforced": declared_constraint_unenforced,
-    "perf_ttfb": perf_ttfb,
-    "perf_page_weight": perf_page_weight,
-    "perf_request_count": perf_request_count,
-    "perf_load_time": perf_load_time,
-    "caching_ineffective": caching_ineffective,
     "http_soft_404": http_soft_404,
     "a11y_hard_fails": a11y_hard_fails,
     "broken_links": broken_links,
     "redirect_loop": redirect_loop,
     "mixed_content": mixed_content,
     "subresource_integrity_missing": subresource_integrity_missing,
-    "unminified_assets": unminified_assets,
-    "lcp_image_lazy_loaded": lcp_image_lazy_loaded,
-    "excessive_dom_size": excessive_dom_size,
-    "font_display_missing": font_display_missing,
     "seo_meta_missing": seo_meta_missing,
     "http_conformance": http_conformance,
-    "slow_first_paint": slow_first_paint,
-    "slow_core_web_vitals": slow_core_web_vitals,
     "console_errors_present": console_errors_present,
     "a11y_violations_present": a11y_violations_present,
     "dead_controls_present": dead_controls_present,
@@ -6012,14 +5640,12 @@ PREDICATES = {
 
 # Human-readable "why it fired" reasons for verbose / --failed output, derived from the probe's check.
 _MATCHER_REASONS = {
-    "ttfb_at_least": "slow time-to-first-byte (>{arg}s)",
     "response_contains": "reflected the probe payload unescaped",
     "response_missing_header": "missing header: {arg}",
     "response_missing_clickjacking_defense": "no clickjacking defense (X-Frame-Options / CSP frame-ancestors)",
     "response_csp_weak": "the Content-Security-Policy is present but toothless against XSS ('unsafe-inline' / wildcard script source with no nonce/hash) -> a false sense of safety",
     "response_cors_misconfigured": "reflects an arbitrary Origin with credentials (CORS)",
     "response_server_error": "returned a 5xx server error",
-    "response_uncompressed": "sizeable text served without gzip (no Content-Encoding)",
     "response_has_header": "leaks the {arg} header (stack / version disclosure)",
     "response_is_aws_credentials": "served an AWS credentials file at the webroot",
     "response_leaks_credentials": "returned password/credential material in a response body",
@@ -6083,25 +5709,14 @@ _PREDICATE_REASONS = {
     "load_resilience": "endpoint 5xx'd under a concurrent burst",
     "crash_resistance": "malformed input caused an unhandled 5xx instead of a graceful 4xx",
     "declared_constraint_unenforced": "the server accepted a value violating the app's own declared field constraint (type=email/number/... -> client-only validation)",
-    "perf_ttfb": "slow server response (time-to-first-byte over the perf budget)",
-    "perf_page_weight": "heavy page (transfer weight over the perf budget)",
-    "perf_request_count": "too many requests to render the homepage (over the perf budget)",
-    "perf_load_time": "homepage load time crosses the ~5s user-abandonment ceiling",
-    "caching_ineffective": "static asset not cacheable (no validator / no-store / ignored revalidation) -> refetched every load",
     "http_soft_404": "a nonexistent static asset returned 2xx instead of 404 (soft-404 -> pollutes caches / crawlers / monitoring)",
     "a11y_hard_fails": "accessibility hard-fail (missing lang / alt / form-control name / page title, or text below the 3:1 contrast floor)",
     "broken_links": "an internal link leads to a 4xx dead end (broken navigation)",
     "redirect_loop": "the homepage or a route it links to redirects endlessly (ERR_TOO_MANY_REDIRECTS) -- the page never loads for any visitor",
     "mixed_content": "an https page loads a subresource over plain http:// (mixed content -> MITM-tamperable; active mixed content is browser-blocked, breaking the page)",
     "subresource_integrity_missing": "a cross-origin script/stylesheet loads without a Subresource Integrity hash -> a compromised or hijacked CDN can run arbitrary code in the app's origin (supply-chain risk)",
-    "unminified_assets": "a sizeable same-origin .css/.js is shipped to production unminified -> wasted bytes and parse time on every page load",
-    "lcp_image_lazy_loaded": "the largest-contentful-paint image is marked loading=lazy -> the browser defers the very image that defines first paint, delaying it for every visitor",
-    "excessive_dom_size": "the page renders an excessive DOM (over ~1400 nodes) -> style/layout/interaction slow on every update, independent of page weight",
-    "font_display_missing": "a web font loads without font-display: swap/optional/fallback -> text is invisible while the font downloads, then reflows (FOIT)",
     "seo_meta_missing": "missing a best-practice meta tag (viewport -> unusable on mobile, or description -> no search snippet)",
     "http_conformance": "HTML response served with no declared charset (browser must guess the encoding -> mojibake / UTF-7 XSS surface)",
-    "slow_first_paint": "First Contentful Paint exceeded the gate",
-    "slow_core_web_vitals": "Core Web Vitals poor on the best of N throttled samples (slow LCP / layout shift / main-thread blocking)",
     "login_no_rate_limit": "repeated wrong-password logins were never throttled",
     "console_errors_present": "the app's own code fails on load (an uncaught JS error, a CSP that blocks its own resource, or a React hydration mismatch)",
     "dead_controls_present": "clickable controls wired to nothing (no effect on click) — non-functional UI",
