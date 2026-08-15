@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import gzip
 import hashlib
+import html
 import json
 import re
 import secrets
@@ -933,6 +934,20 @@ def back_nav_broken(ctx, probe) -> bool | None:
 
 
 _SCRIPT_SRC = re.compile(r"""<script\b[^>]*\bsrc=["']([^"']+)["']""", re.I)
+# dev-server / HMR / build-tool script references that a prod deploy shouldn't have. Their absence (404) does
+# NOT stop the app rendering, so they are not a "dead bundle" -- unlike the app's real hashed bundle.
+_DEV_SCRIPT = re.compile(r"livereload|/@vite/|/@react-refresh|hot-update|webpack-dev-server|__vite|/@id/|"
+                         r"\.local\.js\b|/node_modules/", re.I)
+
+
+def _registrable(netloc: str) -> str:
+    """The registrable domain (last two labels ~ eTLD+1) of a netloc, so an apex<->www canonical redirect reads
+    as the SAME site (foo.com == www.foo.com) while a move to a DIFFERENT domain does not (basementhost.com !=
+    tensordock.com). IPs and single-label hosts compare whole (port stripped)."""
+    h = (netloc or "").split(":")[0].lower().rstrip(".")
+    if re.match(r"^\d+(?:\.\d+)*$", h) or len(h.split(".")) < 3:
+        return h                          # IPv4 / apex domain / single label -> compare the whole host
+    return ".".join(h.split(".")[-2:])    # www.foo.com / a.b.foo.com -> foo.com
 
 
 # DEVELOPMENT BUILD SHIPPED TO PRODUCTION — the HMR client is the categorical tell.
@@ -1053,10 +1068,18 @@ def dead_bundle_chunk(ctx, probe) -> bool | None:
             pu = urllib.parse.urlparse(urllib.parse.urljoin(ctx.base_url.rstrip("/") + "/", src.strip()))
             if pu.netloc and pu.netloc != host:
                 continue   # a CDN/vendor script -> not the app's own bundle
+            if _DEV_SCRIPT.search(pu.path):
+                continue   # a dev-server / HMR / node_modules artifact (livereload, /@vite/, *.local.js) -> not
+                #            the app's prod bundle; its 404 in a static deploy doesn't stop the app rendering
             try:
                 r = c.get(pu.path)
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
+            final = urllib.parse.urlparse(str(r.url)).netloc
+            if final and _registrable(final) != _registrable(host):
+                continue   # the fetch redirected to a DIFFERENT registrable domain (a parked/moved site's HTML,
+                #            basementhost -> tensordock) -> not a dead chunk of THIS app. An apex<->www canonical
+                #            redirect stays SAME-site, so a real dead chunk on a www-canonical app still fires.
             checked += 1
             ct = r.headers.get("content-type", "").lower()
             # dead = an honest 404/410/5xx, OR a catch-all host serving the HTML shell where JS should be
@@ -2875,9 +2898,15 @@ def _no_tls_decision(base_url: str, status: int | None, location: str) -> bool |
     o = urllib.parse.urlparse(base_url)
     if o.scheme != "http" or _is_local_host(o.hostname or ""):
         return None
-    if status is not None and 300 <= status < 400 and (location or "").lower().startswith("https://"):
-        return False
-    return True
+    if status is None:
+        return None
+    if 300 <= status < 400:
+        # -> https = the origin upgrades (TLS enforced, clean); -> http = redirects but stays cleartext (fires)
+        return not (location or "").lower().startswith("https://")
+    if 200 <= status < 300:
+        return True                          # serves cleartext content over http with no upgrade -> no TLS
+    return None   # 401/403/404/429/5xx: a WAF / auth / rate-limit / error / not-found MASKED the real TLS
+    #               behavior (e.g. netlify http->https 301 seen as a 403) -> can't assess -> N/A, not a false fire
 
 
 def no_tls_origin(ctx, probe) -> bool | None:
@@ -4960,9 +4989,15 @@ def _same_origin_links(c, ctx, probe) -> list[str] | None:
         return None
     links = []
     for href in _ANCHOR_HREF.findall(r.text):
-        href = href.split("#")[0].strip()
+        href = html.unescape(href.split("#")[0].strip())   # decode entities: `?a=1&amp;b=2` IS `?a=1&b=2` to a
+        #                                                     browser -- not unescaping fetched a literal &amp; -> 400
         if not href or href.startswith(("mailto:", "tel:", "javascript:", "data:")):
             continue
+        if "${" in href or "{{" in href:
+            continue                                   # an UNINTERPOLATED template literal leaked into the href
+            #                                            (/${s.url}, /${escapeHtml(href)}) -> a code artifact, not a link
+        if "/cdn-cgi/" in href:
+            continue                                   # Cloudflare-INJECTED (email-protection etc.) -> not the app's link
         if re.search(r"log[-_]?out|sign[-_]?out", href, re.IGNORECASE):
             continue                                   # never GET a logout link (would drop the session)
         t = urllib.parse.urlparse(urllib.parse.urljoin("%s://%s%s" % (base.scheme, base.netloc, target), href))
@@ -4983,9 +5018,12 @@ def broken_links(ctx, probe) -> bool | None:
         for path in links[:budget]:
             try:
                 st = c.get(path).status_code
-                if 400 <= st < 500:
+                # a DEAD END is not-found (404/410) or a malformed request (400/414), NOT access-control:
+                # 401/403 = the page exists but is gated (a login-required nav item / deployment protection), and
+                # 429 = rate-limited -- the link WORKS, it isn't broken. So skip the access-control/limit statuses.
+                if 400 <= st < 500 and st not in (401, 403, 429):
                     ctx.evidence.update(broken=True, link=path, status=st)
-                    return True                            # dead link: an internal href leads to a 4xx
+                    return True                            # dead link: an internal href leads to a 4xx dead end
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
     ctx.evidence.update(broken=False, links_checked=len(links[:budget]))
