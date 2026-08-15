@@ -382,6 +382,45 @@ def test_inert_controls_clears_off_channel_and_active_controls():
         srv.shutdown()
 
 
+def test_inert_controls_clears_a_download_link():
+    # a <a download>/file link triggers a DOWNLOAD, not a nav/DOM change -- a real effect on its own channel, so
+    # it must clear, not read as dead (killthebill's 'Sample 1/2' CSV links were exactly this FP). A handler-less
+    # button STILL flags, so the download watcher cannot cost recall.
+    import http.server
+    import threading
+
+    page = ("<!doctype html><html><body>"
+            "<a href='/report.csv' download='report.csv'>Download CSV</a>"      # download channel -> live
+            "<button id='dead'>Show details</button>"                           # no handler -> genuinely DEAD
+            "</body></html>").encode("ascii")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.startswith("/report.csv"):
+                body = b"a,b\n1,2\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv")
+                self.send_header("Content-Disposition", "attachment; filename=report.csv")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers(); self.wfile.write(body); return
+            self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers()
+            self.wfile.write(page)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        dead = browser.inert_controls(base)
+        assert dead is not None
+        assert "Download CSV" not in dead                 # download fired -> not "dead"
+        assert "Show details" in dead                     # genuinely inert -> still flagged (recall preserved)
+    finally:
+        srv.shutdown()
+
+
 @pytest.fixture
 def serve():
     deployers = []

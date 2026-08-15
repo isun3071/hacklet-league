@@ -821,7 +821,7 @@ def inert_controls(url: str, headers=None, timeout: float = 12.0, max_controls: 
     observable effect on ANY watched channel — inert ("dead") controls. None if no browser or the render
     fails; [] if every control did something. Channels: DOM mutation / network / navigation / dialog /
     uncaught error / scroll (smooth-scroll nav) / clipboard (copy) / popup (window.open) / file-chooser
-    (upload). Observed behavior, so event-delegated handlers (invisible to a static check) still clear a
+    (upload) / download (a file link). Observed behavior, so event-delegated handlers (invisible to a static check) still clear a
     control; a control whose only effect is slower than per_wait_ms reads as live-or-skipped, never dead —
     the miss-don't-invent bias that keeps this safe to score. Already-active tabs/toggles (aria-selected/
     pressed) are not clicked (re-clicking them is a correct no-op, not a dead control)."""
@@ -837,7 +837,7 @@ def inert_controls(url: str, headers=None, timeout: float = 12.0, max_controls: 
             try:
                 page = b.new_page()
                 net, dialogs, errs = {"n": 0}, {"n": 0}, {"n": 0}
-                popups, choosers = {"n": 0}, {"n": 0}
+                popups, choosers, downloads = {"n": 0}, {"n": 0}, {"n": 0}
                 page.on("request", lambda r: net.__setitem__("n", net["n"] + 1))         # ALL network (img/beacon too)
                 page.on("dialog", lambda d: (dialogs.__setitem__("n", dialogs["n"] + 1), d.dismiss()))
                 page.on("pageerror", lambda e: errs.__setitem__("n", errs["n"] + 1))
@@ -846,6 +846,10 @@ def inert_controls(url: str, headers=None, timeout: float = 12.0, max_controls: 
                 # the DOM/network channels; watch them so those controls clear instead of reading as dead.
                 page.on("popup", lambda p: (popups.__setitem__("n", popups["n"] + 1), _quiet_close(p)))
                 page.on("filechooser", lambda fc: choosers.__setitem__("n", choosers["n"] + 1))
+                # a <a href="report.csv"> / <a download> triggers a file download, not a nav/DOM change -- a real
+                # effect off the other channels, so watch it or those controls read as dead (killthebill's
+                # 'Sample 1/2' CSV links were the qa-deadctrl-001 FP class).
+                page.on("download", lambda d: downloads.__setitem__("n", downloads["n"] + 1))
                 page.add_init_script(script=_INERT_WATCH_JS)   # re-installs the watcher on every navigation
                 _apply_auth(page, url, headers)
                 page.goto(url, timeout=timeout * 1000, wait_until="load")
@@ -866,15 +870,16 @@ def inert_controls(url: str, headers=None, timeout: float = 12.0, max_controls: 
                             loc.scroll_into_view_if_needed(timeout=1000)
                         page.evaluate("() => { if (window.__hlw) { window.__hlw.muts = 0; window.__hlw.reqs = 0;"
                                       " window.__hlw.clip = 0; window.__hlw.scroll = 0; } }")
-                        n0, d0, e0, p0, f0, url0 = (net["n"], dialogs["n"], errs["n"], popups["n"],
-                                                    choosers["n"], page.url)
+                        n0, d0, e0, p0, f0, dl0, url0 = (net["n"], dialogs["n"], errs["n"], popups["n"],
+                                                         choosers["n"], downloads["n"], page.url)
                         loc.click(timeout=1500)
                         page.wait_for_timeout(per_wait_ms)
                         w = page.evaluate("() => window.__hlw || {muts: 0, reqs: 0, clip: 0, scroll: 0}")
                         navigated = page.url != url0
                         moved = ((w.get("muts") or 0) or (w.get("reqs") or 0) or (w.get("clip") or 0)
                                  or (w.get("scroll") or 0) or (net["n"] - n0) or (dialogs["n"] - d0)
-                                 or (errs["n"] - e0) or (popups["n"] - p0) or (choosers["n"] - f0) or navigated)
+                                 or (errs["n"] - e0) or (popups["n"] - p0) or (choosers["n"] - f0)
+                                 or (downloads["n"] - dl0) or navigated)
                         if not moved:
                             dead.append(label or "(unlabeled)")
                         if navigated:   # a live control that navigated away -> restore + re-tag to continue
