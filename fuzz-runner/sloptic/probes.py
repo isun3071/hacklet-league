@@ -5262,7 +5262,20 @@ def declared_constraint_unenforced(ctx, probe) -> bool | None:
                     r = _xss_send(c, method, form.action, bad)
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
-                if _same_success(base, r, form.action, good, bad):   # a bare 2xx with an inline error is NOT
+                if _same_success(base, r, form.action, good, bad):
+                    # INPUT-DEPENDENCE gate (v18: this probe was ~100% FP). A static-shell SPA (action="/")
+                    # answers 200 to ANY body, and an auth-guarded form 3xx's to /login for any body -- both
+                    # read as "accepted the invalid value" though the server never processed the field. Require
+                    # the acceptance to be INPUT-DEPENDENT: an all-EMPTY submission must NOT get the same success.
+                    # If it does, the endpoint ignores the body (shell / auth-guard / catch-all) -> not this
+                    # field's enforcement -> clean. A real enforcing server rejects the empty required values.
+                    empties = {f: "" for f in form.fields}
+                    try:
+                        empty = _xss_send(c, method, form.action, empties)
+                    except (httpx.HTTPError, httpx.InvalidURL):
+                        continue
+                    if _same_success(base, empty, form.action, good, empties):
+                        continue                             # input-independent -> shell / auth-guard, not a fire
                     ctx.evidence.update(action=form.action, field=field, declared=cons.get("type"),
                                         invalid=str(invalid_val)[:40], valid_status=base.status_code,
                                         invalid_status=r.status_code)
