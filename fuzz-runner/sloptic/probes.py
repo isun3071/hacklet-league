@@ -2419,6 +2419,39 @@ def _create_collection(path: str) -> str:
     return clean
 
 
+def _is_record_list(v) -> bool:
+    """A list of records: empty (a legitimately-empty collection) or holding objects. A list of scalars
+    ({"tags":["a"]}) is config, not a resource collection."""
+    return isinstance(v, list) and (not v or isinstance(v[0], dict))
+
+
+def _has_record_array(resp) -> bool:
+    """The read-back body is an actual resource COLLECTION -- a top-level record array, or an envelope object
+    carrying one ({"submissions":[...]}, {"data":[...]}). A stateless RPC result, a status/config doc or an API
+    index ({"encounterId":""}, {"hasApiKey":false}) is NOT a collection, so 'it did not change after a 2xx' is
+    not data loss -- nothing was ever persisted there. This is what made 3 of 4 v18 fires false."""
+    try:
+        doc = resp.json()
+    except ValueError:
+        return False
+    if _is_record_list(doc):
+        return True
+    return isinstance(doc, dict) and any(_is_record_list(v) for v in doc.values())
+
+
+_AUTH_FIELD = re.compile(r"pass(?:word|wd)?|pwd", re.I)
+_AUTH_PATH = re.compile(r"/(?:auth|login|signin|sign-in|signup|sign-up|register|token|session|oauth|logout)\b", re.I)
+
+
+def _is_auth_endpoint(e) -> bool:
+    """A login / register / token endpoint. Its 'collection' is not a public data list (you cannot list users
+    anonymously), so 'the record is absent from a list' is meaningless here -- fahimni's /backend/auth.php fired
+    exactly this way. A password-family field or an auth-verb path is the tell."""
+    if any(_AUTH_FIELD.search(f) for f in (e.body_fields or [])):
+        return True
+    return bool(_AUTH_PATH.search(e.raw_path or e.path or ""))
+
+
 def data_integrity_list_roundtrip(ctx, probe) -> bool | None:
     """Persistence correctness on a JSON API with NO read-by-{id} route — the common SPA shape
     data_integrity_roundtrip can't test (UUID keys / list-only API). Create an object carrying a unique
@@ -2426,7 +2459,8 @@ def data_integrity_list_roundtrip(ctx, probe) -> bool | None:
     a create reports success (2xx) but the object is absent from its own list -> silent data loss. N/A when
     there's no JSON create endpoint whose collection returns an array, or no create succeeds. Variant group
     data-durability with qa-integrity-001 (read-by-id) -> the two collapse to one data-loss finding."""
-    creates = [e for e in ctx.profile.endpoints if e.method.lower() == "post" and e.body_fields]
+    creates = [e for e in ctx.profile.endpoints if e.method.lower() == "post" and e.body_fields
+               and not _is_auth_endpoint(e)]   # a login/register POST is not a listable-data create
     if not creates:
         ctx.evidence["na_reason"] = "no JSON create endpoint to round-trip through its collection"
         return None
@@ -2447,6 +2481,8 @@ def data_integrity_list_roundtrip(ctx, probe) -> bool | None:
                 before = client.get(collection)
                 if not _is_json_ok(before):
                     continue      # the collection isn't a readable JSON resource -> can't verify here
+                if not _has_record_array(before):
+                    continue      # sibling is an RPC result / status / index, not a resource list -> not durable-testable
                 created, body = _accepted_create(client, c, marker, ctx.profile.endpoints)
                 if created is None or created.status_code not in (200, 201):
                     continue   # create didn't succeed -> nothing durable to read back on this endpoint
@@ -2467,7 +2503,7 @@ def data_integrity_list_roundtrip(ctx, probe) -> bool | None:
             except (httpx.HTTPError, httpx.InvalidURL):
                 continue
         if not tested:
-            ctx.evidence["na_reason"] = "no create accepted a write whose collection could be read back"
+            ctx.evidence["na_reason"] = "no create round-tripped through a readable record collection"
             return None
         ctx.evidence.update(tested=True, durable=True)
         return False
