@@ -240,21 +240,65 @@ class CloneError(Exception):
     is itself a signal, so it's recorded distinctly instead of crashing the run with a traceback."""
 
 
-def clone(url_or_path: str, timeout: int = 300) -> pathlib.Path:
+class RepoTooLargeError(CloneError):
+    """The repo exceeds --max-repo-mb (committed node_modules / datasets / model weights). A CloneError
+    subclass so the existing handler records it as a skip; the 'REPO TOO LARGE' prefix keeps it countable
+    separately from a genuine clone failure. The point: spend the run's hours on gradeable apps, not on
+    downloading + building one team's vendored 900MB node_modules."""
+
+
+_GH_REPO = re.compile(r"github\.com[/:]([^/]+)/([^/.\s]+)", re.I)
+
+
+def _github_size_mb(url: str) -> float | None:
+    """Repo size in MB from the GitHub API WITHOUT cloning — the cheap pre-gate for committed-bloat repos
+    (the API's `size` counts the whole checkout). None if not a GitHub URL or the API didn't answer, in which
+    case the post-clone `du` check is the fallback. Uses GITHUB_TOKEN if set (60/hr anon -> 5000/hr)."""
+    m = _GH_REPO.search(url)
+    if not m:
+        return None
+    headers = {"Accept": "application/vnd.github+json"}
+    tok = os.environ.get("GITHUB_TOKEN")
+    if tok:
+        headers["Authorization"] = "Bearer " + tok
+    try:
+        r = httpx.get(f"https://api.github.com/repos/{m.group(1)}/{m.group(2)}", headers=headers, timeout=15)
+        if r.status_code == 200:
+            return (r.json().get("size") or 0) / 1024.0   # the API 'size' field is in KB
+    except httpx.HTTPError:
+        pass
+    return None
+
+
+def clone(url_or_path: str, timeout: int = 300, max_mb: int = 0) -> pathlib.Path:
     if pathlib.Path(url_or_path).exists():
         return pathlib.Path(url_or_path).resolve()
+    if max_mb:   # cheapest gate: skip committed node_modules / datasets / weights WITHOUT paying the download
+        sz = _github_size_mb(url_or_path)
+        if sz is not None and sz > max_mb:
+            raise RepoTooLargeError(f"REPO TOO LARGE ({sz:.0f}MB > {max_mb}MB, GitHub API) — skipped pre-clone")
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="hl-deploy-"))
     dest = tmp / "repo"
     print(f"  cloning {url_or_path} ...")
     try:
+        # GIT_LFS_SKIP_SMUDGE: don't pull LFS blobs (model weights / datasets) — a build that truly needs them
+        # will just fail (fine); most don't, and skipping them is a large bandwidth + disk win on this box.
         p = subprocess.run(["git", "clone", "--depth", "1", url_or_path, str(dest)],
-                           capture_output=True, text=True, timeout=timeout)
+                           capture_output=True, text=True, timeout=timeout,
+                           env={**os.environ, "GIT_LFS_SKIP_SMUDGE": "1"})
         if p.returncode != 0:
             raise CloneError(f"clone failed: {p.stderr.strip()[:200]}")
     except (subprocess.TimeoutExpired, CloneError) as e:
         shutil.rmtree(tmp, ignore_errors=True)   # don't leak a partial/huge clone on failure
         raise CloneError(f"CLONE TIMEOUT (>{timeout}s)"
                          if isinstance(e, subprocess.TimeoutExpired) else str(e))
+    if max_mb:   # safety net for non-GitHub URLs, an API undercount, or submodules the API 'size' misses
+        du = subprocess.run(["du", "-sm", str(dest)], capture_output=True, text=True)
+        parts = du.stdout.split()
+        mb = int(parts[0]) if parts and parts[0].isdigit() else 0
+        if mb > max_mb:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise RepoTooLargeError(f"REPO TOO LARGE ({mb}MB > {max_mb}MB on disk) — skipped post-clone")
     return dest
 
 
@@ -1216,6 +1260,9 @@ def main():
                     "cache — re-plan from scratch every run (default: a commit's SUCCESSFUL plan is frozen so "
                     "re-grades are reproducible; the cache lives at HL_CACHE_DIR, default ~/.cache/hacklet-plan)")
     ap.add_argument("--attempts", type=int, default=3, help="max deploy attempts (LLM fixes errors between)")
+    ap.add_argument("--retry-timeouts", action="store_true", dest="retry_timeouts",
+                    help="retry a BUILD TIMEOUT like a normal error (default: give up -- a timeout is a "
+                         "'too heavy' verdict, and re-planning rarely slims heavy deps enough to fit).")
     ap.add_argument("--build-timeout", type=int, default=480, dest="build_timeout",
                     help="kill a docker build after N seconds (default 480). Lower = better batch "
                          "throughput but risks false-killing a genuinely heavy build; 300 is aggressive")
@@ -1227,6 +1274,9 @@ def main():
                          "BATCH stays bounded — one pathological app can't stall an overnight run.")
     ap.add_argument("--clone-timeout", type=int, default=300, dest="clone_timeout",
                     help="git clone timeout in seconds (default 300; a timeout is recorded, not a crash)")
+    ap.add_argument("--max-repo-mb", type=int, default=0, dest="max_repo_mb",
+                    help="skip repos larger than this (committed node_modules / datasets / weights); checked via "
+                         "the GitHub API pre-clone, then du post-clone. 0 = off. ~300 is a good throughput knob.")
     ap.add_argument("--checkpoint", metavar="FILE", help="write the stack-ID here right after planning, so "
                     "an external kill (wedge) can still recover the app's classification for deploy-parity")
     ap.add_argument("--no-browser", dest="browser", action="store_false",
@@ -1321,7 +1371,7 @@ def main():
             print(f"\n=== url-ingest: grading live app (no clone/plan/deploy) → {url} ===")
         else:
             _t = time.monotonic()
-            repo = clone(args.repo, timeout=args.clone_timeout)
+            repo = clone(args.repo, timeout=args.clone_timeout, max_mb=args.max_repo_mb)
             timings["clone_s"] = round(time.monotonic() - _t, 1)
             context = gather_context(repo)
             _sha = _git_sha(repo)   # immutable commit identity for the caches (None on a local path -> no cache)
@@ -1376,10 +1426,17 @@ def main():
                     timings["deploy_s"] += round(time.monotonic() - _t, 1)   # a failed attempt cost time too
                     error = str(e)
                     result["deploy_error"] = (error.strip().splitlines() or ["unknown"])[0][:200]
-                    if "BUILD TIMEOUT" in result["deploy_error"]:
-                        result["timeout"] = "build"   # 'took forever to build' — a bloat/deployability signal
                     print(f"  deploy failed:\n{error[-800:]}")
                     _docker("rm", "-f", "-v", APP, DB)   # tear down this attempt's containers + volume
+                    if "BUILD TIMEOUT" in result["deploy_error"]:
+                        result["timeout"] = "build"   # 'took forever to build' — a bloat/deployability signal
+                        if not args.retry_timeouts:
+                            # a timeout is a 'too heavy to build in the budget' VERDICT, not a fixable error: a
+                            # re-plan rarely slims torch/tensorflow enough to fit, so another attempt just burns
+                            # a second/third full build_timeout on a doomed repo. Give up now; the retries stay
+                            # for BUILD FAILED / health failures, where a re-plan actually pays off.
+                            print("  BUILD TIMEOUT — not retrying (heavy deps); giving up to keep the run moving")
+                            break
             if plan:   # kind + stack + features + source-implied surface — recorded even on deploy FAILURE, so
                 _record_plan_meta(result, plan)          # the stack-distribution + parity ground-truth stay whole
             if not url:
