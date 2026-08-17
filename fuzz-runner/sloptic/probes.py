@@ -5657,16 +5657,22 @@ def crash_resistance(ctx, probe) -> bool | None:
                         return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
-        for p in _CRASH_PATHS:                             # 3. decode-crashing paths (naive router -> 500)
-            tested = True
-            try:
-                cr = c.get(p)
-                if cr.status_code >= 500 and c.get(p).status_code >= 500:
-                    ctx.evidence.update(crashed=True, via="decode-path", target=p, status=cr.status_code,
-                                        repro=_repro_from_resp(cr, matched="unhandled %d on a decode-crashing path, reproduced" % cr.status_code))
-                    return True
-            except (httpx.HTTPError, httpx.InvalidURL):
-                continue
+        # 3. decode-crashing paths: a naive SERVER ROUTER 500s trying to %-decode a malformed path. Only on an
+        # HONEST host (real 404s, a real router) -- NOT a catch-all / static-SPA / builder host, where a 5xx here
+        # is the platform EDGE choking on the URL, not the app's router (the v19 FP tail: lovable/modal/gateway).
+        # And require a 500 specifically: a 502/503/504 is the proxy/CDN rejecting the malformed URL, not the
+        # app's own unhandled exception.
+        if _catch_all_sig(ctx) is None:
+            for p in _CRASH_PATHS:
+                tested = True
+                try:
+                    cr = c.get(p)
+                    if cr.status_code == 500 and c.get(p).status_code == 500:
+                        ctx.evidence.update(crashed=True, via="decode-path", target=p, status=cr.status_code,
+                                            repro=_repro_from_resp(cr, matched="unhandled 500 on a decode-crashing path (honest host), reproduced"))
+                        return True
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    continue
     if tested:
         ctx.evidence.update(crashed=False)
     return False if tested else None
