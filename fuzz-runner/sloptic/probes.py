@@ -4054,7 +4054,23 @@ def _looks_like_auth_reject(resp) -> bool:
     if sc in (400, 401, 403, 422):
         return True
     if sc in (301, 302, 303, 307, 308):
-        return any(h in resp.headers.get("location", "").lower() for h in _CSRF_REJECT_HINTS)
+        loc = resp.headers.get("location", "")
+        if not loc:
+            return False
+        # A redirect that only upgrades the scheme (http->https) or canonicalizes the host (www/apex) while
+        # keeping the SAME path is a transport redirect, not a credential rejection: every wrong-password
+        # attempt gets the identical 3xx, so counting it would phantom-fire "never throttled" on an endpoint
+        # that never processed the login. (A same-origin redirect back to /login IS still counted -- that is
+        # the flash-error re-render pattern, a real rejection.)
+        try:
+            req = resp.request.url
+            tgt = req.join(loc)
+            if (tgt.path.rstrip("/") == req.path.rstrip("/")
+                    and (tgt.scheme != req.scheme or tgt.host != req.host)):
+                return False
+        except Exception:
+            pass
+        return any(h in loc.lower() for h in _CSRF_REJECT_HINTS)
     if "json" in resp.headers.get("content-type", "").lower():
         return True
     try:
@@ -4070,8 +4086,11 @@ def login_no_rate_limit(ctx, probe) -> bool | None:
     can't collide with other probes that hit /login (e.g. sqli_auth_bypass). N/A when no login form, or
     when the endpoint never returns an auth-shaped rejection (no real server auth to rate-limit)."""
     form = auth.login_form(ctx.profile.forms)
-    if form is None:
-        return _login_rate_limit_json(ctx, probe)  # no HTML login form -> try a JSON login endpoint
+    if form is None or (form.method or "post").lower() == "get":
+        # No HTML login form, OR a GET-method one: a GET 'login form' carries creds in the query string and
+        # is not the credential-processing POST endpoint this probe models (on an SPA it is an onSubmit stub
+        # whose real login is a JSON fetch). Either way, try a JSON login endpoint instead of GET-fetching.
+        return _login_rate_limit_json(ctx, probe)
     data = {}
     for name in form.fields:
         low = name.lower()
