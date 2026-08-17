@@ -4882,12 +4882,15 @@ _SOFT404_EXT = (".js", ".css", ".png", ".webp", ".svg", ".woff2")
 
 
 def http_soft_404(ctx, probe) -> bool:
-    """A missing STATIC ASSET must return a 4xx (normally 404), never 2xx. A 2xx for a guaranteed-
-    nonexistent typed asset is a soft-404: a misconfigured catch-all (often an SPA serving index.html
-    for everything) that makes caches, crawlers and monitors treat a nonexistent URL as real content.
-    Using a *typed asset* path keeps this SPA-safe — the standard `/route -> 200 index` rewrite is
-    intended, but no correct server (SPA or not) serves a nonexistent .js/.css/.png as success.
-    Redirects are NOT followed: a 3xx to a login is an auth gate, not a soft-404."""
+    """A missing STATIC ASSET returns a 2xx shell instead of a 4xx: a catch-all (usually an SPA serving
+    index.html for everything) so caches, crawlers and monitors treat a nonexistent URL as real content.
+    Using a *typed asset* path keeps this SPA-safe (the `/route -> 200 index` rewrite is intended, not flagged).
+    Redirects are NOT followed: a 3xx to a login is an auth gate, not a soft-404.
+
+    OFF-SCORE (report_only) by default: the tested path is RANDOM, so it fires on the platform-recommended SPA
+    fallback (its own tp_definition's named non-defect), not an observed operative harm; and the real broken-asset
+    case -- an APP-REFERENCED bundle chunk served the shell instead of JS -- is scored by qa-chunk-001
+    (dead_bundle_chunk). Kept as a visible diagnostic. report_only -> penalty_override 0."""
     token = "hlnope" + secrets.token_hex(5)          # a unique random name that cannot be a real file
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
         for ext in _SOFT404_EXT:
@@ -4908,7 +4911,9 @@ def http_soft_404(ctx, probe) -> bool:
                 if sig and _body_sig(r.text) != sig:
                     continue                         # HTML, but not the root shell the host serves everywhere
                 ctx.evidence.update(soft_404=True, ext=ext, status=r.status_code)
-                return True                          # nonexistent asset served as the shell -> soft-404
+                if probe.probe.get("report_only"):
+                    ctx.evidence.update(report_only=True, penalty_override=0)   # off-score diagnostic
+                return True                          # a catch-all shell for a missing asset -> soft-404
     ctx.evidence.update(soft_404=False, exts_tested=len(_SOFT404_EXT))
     return False
 
