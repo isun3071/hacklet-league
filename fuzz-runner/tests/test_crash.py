@@ -142,3 +142,25 @@ def test_decode_path_skipped_on_catch_all_host(decode_server):
         ctx = type("C", (), {"base_url": url, "profile": Profile(base_url=url),
                              "headers": None, "client": client, "evidence": {}})()
         assert crash_resistance(ctx, _Probe()) is None
+
+
+# --- v20 follow-up: base44 vendor-namespace skip (FP) + real-server catch-all recovery (FN) ---
+
+def test_vendor_platform_namespace_is_skipped():
+    from sloptic.probes import _VENDOR_PLATFORM_NS
+    # base44's managed platform API: a 5xx there is the vendor's SDK, not the participant's endpoint -> skip
+    assert _VENDOR_PLATFORM_NS.search("/api/apps/68d9abc0123456789/entities/Booking")
+    assert _VENDOR_PLATFORM_NS.search("/api/apps/0123456789abcdef/analytics/track/batch")
+    # a real participant endpoint must NOT be skipped
+    assert not _VENDOR_PLATFORM_NS.search("/api/bookings/end")
+    assert not _VENDOR_PLATFORM_NS.search("/api/apps/list")     # no hex app-id segment
+
+
+def test_real_server_hosts_recover_catch_all_crashers():
+    from sloptic.probes import _REAL_SERVER_HOSTS
+    # real-server PaaS: the catch-all IS the participant's own router -> the decode branch should still run there
+    for h in ("langtour-production.up.railway.app", "x--y.modal.run", "app.onrender.com", "svc.fly.dev", "api.run.app"):
+        assert h.endswith(_REAL_SERVER_HOSTS), h
+    # static-builder / SPA hosts must NOT be recovered (their catch-all is a platform edge, not the app's router)
+    for h in ("foo.lovable.app", "bar.retool.app", "baz.netlify.app", "127.0.0.1"):
+        assert not h.endswith(_REAL_SERVER_HOSTS), h

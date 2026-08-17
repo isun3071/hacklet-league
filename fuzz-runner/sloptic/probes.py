@@ -117,7 +117,12 @@ def _policy_applies(resp) -> bool:
 # header is no real exposure. Suppression only ever REMOVES a penalty (upside-only), so a conservative
 # known-suffix list is safe; a custom domain is never suppressed.
 _HSTS_PRELOADED_SUFFIXES = (
-    ".vercel.app", ".netlify.app", ".onrender.com", ".pages.dev", ".web.app", ".firebaseapp.com",
+    # Google's HSTS-preloaded TLDs (whole TLD, includeSubDomains): every *.app / *.dev / *.page has HTTPS
+    # browser-enforced, so a missing per-app HSTS header is no real exposure. Subsumes vercel/netlify/web.app +
+    # pages.dev, and catches run.app / railway.app / workers.dev / base44.app -- the S1 audit's ~40% preloaded-TLD FP.
+    ".app", ".dev", ".page",
+    # specific HSTS-preloaded platform domains NOT under a preloaded TLD
+    ".onrender.com", ".firebaseapp.com", ".github.io",
 )
 
 
@@ -5412,6 +5417,14 @@ _CRASH_JSON = (
     b'{"x": "\\ud834"}',                   # lone-surrogate escape
 )
 _CRASH_PATHS = ("/%ff%fe", "/%c0%ae%c0%ae", "/%00", "/%e0%80%80")
+# Real-server PaaS: these hosts run the PARTICIPANT's own container/function, so a catch-all there is THEIR
+# router and a decode 500 is their crash (not a static-builder edge). The decode branch is allowed to fire on a
+# catch-all host for these -- recovers the v19 railway/modal false cleans -- without re-admitting static-builder
+# (lovable/retool/netlify-static) catch-all edges.
+_REAL_SERVER_HOSTS = (".up.railway.app", ".modal.run", ".onrender.com", ".fly.dev", ".run.app")
+# Managed-BaaS PLATFORM API namespace (base44's /api/apps/<hexid>/...): a 5xx on malformed input there is the
+# VENDOR's SDK, not the participant's own endpoint -> wrong owner, skip (the v20 blind-audit malformed-JSON FP).
+_VENDOR_PLATFORM_NS = re.compile(r"/api/apps/[0-9a-f]{16,}/", re.I)
 
 
 def _induce_error_responses(ctx, budget=20):
@@ -5629,6 +5642,8 @@ def crash_resistance(ctx, probe) -> bool | None:
                   if e.method.lower() == "get" and e.query_params])
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
         for action, method, fields in targets:            # 1. malformed field values
+            if _VENDOR_PLATFORM_NS.search(action):
+                continue                                   # managed-BaaS platform API -> the vendor's handler, not the app's
             try:
                 base = _xss_send(c, method, action, {fn: "1" for fn in fields})
             except (httpx.HTTPError, httpx.InvalidURL):
@@ -5659,6 +5674,8 @@ def crash_resistance(ctx, probe) -> bool | None:
             [f.action for f in ctx.profile.forms if (f.method or "").lower() == "post"]
             + [e.path for e in ctx.profile.endpoints if e.method.lower() == "post"]))
         for path in posts:
+            if _VENDOR_PLATFORM_NS.search(path):
+                continue                                   # managed-BaaS platform API -> the vendor's handler, not the app's
             try:                                           # baseline: a WELL-FORMED empty JSON body
                 base = c.post(path, json={})
             except (httpx.HTTPError, httpx.InvalidURL):
@@ -5682,19 +5699,20 @@ def crash_resistance(ctx, probe) -> bool | None:
                         return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
-        # 3. decode-crashing paths: a naive SERVER ROUTER 500s trying to %-decode a malformed path. Only on an
-        # HONEST host (real 404s, a real router) -- NOT a catch-all / static-SPA / builder host, where a 5xx here
-        # is the platform EDGE choking on the URL, not the app's router (the v19 FP tail: lovable/modal/gateway).
-        # And require a 500 specifically: a 502/503/504 is the proxy/CDN rejecting the malformed URL, not the
-        # app's own unhandled exception.
-        if _catch_all_sig(ctx) is None:
+        # 3. decode-crashing paths: a naive SERVER ROUTER 500s trying to %-decode a malformed path. Run on an
+        # HONEST host (real 404s, a real router) OR a real-server PaaS whose catch-all IS the participant's own
+        # router (railway/modal/...) -- but NOT a static-SPA / builder catch-all, where a 5xx here is the platform
+        # EDGE choking on the URL, not the app's router. And require a 500 specifically: a 502/503/504 is the
+        # proxy/CDN rejecting the malformed URL, not the app's own unhandled exception.
+        _crash_host = urllib.parse.urlparse(ctx.base_url).netloc.split(":")[0].lower()
+        if _catch_all_sig(ctx) is None or _crash_host.endswith(_REAL_SERVER_HOSTS):
             for p in _CRASH_PATHS:
                 tested = True
                 try:
                     cr = c.get(p)
                     if cr.status_code == 500 and c.get(p).status_code == 500:
                         ctx.evidence.update(crashed=True, via="decode-path", target=p, status=cr.status_code,
-                                            repro=_repro_from_resp(cr, matched="unhandled 500 on a decode-crashing path (honest host), reproduced"))
+                                            repro=_repro_from_resp(cr, matched="unhandled 500 on a decode-crashing path, reproduced"))
                         return True
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
