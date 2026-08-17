@@ -26,7 +26,7 @@ import httpx
 from . import auth, baas, browser, depscan, lighthouse, oob, secretscan
 from .net import make_client, request_counts
 from .schema import Endpoint
-from .discovery import _CATCHALL_PROBE, _body_sig
+from .discovery import _CATCHALL_PROBE, _body_sig, _registrable_domain
 
 
 # --- innocence check: never fire a phantom finding on a catch-all / soft-404 SHELL ------------------------
@@ -5187,30 +5187,72 @@ def mixed_content(ctx, probe) -> bool | None:
     return True if insecure else False
 
 
-# v2.0 FAMILY 4 -- Subresource Integrity (SRI, a W3C recommendation). A CROSS-ORIGIN <script src> / stylesheet
-# loaded without an `integrity=` hash is an unguarded supply-chain risk: if that CDN is compromised or the
-# domain is hijacked, arbitrary code runs in the app's origin with full access to its DOM, cookies, and tokens.
-# Same-origin resources need no SRI (you already control them). Static: parsed from the served HTML.
+# v2.0 FAMILY 4 -- Subresource Integrity (SRI, a W3C recommendation). A CROSS-ORIGIN, code-executing <script src>
+# / stylesheet loaded without an `integrity=` hash is an unguarded supply-chain risk: if that CDN is compromised
+# or the domain is hijacked, arbitrary code runs in the app's origin with full access to its DOM, cookies, and
+# tokens. Same-origin resources need no SRI (you already control them). Static: parsed from the served HTML.
+#
+# SRI is INAPPLICABLE to these subresource hosts, so flagging them is a false positive by DOMINANCE (not
+# prevalence): font-CSS endpoints serve DIFFERENT bytes per User-Agent (the @font-face `src` varies), so a
+# pinned integrity hash MISMATCHES for some browsers and BLOCKS the stylesheet -- the "fix" breaks the site; and
+# tag/loader endpoints (GTM / Google Identity / gapi) publish no stable hash and bootstrap further scripts SRI on
+# the loader cannot cover. Loading these WITHOUT SRI is the correct practice.
+_SRI_INAPPLICABLE_HOSTS = {
+    "fonts.googleapis.com", "api.fontshare.com", "use.typekit.net", "fonts.bunny.net", "use.fontawesome.com",
+    "www.googletagmanager.com", "accounts.google.com", "apis.google.com",
+}
+# Zero-dev-control BUILDER-INJECTED asset hosts: the platform (Lovable / Framer / Wix / Softr / Gamma / Supabase)
+# wrote the <script>/<link>, so the participant cannot add integrity= to a tag they did not author -> wrong
+# owner, an ATTRIBUTABLE false positive. Suffix-matched, so a subdomain is covered too.
+_SRI_PLATFORM_ASSET_HOSTS = {
+    "gpteng.co", "framerusercontent.com", "parastorage.com", "softr-files.com",
+    "gammahosted.com", "frontend-assets.supabase.com",
+}
+
+
+def _sri_excluded_host(host: str) -> bool:
+    """A cross-origin subresource host that is NOT a scorable SRI gap: one SRI cannot protect (per-UA font CSS /
+    a tag loader -- a hash breaks it), or a builder-injected asset host the participant does not own."""
+    if host in _SRI_INAPPLICABLE_HOSTS:
+        return True
+    return any(host == s or host.endswith("." + s) for s in _SRI_PLATFORM_ASSET_HOSTS)
+
+
 def _sri_scan(html: str, page_url: str) -> tuple[list[str], int]:
-    """(cross-origin script/stylesheet URLs that ship WITHOUT integrity=, count of ALL cross-origin such
-    resources). The second value separates 'no third-party resources -> N/A' from 'all of them are protected
-    -> clean'. Only <script src> and <link rel=stylesheet|preload|modulepreload> -- the resource kinds SRI
-    covers; <img>/<iframe> are out of scope (SRI does not apply)."""
-    origin = urllib.parse.urlparse(page_url).netloc.lower()
+    """(cross-origin subresource URLs that ship WITHOUT integrity=, count of ALL SRI-APPLICABLE cross-origin such
+    resources). The second value separates 'no third-party resource to protect -> N/A' from 'all protected ->
+    clean'. Counts only CODE-EXECUTING cross-origin kinds -- <script src>, <link rel=stylesheet|modulepreload>,
+    and <link rel=preload as=script|style> (a preloaded image/font/fetch does not execute) -- treats a sibling
+    subdomain of the SAME registrable domain as first-party (PSL-aware), and excludes hosts SRI cannot protect or
+    that the participant does not own (see _sri_excluded_host). <img>/<iframe> are out of scope."""
+    origin_site = _registrable_domain(urllib.parse.urlparse(page_url).netloc.split(":")[0].lower())
     gaps: list[str] = []
     total = 0
     tags = [(m.group(1), "src") for m in re.finditer(r"<script\b([^>]*)>", html, re.I)]
     for m in re.finditer(r"<link\b([^>]*)>", html, re.I):
-        rel = re.search(r"\brel\s*=\s*[\"']?([^\"'>\s]+)", m.group(1), re.I)
-        if rel and rel.group(1).lower() in ("stylesheet", "preload", "modulepreload"):
-            tags.append((m.group(1), "href"))
+        attrs = m.group(1)
+        rel = re.search(r"\brel\s*=\s*[\"']?([^\"'>\s]+)", attrs, re.I)
+        if not rel:
+            continue
+        kind = rel.group(1).lower()
+        if kind in ("stylesheet", "modulepreload"):
+            tags.append((attrs, "href"))                 # a stylesheet applies / a module preload executes
+        elif kind == "preload":
+            as_ = re.search(r"\bas\s*=\s*[\"']?([^\"'>\s]+)", attrs, re.I)
+            if as_ and as_.group(1).lower() in ("script", "style"):
+                tags.append((attrs, "href"))             # a preloaded script/style executes; image/font/fetch does not
     for attrs, urlattr in tags:
         ref = re.search(r"\b" + urlattr + r"\s*=\s*[\"']([^\"']+)[\"']", attrs, re.I)
         if not ref:
             continue
         p = urllib.parse.urlparse(urllib.parse.urljoin(page_url, ref.group(1).strip()))
-        if p.scheme not in ("http", "https") or not p.netloc or p.netloc.lower() == origin:
-            continue                                     # relative / same-origin -> no SRI needed
+        if p.scheme not in ("http", "https") or not p.netloc:
+            continue                                     # relative / non-http
+        host = p.netloc.split(":")[0].lower()
+        if _registrable_domain(host) == origin_site:
+            continue                                     # first-party (same registrable domain, incl. a sibling subdomain)
+        if _sri_excluded_host(host):
+            continue                                     # SRI-inapplicable host / builder-injected asset -> not a gap
         total += 1
         if not re.search(r"\bintegrity\s*=\s*[\"']", attrs, re.I):
             gaps.append(p.geturl())
