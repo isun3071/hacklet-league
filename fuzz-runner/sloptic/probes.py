@@ -2801,22 +2801,50 @@ _PRIVATE_HOST = re.compile(
 _UNSET_ENV_HOST = re.compile(r"""https?://(?:undefined|null)(?::\d+)?(?=[/"'\s)]|$)""", re.I)
 
 
+def _operative_private_hosts(matched_urls, opaque_hosts) -> list:
+    """Which matched private/unset backend URLs the app ACTUALLY requested at runtime -- their host was observed
+    in the opaque-host tier (an off-origin host discovery couldn't attribute, where a localhost/private fetch
+    lands, see discovery._classify_hosts). Compared by hostname (port-agnostic): a bundle localhost:9999 the app
+    fetched on :3000 is still "the data layer hit a dead private host at runtime". A match => OPERATIVE (dead in
+    prod for real visitors). No match => the address is PRESENT in the bundle but never requested (a dead
+    `env || localhost` fallback the prod override wins, a CORS/OAuth allowlist entry, a corpus-shared template
+    constant like localhost:9999) => presence != use => UNPROVEN, off-score. (opaque_hosts is capped at 10
+    upstream, so a genuine fetch beyond the 10th unattributable host reads here as presence-only -- conservative:
+    it can under-count operative fires, never invent one. A mixed-content-blocked http://localhost fetch from an
+    https page may also not reach net_sink; capturing page.on('requestfailed') would recover those -- a recall
+    follow-up, not a correctness gap: unobserved => off-score, never a false score.)"""
+    def _host(s):
+        return (urllib.parse.urlparse(s if "://" in s else "//" + s).hostname or "").lower()
+    observed = {_host(h) for h in opaque_hosts}
+    return [u for u in matched_urls if _host(u) in observed]
+
+
 def unreachable_backend_reference(ctx, probe) -> bool | None:
     """DEPLOY-TIME "works on my machine": the shipped client bundle points its backend at a host no visitor can
     reach -- localhost / 127.0.0.1 / 0.0.0.0 / a private RFC1918 IP (the developer's own machine), or
-    `https://undefined` / `https://null` (an unset NEXT_PUBLIC_/VITE_ build-time env var stringified into the
-    URL). The front page still renders, so the app's data layer being dead for everyone but the developer is
-    invisible to a "does it load" check. Reads the app's OWN served bundle (ethical). N/A when there is no bundle."""
+    `https://undefined` / `https://null` (an unset NEXT_PUBLIC_/VITE_ build-time env var stringified into the URL).
+    SCORES only when the app is OBSERVED to actually request that host at runtime (its host shows up in the opaque
+    tier) -- an OPERATIVE dead data layer, invisible to a "does it load" check. A match that is merely PRESENT in
+    the bundle but never requested (a dead `env || localhost` fallback, a CORS/OAuth allowlist entry, a corpus-
+    shared template constant like localhost:9999) is UNPROVEN: recorded as an OFF-SCORE diagnostic (report_only),
+    never scored -- presence != use. Reads the app's OWN served bundle (ethical). N/A when there is no bundle."""
     blob = _client_bundle(ctx)
     if not blob.strip():
         return None
     private = sorted({m.group(0) for m in _PRIVATE_HOST.finditer(blob)})
     unset = sorted({m.group(0) for m in _UNSET_ENV_HOST.finditer(blob)})
-    if private or unset:
-        ctx.evidence.update(private_backends=private[:5], unset_env_backends=unset[:5], source="client-bundle")
-        return True
-    ctx.evidence.update(private_backends=[], unset_env_backends=[], scanned_bytes=len(blob))
-    return False
+    if not (private or unset):
+        ctx.evidence.update(private_backends=[], unset_env_backends=[], scanned_bytes=len(blob))
+        return False
+    opaque = (ctx.profile.host_tiers or {}).get("opaque_hosts", [])
+    operative = _operative_private_hosts(private + unset, opaque)
+    if operative:
+        ctx.evidence.update(private_backends=private[:5], unset_env_backends=unset[:5],
+                            operative_backends=operative[:5], observed=True, source="client-bundle")
+        return True                                     # OPERATIVE -> the yaml penalty (34) applies
+    ctx.evidence.update(private_backends=private[:5], unset_env_backends=unset[:5], observed=False,
+                        report_only=True, penalty_override=0, source="client-bundle")
+    return True                                          # presence-only -> off-score diagnostic (UNPROVEN)
 
 
 # v2.0 FAMILY 1 -- OAuth sign-in dead in prod. The app hands the browser an authorization URL whose
