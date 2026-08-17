@@ -2847,6 +2847,40 @@ def unreachable_backend_reference(ctx, probe) -> bool | None:
     return True                                          # presence-only -> off-score diagnostic (UNPROVEN)
 
 
+# v2.0 -- INTERNAL-ADDRESS disclosure. A served bundle that hardcodes a genuinely-INTERNAL address (an RFC1918
+# private IP, a link-local / cloud-metadata IP, or an internal-only hostname) leaks infrastructure topology to
+# every source-viewer -- recon value (SSRF targets, internal hostnames for lateral movement). LOOPBACK is
+# deliberately EXCLUDED: localhost / 127.0.0.1 / [::1] / 0.0.0.0 disclose nothing (everyone has one), so this
+# scores them at ZERO -- that presence is qa-deploy-001's availability concern, not a disclosure. URL-form + a
+# host lookahead (same rigor as _PRIVATE_HOST): the internal TLD must be the FINAL host label, so a PUBLIC host
+# carrying the token as a middle label (api.corp.example.com) does NOT match, and a bare "10.0.0.1" in unrelated
+# numeric data (no scheme) does NOT match.
+_INTERNAL_ADDR = re.compile(
+    r"""https?://(?:"""
+    r"""10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|"""
+    r"""169\.254(?:\.\d{1,3}){2}|"""
+    r"""[a-z0-9-]+\.(?:internal|corp|intranet|lan))"""
+    r"""(?::\d+)?(?=[/"'\s)]|$)""", re.I)
+
+
+def internal_address_disclosed(ctx, probe) -> bool | None:
+    """INFO DISCLOSURE: the served client bundle hardcodes a genuinely-INTERNAL address -- an RFC1918 private IP
+    (10 / 172.16-31 / 192.168), a link-local / cloud-metadata IP (169.254), or an internal-only hostname
+    (*.internal / *.corp / *.intranet / *.lan). Readable by any source-viewer, it leaks infra topology (recon:
+    SSRF targets, internal hostnames). LOOPBACK (localhost / 127.0.0.1 / [::1] / 0.0.0.0) is EXCLUDED -- it
+    discloses nothing, so localhost scores zero here (that presence is qa-deploy-001's availability concern, not
+    a disclosure). Reads the app's OWN served bundle (ethical). N/A when there is no bundle."""
+    blob = _client_bundle(ctx)
+    if not blob.strip():
+        return None
+    addrs = sorted({m.group(0) for m in _INTERNAL_ADDR.finditer(blob)})
+    if addrs:
+        ctx.evidence.update(internal_addresses=addrs[:5], source="client-bundle")
+        return True
+    ctx.evidence.update(internal_addresses=[], scanned_bytes=len(blob))
+    return False
+
+
 # v2.0 FAMILY 1 -- OAuth sign-in dead in prod. The app hands the browser an authorization URL whose
 # redirect_uri points at localhost / a private IP / an unset env var: after the user authenticates, the
 # provider bounces them to a host that does not exist in production, so sign-in is broken for every visitor
@@ -5882,6 +5916,7 @@ PREDICATES = {
     "authenticated_backend_readable": authenticated_backend_readable,
     "bundle_leaks_secret": bundle_leaks_secret,
     "unreachable_backend_reference": unreachable_backend_reference,
+    "internal_address_disclosed": internal_address_disclosed,
     "oauth_redirect_localhost": oauth_redirect_localhost,
     "no_tls_origin": no_tls_origin,
     "vulnerable_dependency": vulnerable_dependency,
@@ -5973,6 +6008,7 @@ _PREDICATE_REASONS = {
     "authenticated_backend_readable": "any logged-in user reads every other user's data -> broken authenticated-tier RLS/Rules (the IDOR equivalent on a BaaS app; missing per-user row filtering)",
     "bundle_leaks_secret": "a hardcoded SECRET key (Stripe sk_ / OpenAI / AWS secret / GitHub PAT / private key) is shipped in the client JS bundle -> account/DB takeover (public anon/publishable keys are not flagged)",
     "unreachable_backend_reference": "the shipped client bundle calls a backend no visitor can reach (localhost / a private IP / an unset env var) -> the app renders but its data layer is dead in production",
+    "internal_address_disclosed": "the client bundle hardcodes an internal-only address (a private/link-local IP or an *.internal/.corp hostname) -> leaks infrastructure topology to any source-viewer (recon); loopback/localhost is not flagged",
     "oauth_redirect_localhost": "the OAuth sign-in sets redirect_uri to localhost / a private IP / an unset env var -> after authenticating, the provider bounces the user to a host that doesn't exist in production, so login is dead for every visitor",
     "no_tls_origin": "the public origin is served over plain http:// with no upgrade to https -> every visitor's credentials and session cookies cross the network in the clear",
     "vulnerable_dependency": "the app ships a client library with a KNOWN CVE (retire.js-style: jQuery / AngularJS / Bootstrap / Axios / Moment / Handlebars / DOMPurify) -> supply-chain risk the team chose; upgrade per the finding",
