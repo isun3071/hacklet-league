@@ -3822,9 +3822,31 @@ def _supabase_candidate_tables(client, base: str, hdr: dict, tables) -> list:
     return disclosed + [t for t in tables if t not in disclosed]
 
 
+def _foreign_rows(rows: list, own_ids: set) -> list:
+    """The subset of `rows` NOT owned by the FRESH test user -- a genuine CROSS-USER read. A row is the fresh
+    user's OWN when an owner column (owner_id/user_id/created_by/... via _OWNER_ID_FIELD, or `id`/`uid`) holds
+    their JWT `sub`, or an email column holds their signup email. A CORRECTLY per-user-scoped table (RLS
+    `using(auth.uid() = user_id)`, plus the near-universal Supabase handle_new_user() trigger that seeds the
+    fresh user's OWN profile row) therefore returns ONLY own rows here -> [] -> NO leak; only a row belonging to
+    SOMEONE ELSE proves the 'any authenticated user reads everything' bypass. Fail-closed: with no identifiable
+    own-id we cannot prove any row is cross-user -> [] (don't fire). A real Supabase access_token always carries
+    sub+email, so this only guards a malformed token."""
+    if not own_ids:
+        return []
+    def _owns(k: str) -> bool:
+        return bool(_OWNER_ID_FIELD.match(k)) or k.lower() in ("id", "uid") or "email" in k.lower()
+    return [r for r in rows if isinstance(r, dict)
+            and not any(str(v) in own_ids for k, v in r.items() if isinstance(v, (str, int)) and _owns(k))]
+
+
 def _supabase_authed_only(client, base, anon_key, user_jwt, tables):
-    """A table a FRESH authenticated user reads but ANON cannot -> a broken `authenticated` RLS policy (any
-    logged-in user reads all rows). Differential + sensitivity gated; read-only. {table,...} / 'unreachable' / None."""
+    """A table where a FRESH authenticated user reads rows OWNED BY SOMEONE ELSE while ANON cannot -> a broken
+    `authenticated`-tier RLS policy (any logged-in user reads all rows, the IDOR equivalent on a BaaS SPA). The
+    fresh user's OWN rows (the handle_new_user() profile row, anything keyed on its sub/email) are EXCLUDED, so a
+    correctly per-user-scoped table -- which returns only the fresh user's own row -- does NOT fire. Differential
+    + own-row filter + sensitivity gated; read-only. {table,...} / 'unreachable' / None."""
+    claims = auth._jwt_claims(user_jwt) or {}
+    own_ids = {str(claims[k]) for k in ("sub", "email") if claims.get(k)}
     tables = _supabase_candidate_tables(client, base, {"apikey": anon_key,
                                                        "Authorization": "Bearer " + anon_key}, tables)
     def read(table, jwt, lim):
@@ -3844,10 +3866,13 @@ def _supabase_authed_only(client, base, anon_key, user_jwt, tables):
             continue
         reached = True
         if not anon_rows and authed_rows:   # anon denied/empty, a fresh authed user sees rows
-            columns = sorted(authed_rows[0]) if isinstance(authed_rows[0], dict) else []
-            if _sensitive_leak(table, columns):
-                return {"table": table, "rows": len(authed_rows), "columns": columns[:8],
-                        "repro": _repro_from_resp(authed_resp, matched="%d row(s) readable by ANY authed user" % len(authed_rows))}
+            foreign = _foreign_rows(authed_rows, own_ids)   # drop the fresh user's OWN rows -> only cross-user left
+            if foreign:
+                columns = sorted(foreign[0]) if isinstance(foreign[0], dict) else []
+                if _sensitive_leak(table, columns):
+                    return {"table": table, "rows": len(foreign), "columns": columns[:8],
+                            "repro": _repro_from_resp(authed_resp,
+                                     matched="%d cross-user row(s) readable by ANY authed user (own rows excluded)" % len(foreign))}
     return None if reached else "unreachable"
 
 
