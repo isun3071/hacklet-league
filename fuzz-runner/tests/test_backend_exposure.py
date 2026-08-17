@@ -395,3 +395,52 @@ def test_predicate_na_when_no_backend_config():
     ctx = type("C", (), {"client": httpx.Client(base_url="http://127.0.0.1:1"),
                          "profile": Profile(base_url="http://127.0.0.1:1", routes=["/"]), "evidence": {}})()
     assert probes.exposed_backend_readable(ctx, type("P", (), {"probe": {}})()) is None
+
+
+# --- v20 sec-backend-001 hardening: `credit` substring + Firestore/RTDB sensitivity-gate parity ------------
+
+def test_credits_column_is_not_sensitive_but_credit_card_is():
+    # `credit` was a bare substring matching game/leaderboard `credits`; narrowed to credit_?card
+    assert probes._sensitive_columns(["credits", "score", "level"]) == []
+    assert probes._sensitive_columns(["credit_card"]) == ["credit_card"]
+    assert probes._sensitive_columns(["creditcard"]) == ["creditcard"]
+
+
+def test_firestore_public_collection_without_pii_is_clean(serve):
+    # a world-readable but public-by-design collection (a leaderboard of handle+score) is NOT a leak now that
+    # the Firestore path applies the same column-sensitivity gate as the Supabase read path
+    def h(path):
+        if "/documents/leaderboard" in path:
+            return 200, "application/json", json.dumps({"documents": [
+                {"name": "p/databases/(default)/documents/leaderboard/1",
+                 "fields": {"score": {"integerValue": "5"}, "handle": {"stringValue": "ace"}}}]}).encode()
+        return 200, "application/json", b'{"documents": []}'
+    base = serve(h)
+    with httpx.Client(timeout=5) as c:
+        assert probes._firestore_readable(c, base, "my-proj", "AIzaKEY", ["leaderboard"]) is None
+
+
+def test_firestore_fire_reports_sensitive_fields(serve):
+    # a collection carrying a PII field still fires, and now names the field that made it a leak
+    def h(path):
+        if "/documents/users" in path:
+            return 200, "application/json", json.dumps({"documents": [
+                {"name": "p/databases/(default)/documents/users/1",
+                 "fields": {"email": {"stringValue": "a@x.com"}, "bio": {"stringValue": "hi"}}}]}).encode()
+        return 200, "application/json", b'{"documents": []}'
+    base = serve(h)
+    with httpx.Client(timeout=5) as c:
+        hit = probes._firestore_readable(c, base, "my-proj", "AIzaKEY", ["users"])
+    assert hit["sensitive_fields"] == ["email"] and "carrying email" in hit["repro"]["matched"]
+
+
+def test_rtdb_sensitive_names_flags_users_tree():
+    data = {"users": {"u1": {"email": "a@x.com", "name": "Al"}, "u2": {"email": "b@x.com"}}}
+    names = probes._rtdb_sensitive_names(data)
+    assert "users" in names and "email" in names
+
+
+def test_rtdb_sensitive_names_clean_on_public_tree():
+    # a public-by-design tree (config + a leaderboard of handle+score) carries no sensitive node/field name
+    data = {"leaderboard": {"e1": {"handle": "ace", "score": 5}}, "config": {"maxPlayers": 4}}
+    assert probes._rtdb_sensitive_names(data) == []

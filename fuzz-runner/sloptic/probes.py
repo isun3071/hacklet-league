@@ -2756,7 +2756,7 @@ _SUPABASE_COMMON = ("users", "profiles", "accounts", "posts", "orders", "message
 _SENSITIVE_TABLE = re.compile(r"user|account|profile|payment|order|customer|subscription|transaction|"
                               r"credential|session|contact|booking|member|billing|invoice|message", re.I)
 _SENSITIVE_COLUMN = re.compile(r"email|password|passwd|phone|token|api_?key|secret|stripe|address|ssn|"
-                               r"credit|dob|birth|first_?name|last_?name|full_?name|access_?token", re.I)
+                               r"credit_?card|dob|birth|first_?name|last_?name|full_?name|access_?token", re.I)
 
 
 def _client_bundle(ctx, cap: int = 2_000_000) -> str:
@@ -3652,6 +3652,32 @@ def _firebase_readable(client, json_url: str):
     return None
 
 
+def _rtdb_sensitive_names(data) -> list[str]:
+    """Sensitive node/field names in a world-readable RTDB tree. RTDB `.read:true` exposes the WHOLE tree
+    with no per-path rules, so the leak is a top-level node named like a private table (users/payments/...)
+    OR a nested field named like PII/secret (email/token/...); a public-by-design tree (config, or a
+    leaderboard of name+score) is not. Scans every top-level node and ONE sampled leaf per node -- RTDB
+    nodes are homogeneous, so a sample suffices -- and is bounded by a node budget regardless of row count.
+    This brings the RTDB path to parity with the Supabase read path's column-sensitivity gate."""
+    names: list[str] = []
+    budget = [400]
+
+    def _walk(node, level):
+        if budget[0] <= 0 or level > 2 or not isinstance(node, dict):
+            return
+        for i, (k, v) in enumerate(node.items()):
+            if budget[0] <= 0:
+                return
+            budget[0] -= 1
+            if isinstance(k, str) and (_SENSITIVE_COLUMN.search(k) or (level == 0 and _SENSITIVE_TABLE.search(k))):
+                names.append(k)
+            if level == 0 or i == 0:      # all top-level nodes; then one homogeneous sample per node
+                _walk(v, level + 1)
+
+    _walk(data, 0)
+    return names
+
+
 def _firestore_collections(blob: str, observed: list[str] | None = None) -> list[str]:
     """Collections to test for public readability, strongest signal first: OBSERVED at runtime (survives
     minification/dynamic queries), then the app's own code (`collection(db, 'name')`), then a small
@@ -3679,9 +3705,16 @@ def _firestore_readable(client, base: str, project: str, api_key: str, collectio
             except (ValueError, AttributeError):
                 continue
             if isinstance(docs, list) and docs:   # real documents to the public key -> world-readable rules
-                fields = sorted((docs[0].get("fields") or {}).keys())[:8]
-                return {"collection": coll, "documents": len(docs), "fields": fields,
-                        "repro": _repro_from_resp(r, matched="%d document(s) readable" % len(docs))}
+                fields = sorted((docs[0].get("fields") or {}).keys())
+                sensitive = _sensitive_columns(fields)
+                if not sensitive:
+                    continue                       # public-by-design collection (no PII/secret field): NOT a leak,
+                                                   # the same column-sensitivity gate the Supabase read path applies
+                return {"collection": coll, "documents": len(docs), "fields": fields[:8],
+                        "sensitive_fields": sensitive[:6],
+                        "repro": _repro_from_resp(
+                            r, matched="%d document(s) readable to anon, carrying %s"
+                                       % (len(docs), ", ".join(sensitive[:3])))}
     return None if reached else "unreachable"
 
 
@@ -3721,10 +3754,15 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
             url = "https://" + fm.group(1) + "/.json"
             data = _firebase_readable(ext, url)
             if isinstance(data, (dict, list)) and data:
-                ctx.evidence.update(backend="firebase-rtdb", host=fm.group(1),
-                                    sample_keys=sorted(data)[:8] if isinstance(data, dict) else len(data),
-                                    repro=_repro("GET", url, status=200, matched="RTDB readable to anon"))
-                return True
+                sensitive = _rtdb_sensitive_names(data)
+                if sensitive:                       # gate on sensitive node/field names (Supabase-path parity)
+                    ctx.evidence.update(backend="firebase-rtdb", host=fm.group(1),
+                                        sample_keys=sorted(data)[:8] if isinstance(data, dict) else len(data),
+                                        sensitive_fields=sensitive[:6],
+                                        repro=_repro("GET", url, status=200,
+                                                     matched="RTDB readable to anon, carrying %s"
+                                                             % ", ".join(sensitive[:3])))
+                    return True
             reached = reached or data != "unreachable"
         if fs_used:
             proj, key = proj_m.group(1), key_m.group(0)
@@ -3732,7 +3770,8 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
                                       _firestore_collections(blob, _observed_tables(ctx)))
             if isinstance(hit, dict):
                 ctx.evidence.update(backend="firestore", project=proj, collection=hit["collection"],
-                                    documents_readable=hit["documents"], fields=hit["fields"], repro=hit["repro"])
+                                    documents_readable=hit["documents"], fields=hit["fields"],
+                                    sensitive_fields=hit.get("sensitive_fields"), repro=hit["repro"])
                 return True
             reached = reached or hit != "unreachable"
     ctx.evidence.update(checked=True, reachable=reached, world_readable=False)
