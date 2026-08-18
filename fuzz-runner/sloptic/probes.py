@@ -1156,7 +1156,8 @@ def no_error_state(ctx, probe) -> bool | None:
     The forced failure makes the OUTCOME definitively failed, so a silent-retry-that-succeeds can't confuse it;
     ANY indication (message / red field / toast) counts as handled — we grade that an apology exists, not its
     quality. N/A without a browser or a create form whose submit fires a mutating request."""
-    if auth.create_form(ctx.profile.forms) is None:
+    form = auth.create_form(ctx.profile.forms)
+    if form is None:
         ctx.evidence["na_reason"] = "no create/save form to submit-and-fail"
         return None
     hdrs = dict(ctx.headers or {})   # authenticate the page if we hold a session (the form is usually gated)
@@ -1173,8 +1174,10 @@ def no_error_state(ctx, probe) -> bool | None:
     finally:
         if account is not None:
             account.client.close()
-    ctx.evidence.update(verdict=verdict)
+    ctx.evidence.update(verdict=verdict, action=form.action)
     if verdict == "silent":
+        ctx.evidence["matched"] = ("forced the submit of %s to fail; the app showed no error/failure "
+                                   "indication (silent data loss)" % form.action)
         return True   # the action's request failed and the app showed the user nothing -> silent data loss
     if verdict == "handled":
         return False
@@ -5547,11 +5550,17 @@ def leaks_error_detail(ctx, probe) -> bool | None:
     inspected = False
     for r in _induce_error_responses(ctx):
         inspected = True
-        if _TRACE.search(r.text):
-            ctx.evidence.update(status=r.status_code, leak="stack-trace")
+        m = _TRACE.search(r.text)
+        if m:
+            ctx.evidence.update(status=r.status_code, leak="stack-trace",
+                                matched=r.text[m.start():m.start() + 200].strip(),
+                                repro=_repro_from_resp(r, matched="stack trace leaked in the error response"))
             return True
-        if _SQL_ERROR.search(r.text):
-            ctx.evidence.update(status=r.status_code, leak="db-error")
+        m = _SQL_ERROR.search(r.text)
+        if m:
+            ctx.evidence.update(status=r.status_code, leak="db-error",
+                                matched=r.text[m.start():m.start() + 200].strip(),
+                                repro=_repro_from_resp(r, matched="database error leaked in the error response"))
             return True
     ctx.evidence.update(inspected=inspected, leak=None)
     return False if inspected else None
