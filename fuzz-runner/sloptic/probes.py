@@ -3021,7 +3021,8 @@ def vulnerable_dependency(ctx, probe) -> bool | None:
         return None
     vulns = depscan.scan_deps(blob)
     if vulns:
-        ctx.evidence.update(vulnerable_deps=vulns, count=len(vulns))
+        worst = max(v["cvss"] for v in vulns)   # OWASP A03: the finding IS a CVE -> score its own NVD CVSS x 10
+        ctx.evidence.update(vulnerable_deps=vulns, count=len(vulns), penalty_override=round(worst * 10))
         return True
     ctx.evidence.update(vulnerable_deps=[], scanned_bytes=len(blob))
     return False

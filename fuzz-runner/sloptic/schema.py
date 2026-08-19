@@ -54,7 +54,8 @@ class Probe(BaseModel):
     variant_group_id: str | None = None  # probes sharing one fire once (same logical flaw)
     pool: str = "public"  # public | hidden
     evidence_model: str = "provable"  # provable | oracle (detection hint only)
-    penalty: int  # slop added when the probe fires; deduction-only, so always positive
+    penalty: int = 0  # nominal fallback. A probe with a severity block has this SYNCED to severity.default at
+                      # load (load_catalog), so it never drifts; a migrated probe need not set it at all.
     # What genuinely counts as a TRUE POSITIVE + the confounders to rule out (a FP is a fire that FAILS this).
     # Recorded so an audit measures fires against a STATED def, not memory/vibes; doc-only, never affects scoring.
     # Especially load-bearing for confounder-prone probes (timing/load/cold-start/presence-vs-use), where the

@@ -58,6 +58,9 @@ def load_catalog(root: str | pathlib.Path) -> list[Probe]:
         data = yaml.safe_load(path.read_text())
         probe = Probe(**data)
         _apply_severity_ref(probe, registry)
+        if probe.severity is not None:
+            probe.penalty = probe.severity.default   # keep the nominal in sync with the authority -> no drift,
+                                                     # no stale value; the severity block is the single source
         probes.append(probe)
     return probes
 

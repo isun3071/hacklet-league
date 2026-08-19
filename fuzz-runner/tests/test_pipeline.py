@@ -149,26 +149,17 @@ def test_vulnerable_app_accrues_slop():
     assert o["sec-split-001"] == "slop_detected"
     # sec-dos-001: /ingest decompresses a gzip request body with no size cap -> zip-bomb exhaustible:
     assert o["sec-dos-001"] == "slop_detected"
-    # Total decomposes by axis (the subtotals sum to slop_score). Penalties are risk-priced
-    # (frequency x severity, see the catalog): security holds its catastrophic per-instance ceiling (40),
-    # while qa/perf are priced up for their every-user frequency. On this deliberately security-riddled
-    # reference, security still dominates; a realistic janky app (references/qa-janky) leans qa/perf.
-    assert report.axis_slop == {"security": 429, "qa": 140, "performance": 28}   # perf 68->28: this pipeline
-    #     test excludes the Lighthouse-backed perf probes, so performance is just perf-load-001 (the burst probe)
-    assert report.slop_score == 597   # 643->597: -46 -- qa-deploy-001 (34) + qa-http-001 (12) are now
-                                      # report_only (off-score) here: the operative gate withholds deploy-001's
-                                      # score without a runtime-fetch confirmation (no browser in this test), and
-                                      # soft-404 (http-001) is report_only everywhere. 683->643 earlier:
-                                      # -40 from excluding the Lighthouse-backed perf probes here
-                                      # (30/18/10/4 -> 20/12/7/3, see _A11Y_TIER). This reference renders
-                                      # critical 1 + serious 2, priced 47 -> 32, and that -15 is the WHOLE
-                                      # delta — security 429 and performance 68 are unmoved, which is the
-                                      # check that the re-pricing stayed inside its own category.
-                                      # Earlier moves, kept for the trail: security 435->429 because
-                                      # sec-session-003 (Secure) is https-gated -> N/A over http (mirrors
-                                      # HSTS). qa 183->167:
-                                      # crash re-price (qa-crash-010 32->16) — a 500-not-400 on malformed input
-                                      # is ungraceful error handling (a QA-hygiene tier), not a server crash
+    # Total decomposes by axis (the subtotals sum to slop_score). Security is now AUTHORITY-ANCHORED (v2:
+    # a CVSS x Bugcrowd-VRT range placed by observed evidence, see catalog/_severity_classes.yaml + docs/
+    # SCORING_V2_SPEC.md): a confirmed SQLi is 90, a served .env / .aws / a live server-secret / a Werkzeug
+    # RCE debugger is 90-98, an IDOR that read a record is 55, missing headers stay a 2-8 chore floor.
+    assert report.axis_slop == {"security": 902, "qa": 140, "performance": 28}   # perf excludes Lighthouse here
+    #     (just perf-load-001, the burst probe). qa 140 and perf 28 are UNCHANGED from the pre-v2 baseline --
+    #     ONLY security moved (429 -> 902), the check that the reprice stayed inside its own axis.
+    assert report.slop_score == 1070   # was 597 pre-v2. The security reprice off the flat-40 ceiling: SQLi
+                                       # 40->90; secrets/.env/.aws/Werkzeug-RCE 35/20 -> 90/98; deps 18->61
+                                       # (jQuery 1.12.4 = CVE-2020-11022, CVSS 6.1 x 10). Every per-probe score
+                                       # is <= its 100 anchor (verified against the fixture dump).
     assert sum(report.axis_slop.values()) == report.slop_score
 
 
@@ -241,7 +232,7 @@ def test_cached_profile_freezes_surface_and_reproduces_score(monkeypatch):
     catalog = _catalog()   # exclude Lighthouse perf -> fast + deterministic (no metric variance in this repro test)
     minted = []
     r1 = run(SubprocessDeployer(str(REFS / "vulnerable" / "app.py")), catalog, on_profile=minted.append)
-    assert len(minted) == 1 and r1.slop_score == 597          # cache MISS -> discovered once + handed back
+    assert len(minted) == 1 and r1.slop_score == 1070          # cache MISS -> discovered once + handed back
 
     import sloptic.pipeline as pipeline_mod            # PROVE the crawl is skipped on a cache HIT:
     monkeypatch.setattr(pipeline_mod, "discover",             # discover() must never be called with a cached profile
@@ -249,7 +240,7 @@ def test_cached_profile_freezes_surface_and_reproduces_score(monkeypatch):
     seen = []
     r2 = run(SubprocessDeployer(str(REFS / "vulnerable" / "app.py")), catalog,
              cached_profile=minted[0], on_profile=seen.append)
-    assert r2.slop_score == 597 and seen == []                # HIT -> same score, no re-crawl, no re-mint
+    assert r2.slop_score == 1070 and seen == []                # HIT -> same score, no re-crawl, no re-mint
     assert r2.axis_slop == r1.axis_slop                       # identical per-axis decomposition too
 
 

@@ -130,7 +130,7 @@ def test_idor_class_carries_shared_severity_and_resolves_by_evidence():
         assert p.severity_ref == "access-control", pid                      # DRY: shared block, not inline copy
         assert p.severity is not None, pid                                  # loader resolved the ref
         assert p.severity.range == (30, 85), pid
-        assert p.penalty == 40, f"{pid}: nominal fallback preserved"        # unchanged; severity wins at runtime
+        assert p.penalty == 30, f"{pid}: nominal synced to severity.default"   # loader keeps them equal
         flags = {e.evidence for e in p.severity.escalators}
         assert {"cross_user_read", "sensitive_fields", "bulk_read", "cross_user_write"} <= flags, pid
     # the ladder differentiates by observed impact (was a flat 40 for all five)
@@ -284,7 +284,16 @@ def test_specials_severity():
     by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
     assert _severity_penalty(by_id["sec-ssrf-001"].severity, {"internal_reached": True}) == 70
     assert by_id["sec-filterinj-001"].severity.default == 75
-    assert by_id["sec-deps-001"].severity.default == 35
+
+
+def test_deps_scores_from_the_cve_own_cvss():
+    from sloptic import depscan
+    for entry in depscan._DEP_VULNS:
+        assert isinstance(entry[4], (int, float)) and 0 < entry[4] <= 10, entry[0]   # the cvss slot
+    hb = depscan.scan_deps("/*! Handlebars v4.0.0 */")               # prototype-pollution RCE
+    assert hb and hb[0]["cvss"] == 9.8                               # -> penalty_override 98
+    ng = depscan.scan_deps("AngularJS v1.6.0")                       # sanitizer-bypass XSS
+    assert ng and ng[0]["cvss"] == 5.4                               # -> penalty_override 54
 
 
 # --- the anti-vibe gate (SCORING_V2_SPEC.md section 7) ---
@@ -293,11 +302,18 @@ def test_every_security_probe_has_authority_anchored_severity():
     """Every bundle=security probe must carry a severity block with a non-empty cvss and vrt (n/a is allowed
     for a declared chore / CVSS-only class). A naked penalty with no named authority cannot ship."""
     from sloptic.catalog import default_catalog_dir, load_catalog
+    # sec-deps-001 (OWASP A03) computes its penalty from the detected CVE's own NVD CVSS (penalty_override),
+    # so it carries no severity block by design.
+    exempt = {"sec-deps-001"}
     missing = []
     for p in load_catalog(default_catalog_dir()):
-        if p.bundle != "security":
+        if p.bundle != "security" or p.id in exempt:
             continue
         s = p.severity
         if s is None or not s.cvss or not s.vrt:
             missing.append(p.id)
     assert not missing, f"security probes missing authority-anchored severity: {sorted(missing)}"
+    # and the nominal `penalty` is kept in sync with severity.default by the loader (no vestigial drift)
+    drift = [p.id for p in load_catalog(default_catalog_dir())
+             if p.severity is not None and p.penalty != p.severity.default]
+    assert not drift, f"nominal penalty drifted from severity.default: {sorted(drift)}"
