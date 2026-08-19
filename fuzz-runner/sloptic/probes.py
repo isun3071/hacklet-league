@@ -1302,7 +1302,7 @@ def command_injection(ctx, probe) -> bool | None:
                         data = {fn: (sep % htmpl.format(s=salt) if fn == field else _XSS_FILLER) for fn in fields}
                         try:
                             if any(w in _xss_send(c, method, action, data).text for w in wanted):
-                                ctx.evidence.update(injectable=True, via="in-band hash",
+                                ctx.evidence.update(injectable=True, execution_confirmed=True, via="in-band hash",
                                                     target=action, field=field)
                                 return True  # a shell hashed the salt to its exact digest -> real injection
                         except (httpx.HTTPError, httpx.InvalidURL):
@@ -1388,7 +1388,7 @@ def ssti_injectable(ctx, probe) -> bool | None:
                     data = {fn: (p if fn == field else _XSS_FILLER) for fn in fields}
                     try:
                         if any(w in _xss_send(c, method, action, data).text for w in wanted):
-                            ctx.evidence.update(injectable=True, via="hash oracle", engine=engine,
+                            ctx.evidence.update(injectable=True, execution_confirmed=True, via="hash oracle", engine=engine,
                                                 target=action, field=field)
                             return True  # the engine hashed the salt to its exact digest -> real injection
                     except (httpx.HTTPError, httpx.InvalidURL):
@@ -1535,7 +1535,7 @@ def xxe(ctx, probe) -> bool | None:
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
                     if _LFI_SIG.search(r.text):
-                        ctx.evidence.update(via="in-band file read", target=action)
+                        ctx.evidence.update(via="in-band file read", sensitive_fields=True, target=action)   # read a system file
                         return True  # the parser resolved file:///etc/passwd and reflected it -> XXE
     # OOB: a callback to our one-time URL proves the server fetched it (definitive, but dark on egress-blocked hosts).
     hosts = oob.callback_hosts()
@@ -1555,7 +1555,7 @@ def xxe(ctx, probe) -> bool | None:
                             continue
         _await_callback(collab, tokens, probe)
         fired = any(collab.received(t) for t in tokens)
-        ctx.evidence.update(callback_received=fired, via=("oob callback" if fired else None),
+        ctx.evidence.update(callback_received=fired, internal_reached=fired, via=("oob callback" if fired else None),
                             post_endpoints=len(posts), probes_sent=len(tokens))
         return True if fired else False
     finally:
@@ -1648,7 +1648,7 @@ def path_traversal(ctx, probe) -> bool | None:
                                     continue   # file signature does not reproduce -> nondeterministic (#1)
                             except (httpx.HTTPError, httpx.InvalidURL):
                                 pass       # control probe unreachable -> fall through and fire on direct evidence
-                            ctx.evidence.update(found=True, target=action, field=field, canary_clean=True)
+                            ctx.evidence.update(found=True, sensitive_fields=True, target=action, field=field, canary_clean=True)
                             return True  # returned the contents of a system file -> traversal/LFI
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
@@ -1753,7 +1753,7 @@ def file_upload(ctx, probe) -> bool | None:
                     try:
                         got = c.get(url)
                         if want in got.text:
-                            ctx.evidence.update(rce=True, form=f.action, filename=filename,
+                            ctx.evidence.update(rce=True, execution_confirmed=True, form=f.action, filename=filename,
                                                 repro=_repro_from_resp(got, matched="uploaded script executed server-side (salt digest returned)"))
                             return True  # the uploaded webshell hashed the salt server-side -> RCE via upload
                     except (httpx.HTTPError, httpx.InvalidURL):
@@ -2687,7 +2687,7 @@ def debug_mode_enabled(ctx, probe) -> bool | None:
     for r in _induce_error_responses(ctx):
         inspected = True
         if _DEBUG_FINGERPRINT.search(r.text):
-            ctx.evidence.update(status=r.status_code, debug_ui=True,
+            ctx.evidence.update(status=r.status_code, debug_ui=True, execution_confirmed="werkzeug" in r.text.lower(),
                                 repro=_repro_from_resp(r, matched="framework debug UI fingerprint"))
             return True
     # Werkzeug/Flask debug ships an interactive debugger reachable WITHOUT an error: it serves its own JS
@@ -2699,7 +2699,7 @@ def debug_mode_enabled(ctx, probe) -> bool | None:
         inspected = True
         if (r.status_code == 200 and "javascript" in r.headers.get("content-type", "").lower()
                 and "werkzeug" in r.text.lower()):
-            ctx.evidence.update(endpoint="/?__debugger__=yes", debug_ui=True, framework="werkzeug")
+            ctx.evidence.update(endpoint="/?__debugger__=yes", debug_ui=True, framework="werkzeug", execution_confirmed=True)
             return True
     except (httpx.HTTPError, httpx.InvalidURL):
         pass

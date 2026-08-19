@@ -191,3 +191,29 @@ def test_chore_floor_probes_carry_fixed_severity():
         # unliftable: even a bag of impact flags returns the fixed floor
         loaded = {"cross_user_read": True, "bulk_read": True, "sensitive_fields": True}
         assert _severity_penalty(p.severity, loaded) == val, pid
+
+
+# --- the injection/terminal cluster: flat-40 top de-clustered into the 70-98 band ---
+
+def test_injection_cluster_severity_and_resolution():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    refs = {
+        "sec-sqli-001": "sql-injection", "sec-sqli-004": "sql-injection",
+        "sec-cmdi-001": "command-injection", "sec-ssti-001": "code-injection",
+        "sec-xxe-001": "xxe", "sec-lfi-001": "path-traversal",
+        "sec-upload-001": "file-upload-rce", "sec-debug-001": "debug-mode",
+    }
+    for pid, ref in refs.items():
+        assert by_id[pid].severity_ref == ref, pid
+        assert by_id[pid].severity is not None, pid
+    assert by_id["sec-sqli-001"].severity.default == 90        # de-clustered off the old flat 40
+    assert by_id["sec-cmdi-001"].severity.range == (90, 98)
+    ssti = by_id["sec-ssti-001"].severity                      # our oracle proves execution -> terminal
+    assert _severity_penalty(ssti, {"execution_confirmed": True}) == 98
+    xxe = by_id["sec-xxe-001"].severity                        # file-read vs oob-ssrf
+    assert _severity_penalty(xxe, {"internal_reached": True}) == 82
+    assert _severity_penalty(xxe, {"sensitive_fields": True}) == 91
+    debug = by_id["sec-debug-001"].severity                    # info-leak base vs Werkzeug RCE
+    assert _severity_penalty(debug, {}) == 40
+    assert _severity_penalty(debug, {"execution_confirmed": True}) == 98
