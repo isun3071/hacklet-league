@@ -1471,12 +1471,12 @@ def ssrf(ctx, probe) -> bool | None:
         fired = any(collab.received(t) for t in tokens)
         url_params = sorted({f for _, _, uf, _ in targets for f in uf})
         if fired:
-            ctx.evidence.update(callback_received=True, via="oast", url_params=url_params,
+            ctx.evidence.update(callback_received=True, via="oast", internal_reached=True, url_params=url_params,
                                 probes_sent=len(tokens))
             return True
         inband = _ssrf_inband(ctx, targets)
         if inband is not None:
-            ctx.evidence.update(callback_received=False, via="in-band", url_params=url_params, **inband)
+            ctx.evidence.update(callback_received=False, via="in-band", internal_reached=True, url_params=url_params, **inband)
             return True
         ctx.evidence.update(callback_received=False, url_params=url_params, probes_sent=len(tokens))
         return False
@@ -1834,7 +1834,7 @@ def upload_stored_xss(ctx, probe) -> bool | None:
                     except (httpx.HTTPError, httpx.InvalidURL):
                         continue
                     if _served_executable_inline(got):
-                        ctx.evidence.update(stored_xss=True, form=f.action, filename=filename,
+                        ctx.evidence.update(stored_xss=True, stored=True, execution_confirmed=True, form=f.action, filename=filename,
                                             served_as=got.headers.get("content-type", ""),
                                             repro=_repro_from_resp(got, matched="served %s inline (not attachment)"
                                                                    % got.headers.get("content-type", "")))

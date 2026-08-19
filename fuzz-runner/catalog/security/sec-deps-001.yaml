@@ -7,6 +7,7 @@ penalty: 18   # a client dependency with a KNOWN CVE (retire.js-style) shipped t
               # prototype-pollution / ReDoS the team could have avoided with `npm audit`. Supply-chain
               # responsibility (the team CHOSE it, 24h is enough for due diligence); moderate — exploitation
               # needs the vulnerable path actually used, and it's client-side, so priced below active XSS (35).
+severity: {cvss: "n/a", vrt: "n/a", range: [35, 35], default: 35}   # OWASP A03 supply chain. THE EPSS special case (spec section 6): per-CVE CVSS x 10 once _DEP_VULNS carries a cvss/epss field; fixed 35 until then. REPRICED 18->35
 applicability:
   requires: [at_least_one_http_endpoint_exists]
 probe:

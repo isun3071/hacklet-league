@@ -275,3 +275,29 @@ def test_medium_tier_severity():
     assert _severity_penalty(rd, {}) == 25
     assert _severity_penalty(rd, {"external_host": True}) == 40
     assert _severity_penalty(rd, {"external_host": True, "auth_flow": True}) == 55
+
+
+# --- the three specials ---
+
+def test_specials_severity():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    assert _severity_penalty(by_id["sec-ssrf-001"].severity, {"internal_reached": True}) == 70
+    assert by_id["sec-filterinj-001"].severity.default == 75
+    assert by_id["sec-deps-001"].severity.default == 35
+
+
+# --- the anti-vibe gate (SCORING_V2_SPEC.md section 7) ---
+
+def test_every_security_probe_has_authority_anchored_severity():
+    """Every bundle=security probe must carry a severity block with a non-empty cvss and vrt (n/a is allowed
+    for a declared chore / CVSS-only class). A naked penalty with no named authority cannot ship."""
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    missing = []
+    for p in load_catalog(default_catalog_dir()):
+        if p.bundle != "security":
+            continue
+        s = p.severity
+        if s is None or not s.cvss or not s.vrt:
+            missing.append(p.id)
+    assert not missing, f"security probes missing authority-anchored severity: {sorted(missing)}"
