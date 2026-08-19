@@ -239,3 +239,18 @@ def test_exposure_secret_family_severity():
     # anon-data-exposure: sensitive -> 80, bulk -> 90
     ade = by_id["sec-exposure-008"].severity
     assert _severity_penalty(ade, {"sensitive_fields": True, "bulk_read": True}) == 90
+
+
+# --- the backend / BaaS class ---
+
+def test_backend_class_severity():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    assert by_id["sec-backend-001"].severity_ref == "anon-data-exposure"
+    assert by_id["sec-backend-002"].severity_ref == "access-control"
+    assert by_id["sec-backend-003"].severity.default == 12          # schema disclosure = chore floor
+    b1 = by_id["sec-backend-001"].severity                          # world-readable DB
+    assert _severity_penalty(b1, {"bulk_read": True}) == 90         # anon read
+    assert _severity_penalty(b1, {"write_confirmed": True}) == 98   # anon WRITE = terminal
+    b2 = by_id["sec-backend-002"].severity                          # authed BOLA (reads everything)
+    assert _severity_penalty(b2, {"cross_user_read": True, "bulk_read": True}) == 78

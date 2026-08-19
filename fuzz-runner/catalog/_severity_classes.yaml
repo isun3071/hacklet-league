@@ -93,12 +93,13 @@ disclosed-secret:                                       # OWASP A02/A07 (a serve
     - {evidence: validated_live, point: 92, vrt_variant: "secret confirmed live against its provider"}
     - {evidence: high_privilege, point: 98, vrt_variant: "server key / DB creds / private key = takeover"}
 
-anon-data-exposure:                                     # OWASP A01 (anonymous bulk records with PII)
+anon-data-exposure:                                     # OWASP A01 (anon bulk records / world-readable DB)
   cvss: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"  # 7.5
   cvss_score: 7.5
   vrt: "P1"
-  range: [70, 90]
+  range: [70, 98]
   default: 70
   escalators:
     - {evidence: sensitive_fields, point: 80, vrt_variant: "records carry PII / financial / credential columns"}
-    - {evidence: bulk_read, point: 90, vrt_variant: "bulk records exposed to an anonymous request"}
+    - {evidence: bulk_read, point: 90, vrt_variant: "bulk records / world-readable DB exposed to anon"}
+    - {evidence: write_confirmed, point: 98, vrt_variant: "anon can WRITE the DB (no RLS) = integrity compromise"}

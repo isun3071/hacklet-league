@@ -3748,13 +3748,13 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
             w = _supabase_anon_writable(ext, base, keys, tables)
             if isinstance(w, dict):
                 ctx.evidence.update(backend="supabase", host=base, table=w["table"], anon_writable=True,
-                                    sqlstate=w["sqlstate"], repro=w["repro"])
+                                    write_confirmed=True, sqlstate=w["sqlstate"], repro=w["repro"])
                 return True
             hit = _supabase_readable(ext, base, keys, tables)
             if isinstance(hit, dict):
                 ctx.evidence.update(backend="supabase", host=base, table=hit["table"],
                                     rows_readable=hit["rows"], columns=hit["columns"],
-                                    sensitive_columns=hit.get("sensitive_columns"), repro=hit["repro"])
+                                    bulk_read=True, sensitive_columns=hit.get("sensitive_columns"), repro=hit["repro"])
                 return True
             reached = reached or hit != "unreachable"
         if fm:
@@ -3763,7 +3763,7 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
             if isinstance(data, (dict, list)) and data:
                 sensitive = _rtdb_sensitive_names(data)
                 if sensitive:                       # gate on sensitive node/field names (Supabase-path parity)
-                    ctx.evidence.update(backend="firebase-rtdb", host=fm.group(1),
+                    ctx.evidence.update(backend="firebase-rtdb", bulk_read=True, host=fm.group(1),
                                         sample_keys=sorted(data)[:8] if isinstance(data, dict) else len(data),
                                         sensitive_fields=sensitive[:6],
                                         repro=_repro("GET", url, status=200,
@@ -3776,7 +3776,7 @@ def exposed_backend_readable(ctx, probe) -> bool | None:
             hit = _firestore_readable(ext, "https://firestore.googleapis.com", proj, key,
                                       _firestore_collections(blob, _observed_tables(ctx)))
             if isinstance(hit, dict):
-                ctx.evidence.update(backend="firestore", project=proj, collection=hit["collection"],
+                ctx.evidence.update(backend="firestore", bulk_read=True, project=proj, collection=hit["collection"],
                                     documents_readable=hit["documents"], fields=hit["fields"],
                                     sensitive_fields=hit.get("sensitive_fields"), repro=hit["repro"])
                 return True
@@ -3949,7 +3949,7 @@ def authenticated_backend_readable(ctx, probe) -> bool | None:
                                              key_m.group(0), token,
                                              _firestore_collections(blob, _observed_tables(ctx)))
                 if isinstance(hit, dict):
-                    ctx.evidence.update(backend="firestore", tier="authenticated", project=proj_m.group(1),
+                    ctx.evidence.update(backend="firestore", tier="authenticated", cross_user_read=True, bulk_read=True, project=proj_m.group(1),
                                         collection=hit["collection"], documents_readable=hit["documents"],
                                         fields=hit["fields"], repro=hit["repro"])
                     return True
@@ -3964,7 +3964,7 @@ def authenticated_backend_readable(ctx, probe) -> bool | None:
                     hit = _supabase_authed_only(ext, base, anon_key, jwt,
                                                 _supabase_tables(blob, _observed_tables(ctx)))
                     if isinstance(hit, dict):
-                        ctx.evidence.update(backend="supabase", tier="authenticated", host=base,
+                        ctx.evidence.update(backend="supabase", tier="authenticated", cross_user_read=True, bulk_read=True, host=base,
                                             table=hit["table"], rows_readable=hit["rows"],
                                             columns=hit["columns"], repro=hit["repro"])
                         return True
