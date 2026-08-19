@@ -82,3 +82,23 @@ debug-mode:                                             # OWASP A02 (debug UI in
   default: 40
   escalators:
     - {evidence: execution_confirmed, point: 98, vrt_variant: "Werkzeug interactive debugger = RCE console"}
+
+disclosed-secret:                                       # OWASP A02/A07 (a server secret shipped to anyone)
+  cvss: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"  # 7.5: read-only secret disclosure
+  cvss_score: 7.5
+  vrt: "P1"
+  range: [70, 98]
+  default: 70
+  escalators:
+    - {evidence: validated_live, point: 92, vrt_variant: "secret confirmed live against its provider"}
+    - {evidence: high_privilege, point: 98, vrt_variant: "server key / DB creds / private key = takeover"}
+
+anon-data-exposure:                                     # OWASP A01 (anonymous bulk records with PII)
+  cvss: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"  # 7.5
+  cvss_score: 7.5
+  vrt: "P1"
+  range: [70, 90]
+  default: 70
+  escalators:
+    - {evidence: sensitive_fields, point: 80, vrt_variant: "records carry PII / financial / credential columns"}
+    - {evidence: bulk_read, point: 90, vrt_variant: "bulk records exposed to an anonymous request"}

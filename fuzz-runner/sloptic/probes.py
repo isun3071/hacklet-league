@@ -2796,7 +2796,7 @@ def bundle_leaks_secret(ctx, probe) -> bool | None:
         return None
     kinds = secretscan.scan_blob(blob)
     if kinds:
-        ctx.evidence.update(secret_kinds=kinds, source="client-bundle")
+        ctx.evidence.update(secret_kinds=kinds, high_privilege=True, source="client-bundle")   # server keys = takeover
         return True
     ctx.evidence.update(secret_kinds=[], scanned_bytes=len(blob))
     return False
@@ -3224,7 +3224,7 @@ def exposed_sensitive_file(ctx, probe) -> bool | None:
                 continue          # a discovered path another probe already bills -> theirs, not ours
             with contextlib.suppress(Exception):
                 if check(r):
-                    ctx.evidence.update(exposed=True, path=path, status=r.status_code,
+                    ctx.evidence.update(exposed=True, high_privilege=True, path=path, status=r.status_code,
                                         bytes=len(r.content or b""),
                                         repro=_repro("GET", str(r.url), status=r.status_code,
                                                      matched=f"served {path}"))
@@ -3458,7 +3458,7 @@ def anon_bulk_data_exposed(ctx, probe) -> bool | None:
                     hits.append(c)
                 if not hits:
                     continue      # bulk but not sensitive: a catalog, an index, a public profile list
-                ctx.evidence.update(anon_readable=True, endpoint=path, collection=key or "(top level)",
+                ctx.evidence.update(anon_readable=True, sensitive_fields=True, bulk_read=True, endpoint=path, collection=key or "(top level)",
                                     records=len(rows), sensitive_columns=hits[:6], columns=cols[:10],
                                     repro=_repro_from_resp(
                                         r, matched="%d records with %s readable to an anonymous request"

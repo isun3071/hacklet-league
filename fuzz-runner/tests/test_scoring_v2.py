@@ -217,3 +217,25 @@ def test_injection_cluster_severity_and_resolution():
     debug = by_id["sec-debug-001"].severity                    # info-leak base vs Werkzeug RCE
     assert _severity_penalty(debug, {}) == 40
     assert _severity_penalty(debug, {"execution_confirmed": True}) == 98
+
+
+# --- the disclosed-secret + exposure family ---
+
+def test_exposure_secret_family_severity():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    for pid in ("sec-secrets-001", "sec-secrets-002", "sec-exposure-005", "sec-exposure-007"):
+        assert by_id[pid].severity_ref == "disclosed-secret", pid
+    assert by_id["sec-exposure-008"].severity_ref == "anon-data-exposure"
+    # declarative known-high-priv files: fixed high (repriced off 35/30)
+    assert by_id["sec-exposure-001"].severity.default == 90        # served .env
+    assert by_id["sec-exposure-004"].severity.default == 90        # served .aws/credentials
+    assert by_id["sec-exposure-002"].severity.default == 55        # served .git
+    # disclosed-secret resolves: floor 70, high_privilege -> 98, validated_live -> 92
+    ds = by_id["sec-secrets-002"].severity
+    assert _severity_penalty(ds, {}) == 70
+    assert _severity_penalty(ds, {"high_privilege": True}) == 98
+    assert _severity_penalty(ds, {"validated_live": True}) == 92
+    # anon-data-exposure: sensitive -> 80, bulk -> 90
+    ade = by_id["sec-exposure-008"].severity
+    assert _severity_penalty(ade, {"sensitive_fields": True, "bulk_read": True}) == 90
