@@ -8,3 +8,14 @@ applicability:
   requires: [has_auth_entrypoint]
 probe:
   predicate: idor_horizontal
+severity:
+  cvss: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"   # 6.5: authed low-priv reads another user's record
+  cvss_score: 6.5
+  vrt: "P1"                       # Bugcrowd VRT: IDOR view/modify sensitive iterable = P1
+  range: [30, 85]
+  default: 30                     # abstention; these probes fire on a PROVEN cross-user read -> land >=55
+  escalators:
+    - {evidence: cross_user_read, point: 55, vrt_variant: "BAC: cross-user read confirmed"}
+    - {evidence: sensitive_fields, point: 68, vrt_variant: "IDOR view sensitive/PII record"}
+    - {evidence: bulk_read, point: 78, vrt_variant: "BOLA collection: many owners"}
+    - {evidence: cross_user_write, point: 85, vrt_variant: "IDOR modify another user's data"}

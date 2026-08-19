@@ -2051,7 +2051,8 @@ def api_bola(ctx, probe) -> bool | None:
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
                 if b_read.status_code == 200 and secret_value in b_read.text:
-                    ctx.evidence.update(cross_read=True, endpoint=read_path)
+                    # v2 severity: the crossed object carried the canary in a SENSITIVE field (pair-selected)
+                    ctx.evidence.update(cross_read=True, cross_user_read=True, sensitive_fields=True, endpoint=read_path)
                     return True  # B read A's object AND saw A's planted secret -> broken object auth
         ctx.evidence.update(cross_read=False, pairs_tested=len(pairs))
         return False if tested else None
@@ -2158,7 +2159,8 @@ def api_bola_collection(ctx, probe) -> bool | None:
                 shared = ({_obj_id(o) for o in oa} & {_obj_id(o) for o in ob}) - {None}
                 # not owner-scoped: each unrelated account sees >=2 owners AND they share a real object
                 if len(owners_a) >= 2 and len(owners_b) >= 2 and shared:
-                    ctx.evidence.update(bola_collection=True, endpoint=path,
+                    # v2 severity: an auth-gated collection leaking >=2 owners = bulk cross-user read
+                    ctx.evidence.update(bola_collection=True, cross_user_read=True, bulk_read=True, endpoint=path,
                                         distinct_owners=len(owners_a), shared_objects=len(shared),
                                         repro=_repro_from_resp(rb, matched="%d distinct owners / %d shared objects visible to a 2nd account"
                                                                % (len(owners_a), len(shared))))
@@ -2209,7 +2211,8 @@ def idor_user_record(ctx, probe) -> bool | None:
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
                 if as_b.status_code == 200 and canary in as_b.text:
-                    ctx.evidence.update(cross_read=True, endpoint=path)
+                    # v2 severity: a user/account record is PII by nature -> sensitive_fields
+                    ctx.evidence.update(cross_read=True, cross_user_read=True, sensitive_fields=True, endpoint=path)
                     return True                    # B read A's own account record -> horizontal IDOR
         ctx.evidence.update(cross_read=False, reads_tested=len(reads))
         return False if tested else None
@@ -2287,7 +2290,8 @@ def bola_managed_backend(ctx, probe) -> bool | None:
                 except (httpx.HTTPError, httpx.InvalidURL):
                     continue
                 if as_b.status_code == 200 and canary in as_b.text:
-                    ctx.evidence.update(cross_read=True, endpoint=url.split("?")[0])
+                    # v2 severity: cross-user read PROVEN; leave sensitive_fields unset (row content not classified)
+                    ctx.evidence.update(cross_read=True, cross_user_read=True, endpoint=url.split("?")[0])
                     return True   # B read A's private backend record -> broken per-user RLS
         ctx.evidence.update(cross_read=False, reads_tested=len(reads))
         return False if tested else None
@@ -4782,7 +4786,7 @@ def idor_horizontal(ctx, probe) -> bool | None:
         with httpx.Client(base_url=ctx.base_url, timeout=10.0, cookies=b_cookies, headers=b_auth) as bc:
             leaked = bc.get(resource)
         cross = leaked.status_code == 200 and marker in leaked.text
-        ctx.evidence.update(cross_read=cross, resource=resource)
+        ctx.evidence.update(cross_read=cross, cross_user_read=cross, resource=resource)   # v2 severity flag
         return cross
     except (httpx.HTTPError, httpx.InvalidURL):
         return None

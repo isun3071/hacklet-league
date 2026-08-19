@@ -117,3 +117,24 @@ def test_chore_floor_severity_no_escalators():
     sev = Severity(cvss="n/a", vrt="P5", range=(8, 8), default=8, tier="chore-floor")
     assert _severity_penalty(sev, {}) == 8
     assert _severity_penalty(sev, {"cross_user_read": True}) == 8   # nothing to lift to
+
+
+# --- the first migrated class: access-control (sec-idor-001..005), verified end to end ---
+
+def test_idor_class_carries_shared_severity_and_resolves_by_evidence():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    ids = ["sec-idor-001", "sec-idor-002", "sec-idor-003", "sec-idor-004", "sec-idor-005"]
+    for pid in ids:
+        p = by_id[pid]
+        assert p.severity is not None, pid
+        assert p.severity.range == (30, 85), pid
+        assert p.penalty == 40, f"{pid}: nominal fallback preserved"        # unchanged; severity wins at runtime
+        flags = {e.evidence for e in p.severity.escalators}
+        assert {"cross_user_read", "sensitive_fields", "bulk_read", "cross_user_write"} <= flags, pid
+    # the ladder differentiates by observed impact (was a flat 40 for all five)
+    sev = by_id["sec-idor-003"].severity
+    assert _severity_penalty(sev, {}) == 30                                                   # abstention floor
+    assert _severity_penalty(sev, {"cross_user_read": True}) == 55                            # bare cross-user read
+    assert _severity_penalty(sev, {"cross_user_read": True, "sensitive_fields": True}) == 68  # a PII record
+    assert _severity_penalty(sev, {"cross_user_read": True, "bulk_read": True}) == 78         # a collection leak
