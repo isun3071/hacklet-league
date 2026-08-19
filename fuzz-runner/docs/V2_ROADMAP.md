@@ -216,3 +216,18 @@ and a genuinely new axis, but at 65% Vercel/Netlify/Cloudflare the TLS is platfo
 
 Every new SCORED probe must pass the admission test (`scripts/rank_variance.py`) on the corpus before
 it stays in the score, and must be CI-locked with a vulnerable/hardened anchor pair (the wedge test).
+
+## Coverage backlog (post scoring-v2)
+
+New probe families to add after the authority-anchored severity migration (docs/SCORING_V2_SPEC.md):
+
+1. **PostgREST filter injection** (CWE-943): validated against the supavulnbase fixture (inj-001 / ctl-012 /
+   hardened-8092). Predicate + three-shot count oracle + fingerprint gate + tp_definition. Self-contained, ready.
+2. **Email-verification driver** (a 6th register lane) + 2 probes: (a) app promises verification but no email
+   within X seconds; (b) the verification link establishes no session. Infra-gated: needs a throwaway domain +
+   inbound-parse receiver (NOT sloptic.org). Respect captcha / SSO (do not defeat them).
+3. **Rate-limit coverage expansion** (CWE-770 / CWE-799): today sec-ratelimit-001 tests only the LOGIN surface.
+   The broader class is abuse-resistance across many surfaces -- signup/contact spam, OTP/email flooding,
+   scraping, enumeration, and the headline case for an AI corpus: **cost amplification** (an unthrottled endpoint
+   that calls a paid LLM API = a direct financial DoS). A probe that finds an expensive/send-email/LLM-proxy
+   endpoint and confirms no throttle. Higher potential severity than the login case (VRT-override candidate).
