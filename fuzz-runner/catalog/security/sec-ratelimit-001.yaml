@@ -4,6 +4,7 @@ category: rate-limiting
 pool: public
 evidence_model: oracle
 penalty: 15   # no brute-force protection on login -> credential stuffing / password spraying
+severity: {cvss: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", cvss_score: 5.3, vrt: "P4", range: [30, 30], default: 30}   # REPRICED 15->30 (VRT P4)
 applicability:
   # not gated on a discovered HTML password form: the predicate itself finds the login surface
   # (HTML form OR JSON-API endpoint like /rest/user/login) and returns N/A when neither exists.

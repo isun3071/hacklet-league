@@ -169,3 +169,25 @@ def test_severity_ref_resolves_and_rejects_bad_input():
     p4 = Probe(id="w", bundle="security", penalty=40)
     _apply_severity_ref(p4, reg)
     assert p4.severity is None
+
+
+# --- the chore-floor batch: fixed-value blocks, unliftable by evidence (weight = breadth, not severity) ---
+
+def test_chore_floor_probes_carry_fixed_severity():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    expected = {
+        "sec-headers-001": 3, "sec-headers-002": 8, "sec-headers-003": 5, "sec-headers-004": 5,
+        "sec-headers-005": 2, "sec-headers-006": 2, "sec-csp-001": 5,
+        "sec-exposure-009": 4, "sec-exposure-006": 15, "sec-mixed-001": 10,
+        "sec-session-001": 15, "sec-session-002": 12, "sec-session-003": 12, "sec-session-005": 15,
+        "sec-ratelimit-001": 30,
+    }
+    for pid, val in expected.items():
+        p = by_id[pid]
+        assert p.severity is not None, pid
+        assert p.severity.range == (val, val), pid
+        assert not p.severity.escalators, pid            # a chore does not escalate
+        # unliftable: even a bag of impact flags returns the fixed floor
+        loaded = {"cross_user_read": True, "bulk_read": True, "sensitive_fields": True}
+        assert _severity_penalty(p.severity, loaded) == val, pid
