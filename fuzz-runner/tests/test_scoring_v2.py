@@ -127,7 +127,8 @@ def test_idor_class_carries_shared_severity_and_resolves_by_evidence():
     ids = ["sec-idor-001", "sec-idor-002", "sec-idor-003", "sec-idor-004", "sec-idor-005"]
     for pid in ids:
         p = by_id[pid]
-        assert p.severity is not None, pid
+        assert p.severity_ref == "access-control", pid                      # DRY: shared block, not inline copy
+        assert p.severity is not None, pid                                  # loader resolved the ref
         assert p.severity.range == (30, 85), pid
         assert p.penalty == 40, f"{pid}: nominal fallback preserved"        # unchanged; severity wins at runtime
         flags = {e.evidence for e in p.severity.escalators}
@@ -138,3 +139,33 @@ def test_idor_class_carries_shared_severity_and_resolves_by_evidence():
     assert _severity_penalty(sev, {"cross_user_read": True}) == 55                            # bare cross-user read
     assert _severity_penalty(sev, {"cross_user_read": True, "sensitive_fields": True}) == 68  # a PII record
     assert _severity_penalty(sev, {"cross_user_read": True, "bulk_read": True}) == 78         # a collection leak
+
+
+# --- the DRY severity_ref mechanism (catalog/_severity_classes.yaml) ---
+
+def test_severity_registry_loads_access_control():
+    from sloptic.catalog import _load_severity_registry, default_catalog_dir
+    reg = _load_severity_registry(default_catalog_dir())
+    assert "access-control" in reg
+    assert reg["access-control"].range == (30, 85)
+    assert reg["access-control"].vrt == "P1"
+
+
+def test_severity_ref_resolves_and_rejects_bad_input():
+    from sloptic.catalog import _apply_severity_ref
+    reg = {"access-control": Severity(range=(30, 85), default=30, vrt="P1")}
+    # valid: ref resolves into .severity
+    p = Probe(id="x", bundle="security", penalty=40, severity_ref="access-control")
+    _apply_severity_ref(p, reg)
+    assert p.severity is not None and p.severity.range == (30, 85)
+    # unknown ref -> loud failure (a catalog typo must not silently fall through to nominal)
+    with pytest.raises(ValueError):
+        _apply_severity_ref(Probe(id="y", bundle="security", penalty=40, severity_ref="nope"), reg)
+    # both inline severity AND a ref -> rejected
+    with pytest.raises(ValueError):
+        _apply_severity_ref(Probe(id="z", bundle="security", penalty=40, severity_ref="access-control",
+                                  severity=Severity(range=(30, 85), default=30)), reg)
+    # no ref -> no-op, severity stays None
+    p4 = Probe(id="w", bundle="security", penalty=40)
+    _apply_severity_ref(p4, reg)
+    assert p4.severity is None

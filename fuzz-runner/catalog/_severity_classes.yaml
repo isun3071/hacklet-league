@@ -1,0 +1,18 @@
+# Shared, authority-anchored severity blocks referenced by a probe's `severity_ref` (DRY: one block per
+# vulnerability CLASS, not copied into every probe of that class). load_catalog() reads this file (skipped by
+# the probe glob because of the leading underscore) and resolves each `severity_ref` into the probe's
+# `severity`. See docs/SCORING_V2_SPEC.md. The range is set by CVSS x Bugcrowd VRT; the point is set at
+# runtime by the probe's own evidence flags (default low, highest matched rung lifts). Rung `point`s [calib]
+# pending the re-grade; range bounds [pinned] from CVSS/VRT.
+
+access-control:                                         # OWASP A01:2025 Broken Access Control (IDOR / BOLA)
+  cvss: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"  # 6.5: authed low-priv reads another user's record
+  cvss_score: 6.5
+  vrt: "P1"                                             # Bugcrowd VRT: IDOR view/modify sensitive iterable = P1
+  range: [30, 85]
+  default: 30                                           # abstention; the idor probes fire on a PROVEN cross-user read
+  escalators:
+    - {evidence: cross_user_read, point: 55, vrt_variant: "BAC: cross-user read confirmed"}
+    - {evidence: sensitive_fields, point: 68, vrt_variant: "IDOR view sensitive/PII record"}
+    - {evidence: bulk_read, point: 78, vrt_variant: "BOLA collection: many owners' objects"}
+    - {evidence: cross_user_write, point: 85, vrt_variant: "IDOR modify another user's data"}

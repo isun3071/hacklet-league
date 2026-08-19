@@ -68,6 +68,9 @@ class Probe(BaseModel):
     # v2 authority-anchored penalty (range + evidence ladder; SCORING_V2_SPEC.md). When set, _run_probe
     # resolves the penalty from it and `penalty` above is only the nominal fallback. None -> legacy behavior.
     severity: Severity | None = None
+    # DRY alternative: reference a shared class block by name (catalog/_severity_classes.yaml); load_catalog
+    # resolves it INTO `severity`. Set at most one of severity / severity_ref (the loader enforces this).
+    severity_ref: str | None = None
 
 
 @dataclass
