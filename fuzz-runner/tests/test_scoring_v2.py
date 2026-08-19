@@ -254,3 +254,24 @@ def test_backend_class_severity():
     assert _severity_penalty(b1, {"write_confirmed": True}) == 98   # anon WRITE = terminal
     b2 = by_id["sec-backend-002"].severity                          # authed BOLA (reads everything)
     assert _severity_penalty(b2, {"cross_user_read": True, "bulk_read": True}) == 78
+
+
+# --- the medium tier: XSS class + the single-severity mid probes + redirect escalation ---
+
+def test_medium_tier_severity():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    for pid in ("sec-xss-001", "sec-xss-002", "sec-domxss-001"):
+        assert by_id[pid].severity_ref == "xss", pid
+    xss = by_id["sec-xss-001"].severity
+    assert _severity_penalty(xss, {}) == 40                             # reflected via heuristic (unproven)
+    assert _severity_penalty(xss, {"execution_confirmed": True}) == 61  # reflected/DOM executed
+    assert _severity_penalty(xss, {"stored": True}) == 85               # stored (runs for every viewer)
+    assert by_id["sec-csrf-001"].severity.default == 45
+    assert by_id["sec-cors-001"].severity.default == 45
+    assert by_id["sec-hosthdr-001"].severity.default == 40
+    assert by_id["sec-session-004"].severity.default == 45
+    rd = by_id["sec-redirect-001"].severity                             # open redirect escalation
+    assert _severity_penalty(rd, {}) == 25
+    assert _severity_penalty(rd, {"external_host": True}) == 40
+    assert _severity_penalty(rd, {"external_host": True, "auth_flow": True}) == 55

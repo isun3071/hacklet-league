@@ -857,7 +857,7 @@ def xss_injectable(ctx, probe) -> bool | None:
                 try:
                     sent = _xss_send(c, "post", action, {fn: inject for fn in fields})
                     if _reflects(c.get(action), detect):
-                        ctx.evidence.update(injectable=True, kind="stored", via="reflection",
+                        ctx.evidence.update(injectable=True, kind="stored", stored=True, via="reflection",
                                             target=action, payload=inject,
                                             repro=_repro_from_resp(sent, matched="payload persists; GET %s reflects it" % action))
                         return True  # persisted across a fresh request -> stored XSS
@@ -874,7 +874,7 @@ def xss_injectable(ctx, probe) -> bool | None:
             if browser.dom_xss_executes(ctx.base_url, [action], params=tuple(gfields),
                                         payloads=browser._XSS_EXEC_PAYLOADS, headers=ctx.headers):
                 exurl = ctx.base_url.rstrip("/") + action + "?" + urllib.parse.urlencode({gfields[0]: browser._XSS_PAYLOAD})
-                ctx.evidence.update(injectable=True, kind="reflected", via="execution",
+                ctx.evidence.update(injectable=True, kind="reflected", execution_confirmed=True, via="execution",
                                     target=action, fields=gfields,   # executed in a real DOM -> provable XSS
                                     repro=_repro("GET", exurl, matched="payload executed in a headless browser"))
                 return True
@@ -922,7 +922,7 @@ def stored_xss_api(ctx, probe) -> bool | None:
                   if not r.startswith("/_next/") and not r.split("?")[0].endswith((".js", ".css", ".png",
                                                                                     ".svg", ".ico", ".woff2"))][:20] or ["/"]
         if browser.stored_xss_executes(ctx.base_url, routes, headers=hdrs or None):
-            ctx.evidence.update(stored_xss=True, endpoints=[e.path for e in creates][:5])
+            ctx.evidence.update(stored_xss=True, stored=True, execution_confirmed=True, endpoints=[e.path for e in creates][:5])
             return True   # a stored API value executed unescaped in the DOM -> stored XSS
         ctx.evidence.update(stored_xss=False, creates_tested=len(creates))
         return False
@@ -4499,7 +4499,7 @@ def dom_xss(ctx, probe) -> bool:
     it runs in the DOM, catching reflected-that-executes and DOM-sink XSS a source check misses.
     Gated on the `browser` capability, so it's N/A unless the run enabled rendering."""
     executed = browser.dom_xss_executes(ctx.base_url, ctx.profile.routes, headers=ctx.headers)
-    ctx.evidence.update(executed=bool(executed), routes_rendered=len(ctx.profile.routes))
+    ctx.evidence.update(executed=bool(executed), execution_confirmed=bool(executed), routes_rendered=len(ctx.profile.routes))
     return executed
 
 
@@ -4748,7 +4748,8 @@ def open_redirect(ctx, probe) -> bool:
                 continue
             if resp.is_redirect and urllib.parse.urlparse(
                     resp.headers.get("location", "")).hostname == _REDIRECT_PROBE_HOST:
-                ctx.evidence.update(vulnerable=True, endpoint=path,
+                ctx.evidence.update(vulnerable=True, endpoint=path, external_host=True,
+                                    auth_flow=any(k in path.lower() for k in ("oauth", "authorize", "sso", "login")),
                                     repro=_repro_from_resp(resp, matched="Location: " + resp.headers.get("location", "")))
                 return True
     ctx.evidence.update(vulnerable=False, endpoints_tested=len(seen))
