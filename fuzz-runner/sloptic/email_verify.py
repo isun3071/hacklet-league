@@ -241,6 +241,7 @@ class EmailVerifyResult:
     attempted: bool                     # a signup with our address was submitted
     email_gated: bool = False           # signup is waiting on email verification (announced, or an email arrived)
     email_arrived: bool = False
+    resent: bool = False                # we clicked the app's own 'resend' control at the halfway mark
     acted_on_verification: bool = False  # a followable link was found and acted on
     session_after_verify: bool = False
     message: EmailMessage | None = None
@@ -253,9 +254,11 @@ def verify_email_flow(
     tag: str,
     register: Callable[[str], RegistrationOutcome | None],
     follow: Callable[[RegistrationOutcome, EmailMessage], Verification],
+    resend: Callable[[RegistrationOutcome], bool] | None = None,
     *,
-    announced_timeout: float = 30.0,
+    announced_timeout: float = 60.0,
     unannounced_timeout: float = 8.0,
+    resend_at: float = 30.0,
 ) -> EmailVerifyResult:
     """Register with a controlled address, decide whether the signup is email-gated, and if so whether the email
     arrives and its link lets us in. The decision tree, with the false positive it is built to avoid:
@@ -267,6 +270,10 @@ def verify_email_flow(
       * gated (announced or an email arrived) but no email came -> email_arrived False (qa-email-001 fires).
       * email arrived: follow its link. Acted and got a session -> the flow works. Acted and got no session ->
         verification is inert (qa-email-002 fires). Nothing followable -> acted False -> qa-email-002 reads N/A.
+
+    SECOND CHANCE for a slow announced email: poll to `resend_at`, then click the app's OWN 'resend
+    confirmation' control if `resend` finds one, then poll the rest of `announced_timeout`. So qa-email-001
+    fires only after BOTH the initial send and a resend fail to deliver -- a flaky first send is not a lock-out.
     """
     address = receiver.address(tag)
     reg = register(address)
@@ -277,17 +284,26 @@ def verify_email_flow(
     if reg.has_session:
         return EmailVerifyResult(attempted=True, email_gated=False,
                                  na_reason="signup established a session immediately (not email-gated)")
-    budget = announced_timeout if reg.announces_email else unannounced_timeout
-    msg = receiver.poll(tag, budget)
+    resent = False
+    if reg.announces_email:
+        first_leg = min(resend_at, announced_timeout)
+        msg = receiver.poll(tag, first_leg)
+        if msg is None and resend is not None and announced_timeout > first_leg:
+            resent = bool(resend(reg))                          # give a flaky first send a second chance
+            msg = receiver.poll(tag, announced_timeout - first_leg)
+    else:
+        # not announced: a single short confirmatory poll; no resend (we cannot confirm it is even email-gated)
+        msg = receiver.poll(tag, unannounced_timeout)
     if not reg.announces_email and msg is None:
         return EmailVerifyResult(attempted=True, email_gated=False,
                                  na_reason="signup is not email-gated (no confirmation-email language, "
                                            "no email received, no immediate session)")
     if msg is None:
-        return EmailVerifyResult(attempted=True, email_gated=True, email_arrived=False,
+        return EmailVerifyResult(attempted=True, email_gated=True, email_arrived=False, resent=resent,
                                  detail=f"signup announced a confirmation email but none arrived to {address} "
-                                        f"within {budget:.0f}s")
-    result = EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True, message=msg)
+                                        f"within {announced_timeout:.0f}s"
+                                        + (" (even after clicking resend)" if resent else ""))
+    result = EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True, resent=resent, message=msg)
     ver = follow(reg, msg)
     result.acted_on_verification = ver.acted
     result.session_after_verify = ver.session

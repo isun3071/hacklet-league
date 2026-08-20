@@ -6059,8 +6059,16 @@ def lighthouse_perf_score(ctx, probe) -> bool | None:
 # email actually arrives and whether acting on its link establishes a session. Both probes read the ONE shared
 # flow result (register + poll mutate and block), memoized on ctx. They ship report_only until the corpus
 # admission-test validates the family.
-_EMAIL_ANNOUNCED_TIMEOUT = 30.0    # wait this long for a confirmation email the signup PROMISED
+_EMAIL_ANNOUNCED_TIMEOUT = 60.0    # total wait for a confirmation email the signup PROMISED
 _EMAIL_UNANNOUNCED_TIMEOUT = 8.0   # a short confirmatory poll for an opaque SPA that sends without announcing
+_EMAIL_RESEND_AT = 30.0            # halfway in, click the app's own 'resend' control (if any) for a second chance
+_RESEND_TEXT_HINTS = ("resend", "re-send", "send again", "send it again", "didn't receive", "did not receive",
+                      "resend confirmation", "resend verification", "resend email", "resend link")
+_RESEND_JSON_PATHS = ("/api/resend", "/api/resend-verification", "/api/resend-confirmation", "/api/auth/resend",
+                      "/api/verify/resend", "/api/users/resend-confirmation", "/resend", "/auth/resend",
+                      "/auth/resend-verification")
+_RESEND_LINK_RE = re.compile(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S)
+_RESEND_FORM_RE = re.compile(r'<form\b[^>]*action="([^"]*resend[^"]*)"', re.I)
 
 
 def _resp_text(resp) -> str:
@@ -6080,11 +6088,67 @@ def _same_app_link(link: str, base: str) -> bool:
         return False
 
 
+def _try_resend(client, register_response, email) -> bool:
+    """Best-effort: trigger the app's OWN 'resend confirmation email' control if it has one, giving a flaky
+    first send a second chance. httpx-only (a JS-only button on an SPA is out of reach, but such apps don't
+    register via httpx anyway); returns True iff a resend actually fired."""
+    body = _resp_text(register_response)
+    low = body.lower()
+    for href, text in _RESEND_LINK_RE.findall(body):   # 1) a resend LINK (href or link text mentions resend)
+        if "resend" in href.lower() or any(h in text.lower() for h in _RESEND_TEXT_HINTS):
+            try:
+                if client.get(href).status_code < 400:
+                    return True
+            except (httpx.HTTPError, httpx.InvalidURL):
+                pass
+    for action in _RESEND_FORM_RE.findall(body):       # 2) a resend FORM (its action names resend)
+        try:
+            if client.post(action, data={"email": email}).status_code < 400:
+                return True
+        except (httpx.HTTPError, httpx.InvalidURL):
+            pass
+    if any(h in low for h in _RESEND_TEXT_HINTS):       # 3) common JSON endpoints, only when the page mentions
+        for path in _RESEND_JSON_PATHS:                 #    resend (a JS button we can't parse) -> no blind spraying
+            try:
+                if client.post(path, json={"email": email}).status_code in (200, 201, 202, 204):
+                    return True
+            except (httpx.HTTPError, httpx.InvalidURL):
+                pass
+    return False
+
+
+def _follow_verification(acct, msg, base, profile, email):
+    """Act on a confirmation email and decide whether the user can now get in. Follow its same-host link(s),
+    then EITHER the link auto-logged us in (some apps) OR -- the common 'verify then log in' pattern -- the link
+    only VERIFIES the account and a login with the registered creds now succeeds. Either way the flow WORKS;
+    qa-email-002 fires only when login STILL fails after verifying. `acted` is False for a code-only / no-link
+    email (nothing to follow) so the probe reads N/A rather than a false fire."""
+    client = acct.client
+    links = [ln for ln in msg.links if _same_app_link(ln, base)]
+    if not links:
+        return email_verify.Verification(acted=False)
+    last = None
+    for link in links[:3]:
+        try:
+            last = client.get(link)
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+    session = (auth._has_session(acct)                                       # the link itself auto-logged us in
+               or (last is not None and auth.session_cookie(last) is not None)
+               or any(auth._is_session_cookie(c.name) for c in client.cookies.jar))
+    if not session:   # 'verify then log in': the link verified the account; a login should now succeed. Try by
+        #               both identifiers (some apps key login on email, some on username).
+        session = any(bool(auth.login_with_credentials(base, ident, acct.password, profile))
+                      for ident in (email, acct.username))
+    return email_verify.Verification(acted=True, session=bool(session))
+
+
 def _run_email_flow(ctx):
-    """Build the register/follow callbacks the pure flow needs from ctx, and run it. Registration uses the
-    httpx/JSON lanes with OUR address (never the browser/BaaS fallbacks, which register their own creds)."""
+    """Build the register/follow/resend callbacks the pure flow needs from ctx, and run it. Registration uses
+    the httpx/JSON lanes with OUR address (never the browser/BaaS fallbacks, which register their own creds)."""
     tag = secrets.token_hex(6)
     base = ctx.base_url
+    address = ctx.email.address(tag)
 
     def register(address):
         acct = auth._register_httpx(base, ctx.profile, "_e" + tag[:4], email=address)
@@ -6095,26 +6159,19 @@ def _run_email_flow(ctx):
             announces_email=email_verify.announces_pending_email(_resp_text(acct.register_response)), handle=acct)
 
     def follow(reg, msg):
-        acct = reg.handle
-        client = acct.client
-        links = [ln for ln in msg.links if _same_app_link(ln, base)]
-        if not links:
-            return email_verify.Verification(acted=False)   # code-only / off-origin only -> can't act -> N/A
-        last = None
-        for link in links[:3]:
-            try:
-                last = client.get(link)
-            except (httpx.HTTPError, httpx.InvalidURL):
-                continue
-        session = (auth._has_session(acct)
-                   or (last is not None and auth.session_cookie(last) is not None)
-                   or any(auth._is_session_cookie(c.name) for c in client.cookies.jar))
-        return email_verify.Verification(acted=True, session=bool(session))
+        return _follow_verification(reg.handle, msg, base, ctx.profile, address)
+
+    def resend(reg):
+        try:
+            return _try_resend(reg.handle.client, reg.handle.register_response, address)
+        except Exception:
+            return False
 
     try:
         return email_verify.verify_email_flow(
-            ctx.email, tag, register, follow,
-            announced_timeout=_EMAIL_ANNOUNCED_TIMEOUT, unannounced_timeout=_EMAIL_UNANNOUNCED_TIMEOUT)
+            ctx.email, tag, register, follow, resend=resend,
+            announced_timeout=_EMAIL_ANNOUNCED_TIMEOUT, unannounced_timeout=_EMAIL_UNANNOUNCED_TIMEOUT,
+            resend_at=_EMAIL_RESEND_AT)
     except Exception:
         return email_verify.EmailVerifyResult(attempted=False, na_reason="email-verification flow errored")
 

@@ -173,6 +173,41 @@ def test_flow_email_002_cannot_judge_a_code_only_email():
     assert res.session_after_verify is False and "cannot judge" in res.detail
 
 
+def test_resend_at_the_mark_rescues_a_slow_email():
+    # nothing in the first leg -> click resend (which delivers) -> the email arrives in the second leg.
+    rx = MockReceiver()
+
+    def resend(reg):
+        rx.inject("tag", EmailMessage.parse("hl-tag@grader.test", "Confirm", "https://grader.test/v"))
+        return True
+    res = verify_email_flow(rx, "tag", register=lambda a: RegistrationOutcome(submitted=True, announces_email=True),
+                            follow=lambda r, m: Verification(acted=True, session=True), resend=resend,
+                            announced_timeout=1, unannounced_timeout=0, resend_at=0)
+    assert res.email_arrived is True and res.resent is True and res.session_after_verify is True
+
+
+def test_email_001_fires_only_after_resend_also_fails():
+    calls = []
+    res = verify_email_flow(MockReceiver(),
+                            "tag", register=lambda a: RegistrationOutcome(submitted=True, announces_email=True),
+                            follow=lambda r, m: Verification(acted=False),
+                            resend=lambda reg: (calls.append(1), True)[1],   # resend control clicked, still no mail
+                            announced_timeout=1, unannounced_timeout=0, resend_at=0)
+    assert res.email_arrived is False and res.resent is True and calls == [1]
+    assert "even after clicking resend" in res.detail
+
+
+def test_no_resend_when_signup_is_not_announced():
+    # not announced -> the short unannounced poll only, resend is never attempted (we can't confirm it's gated).
+    calls = []
+    res = verify_email_flow(MockReceiver(),
+                            "tag", register=lambda a: RegistrationOutcome(submitted=True, announces_email=False),
+                            follow=lambda r, m: Verification(acted=False),
+                            resend=lambda reg: (calls.append(1), True)[1],
+                            announced_timeout=1, unannounced_timeout=0, resend_at=0)
+    assert res.email_gated is False and calls == []
+
+
 def test_receivers_are_email_receivers_and_result_is_a_dataclass():
     assert issubclass(MockReceiver, EmailReceiver) and issubclass(HttpReceiver, EmailReceiver)
     assert isinstance(_run(RegistrationOutcome(submitted=False)), EmailVerifyResult)
