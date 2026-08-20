@@ -29,8 +29,14 @@ def _load_severity_registry(root: pathlib.Path) -> dict[str, Severity]:
     """Shared severity definitions referenced by a probe's `severity_ref` (DRY: one authority-anchored block
     per vulnerability class, not copied into every probe of that class). Lives in catalog/_severity_classes.yaml
     as {class_name: severity-block}. Empty when the file is absent (probes then use inline severity / nominal)."""
+    root = pathlib.Path(root)
     reg = root / "_severity_classes.yaml"
     if not reg.is_file():
+        # load_catalog may be called from an ANCESTOR of the catalog dir (scripts/benchmark._catalog_index
+        # passes the repo root and relies on rglob to find the probe YAMLs deep). Find the registry the same way,
+        # or every severity_ref silently fails to resolve against an empty registry.
+        reg = next(root.rglob("_severity_classes.yaml"), None)
+    if reg is None or not reg.is_file():
         return {}
     raw = yaml.safe_load(reg.read_text()) or {}
     return {name: Severity(**block) for name, block in raw.items()}
