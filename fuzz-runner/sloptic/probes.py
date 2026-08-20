@@ -23,7 +23,7 @@ from dataclasses import replace
 
 import httpx
 
-from . import auth, baas, browser, depscan, lighthouse, oob, secretscan
+from . import auth, baas, browser, depscan, email_verify, lighthouse, oob, secretscan
 from .net import make_client, request_counts
 from .schema import Endpoint
 from .discovery import _CATCHALL_PROBE, _body_sig, _registrable_domain
@@ -6054,8 +6054,124 @@ def lighthouse_perf_score(ctx, probe) -> bool | None:
     return slop > 0
 
 
+# --- email-verification probes (qa-email-001 / qa-email-002) ------------------------------------------------
+# Register with an address WE own (via ctx.email, the configured receiver), then watch whether a confirmation
+# email actually arrives and whether acting on its link establishes a session. Both probes read the ONE shared
+# flow result (register + poll mutate and block), memoized on ctx. They ship report_only until the corpus
+# admission-test validates the family.
+_EMAIL_ANNOUNCED_TIMEOUT = 30.0    # wait this long for a confirmation email the signup PROMISED
+_EMAIL_UNANNOUNCED_TIMEOUT = 8.0   # a short confirmatory poll for an opaque SPA that sends without announcing
+
+
+def _resp_text(resp) -> str:
+    try:
+        return resp.text
+    except Exception:
+        return ""
+
+
+def _same_app_link(link: str, base: str) -> bool:
+    """Follow a verification link only when it is SAME-HOST as the app -- never chase an off-origin link (a
+    tracker pixel, an unsubscribe) while carrying the registration's cookies."""
+    try:
+        return bool(urllib.parse.urlparse(link).hostname) and \
+            urllib.parse.urlparse(link).hostname == urllib.parse.urlparse(base).hostname
+    except Exception:
+        return False
+
+
+def _run_email_flow(ctx):
+    """Build the register/follow callbacks the pure flow needs from ctx, and run it. Registration uses the
+    httpx/JSON lanes with OUR address (never the browser/BaaS fallbacks, which register their own creds)."""
+    tag = secrets.token_hex(6)
+    base = ctx.base_url
+
+    def register(address):
+        acct = auth._register_httpx(base, ctx.profile, "_e" + tag[:4], email=address)
+        if acct is None:
+            return email_verify.RegistrationOutcome(submitted=False)
+        return email_verify.RegistrationOutcome(
+            submitted=True, has_session=auth._has_session(acct),
+            announces_email=email_verify.announces_pending_email(_resp_text(acct.register_response)), handle=acct)
+
+    def follow(reg, msg):
+        acct = reg.handle
+        client = acct.client
+        links = [ln for ln in msg.links if _same_app_link(ln, base)]
+        if not links:
+            return email_verify.Verification(acted=False)   # code-only / off-origin only -> can't act -> N/A
+        last = None
+        for link in links[:3]:
+            try:
+                last = client.get(link)
+            except (httpx.HTTPError, httpx.InvalidURL):
+                continue
+        session = (auth._has_session(acct)
+                   or (last is not None and auth.session_cookie(last) is not None)
+                   or any(auth._is_session_cookie(c.name) for c in client.cookies.jar))
+        return email_verify.Verification(acted=True, session=bool(session))
+
+    try:
+        return email_verify.verify_email_flow(
+            ctx.email, tag, register, follow,
+            announced_timeout=_EMAIL_ANNOUNCED_TIMEOUT, unannounced_timeout=_EMAIL_UNANNOUNCED_TIMEOUT)
+    except Exception:
+        return email_verify.EmailVerifyResult(attempted=False, na_reason="email-verification flow errored")
+
+
+def _email_verify_result(ctx):
+    """The ONE shared observation both email probes read (run once per app, memoized on ctx)."""
+    cache = ctx._email_cache
+    if "result" not in cache:
+        if ctx.email is None:
+            cache["result"] = email_verify.EmailVerifyResult(
+                attempted=False, na_reason="no email receiver configured (pass --email-endpoint)")
+        elif auth._provided_session(ctx.headers):
+            cache["result"] = email_verify.EmailVerifyResult(
+                attempted=False, na_reason="a session was supplied (--header); the signup email flow is untestable")
+        else:
+            cache["result"] = _run_email_flow(ctx)
+    return cache["result"]
+
+
+def email_never_arrives(ctx, probe) -> bool | None:
+    """qa-email-001: signup is email-gated but no confirmation email arrives -> the user is locked out."""
+    res = _email_verify_result(ctx)
+    ctx.evidence["report_only"] = True   # v1: off-score until the admission-test validates the family
+    if not res.attempted or not res.email_gated:
+        ctx.evidence["na_reason"] = res.na_reason or "signup is not email-verification-gated"
+        return None
+    ctx.evidence["email_gated"] = True
+    if res.message is not None:
+        ctx.evidence["subject"] = (res.message.subject or "")[:120]
+    if not res.email_arrived:
+        ctx.evidence["detail"] = res.detail
+        return True    # gated + no email -> locked out
+    return False       # email arrived -> clean for THIS probe (qa-email-002 judges the link)
+
+
+def email_verification_inert(ctx, probe) -> bool | None:
+    """qa-email-002: the confirmation email arrives but acting on its link establishes no session."""
+    res = _email_verify_result(ctx)
+    ctx.evidence["report_only"] = True
+    if not res.attempted or not res.email_gated:
+        ctx.evidence["na_reason"] = res.na_reason or "signup is not email-verification-gated"
+        return None
+    if not res.email_arrived:
+        ctx.evidence["na_reason"] = "no confirmation email arrived (that is qa-email-001's concern)"
+        return None
+    if not res.acted_on_verification:
+        ctx.evidence["na_reason"] = res.detail or "the email carried no followable verification link"
+        return None
+    if not res.session_after_verify:
+        return True    # acted on the link, no session -> verification is inert
+    return False       # verified + a session established -> the whole flow works
+
+
 PREDICATES = {
     "lighthouse_audit": lighthouse_audit,
+    "email_never_arrives": email_never_arrives,
+    "email_verification_inert": email_verification_inert,
     "lighthouse_perf_score": lighthouse_perf_score,
     "sqli_auth_bypass": sqli_auth_bypass,
     "api_sqli": api_sqli,
@@ -6146,6 +6262,8 @@ _MATCHER_REASONS = {
 
 _PREDICATE_REASONS = {
     "lighthouse_audit": "a Lighthouse performance audit is below its passing threshold",
+    "email_never_arrives": "signup is email-verification-gated but no confirmation email arrives -> the user is locked out",
+    "email_verification_inert": "the confirmation email arrives but acting on its link establishes no session -> verification is broken",
     "lighthouse_perf_score": "the overall Lighthouse performance score is below the green line (slop = its shortfall under 90)",
     "sqli_auth_bypass": "login bypassed by a SQL-injection payload",
     "api_sqli": "a parameter is SQL-injectable (error / boolean / UNION / time-based)",

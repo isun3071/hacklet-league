@@ -1,0 +1,19 @@
+id: qa-email-002
+bundle: qa
+category: email-verification
+pool: public
+evidence_model: provable
+# REPORT_ONLY in v1 (the predicate forces off-score) until the corpus admission-test validates the family.
+# Rationale: the confirmation email arrives but acting on its link establishes no session -> the user did
+# everything asked and still cannot log in. Locked out (Nielsen 4), a notch under 001 since the app at least
+# sent the mail. Binary, so no scope to escalate.
+severity: {iso_25010: "reliability", nielsen: "4", range: [50, 50], default: 50}
+applicability:
+  requires: [has_auth_entrypoint]
+probe:
+  predicate: email_verification_inert
+tp_definition: |
+  TP: a confirmation email arrives, we follow its same-host verification link, and no session is established
+  (the link 404s / the token is unrecognised / clicking it changes nothing) -> verification is broken.
+  NOT (confounders): the email is code-only or carries no followable same-host link -> we could not act -> N/A,
+  never a fire; the link DOES establish a session -> clean; no email arrived at all -> N/A (qa-email-001's job).
