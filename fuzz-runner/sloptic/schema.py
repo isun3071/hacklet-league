@@ -29,6 +29,8 @@ class Severity(BaseModel):
     cvss: str = ""                    # canonical CVSS vector, or "n/a" for a non-scorable chore
     cvss_score: float | None = None
     vrt: str = ""                     # Bugcrowd VRT baseline, e.g. "P1" or "P4->P1"
+    iso_25010: str = ""               # QA/perf: the ISO/IEC 25010:2023 quality characteristic (reliability / ...)
+    nielsen: str = ""                 # QA/perf: Nielsen usability-severity band 0-4 (frequency x impact x persistence)
     range: tuple[int, int]            # [lo, hi] penalty bounds, as fractions of the 100 anchor
     default: int                      # penalty with no escalating evidence (should equal range low)
     tier: str = ""                    # "chore-floor" marks a Tier-4 diligence floor

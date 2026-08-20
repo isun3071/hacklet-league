@@ -2853,7 +2853,7 @@ def unreachable_backend_reference(ctx, probe) -> bool | None:
     if operative:
         ctx.evidence.update(private_backends=private[:5], unset_env_backends=unset[:5],
                             operative_backends=operative[:5], observed=True, source="client-bundle")
-        return True                                     # OPERATIVE -> the yaml penalty (34) applies
+        return True                                     # OPERATIVE -> severity escalator `observed` -> 85
     ctx.evidence.update(private_backends=private[:5], unset_env_backends=unset[:5], observed=False,
                         report_only=True, penalty_override=0, source="client-bundle")
     return True                                          # presence-only -> off-score diagnostic (UNPROVEN)
@@ -4704,6 +4704,10 @@ def a11y_violations_present(ctx, probe) -> bool:
     return len(scored) > probe.probe.get("threshold", 0)
 
 
+_PRIMARY_CTA = ("submit", "save", "buy", "checkout", "pay", "order", "create", "sign up", "signup",
+                "log in", "login", "send", "confirm", "add to cart", "place order", "subscribe", "register")
+
+
 def dead_controls_present(ctx, probe) -> bool:
     """Browser oracle: clickable controls wired to nothing — clicking moves no channel (DOM / network /
     navigation / dialog / error). The AI-shell-app tell, the interactive analogue of a broken link.
@@ -4714,7 +4718,8 @@ def dead_controls_present(ctx, probe) -> bool:
     dead = browser.inert_controls(url, headers=ctx.headers, max_controls=probe.probe.get("max_controls", 10))
     if dead is None:
         return False   # no browser / render failed -> inconclusive, not a false "clean"
-    ctx.evidence.update(dead_controls=len(dead), labels=dead[:8])
+    ctx.evidence.update(dead_controls=len(dead), labels=dead[:8],
+                        primary_cta=any(any(k in (l or "").lower() for k in _PRIMARY_CTA) for l in dead))
     return len(dead) > probe.probe.get("threshold", 0)
 
 
@@ -4956,18 +4961,19 @@ def load_resilience(ctx, probe) -> bool:
         # always-present endpoint. NEVER fan across all routes: concurrent bursts at every endpoint
         # of a live target is a DoS.
         target = _landing(ctx)
-    ratios = []
+    ratios, saw_5xx = [], False
     for _ in range(3):  # median of N bursts, not one: a target near the 10% gate flips between runs
         statuses = _concurrent_get(ctx.base_url, target, headers=ctx.headers)
         if statuses:
             # None = connection refused/dropped/timeout — a HARDER fall-over than a 500, counted over
             # the whole burst so an app that crashes the connection can't read cleaner than one that 500s.
+            saw_5xx = saw_5xx or any(s is not None and s >= 500 for s in statuses)   # a hard fault, not just a drop
             failures = sum(1 for s in statuses if s is None or s >= 500)
             ratios.append(failures / len(statuses))
     if not ratios:
         return False
     med = statistics.median(ratios)
-    ctx.evidence.update(fail_ratio=round(med, 3), threshold=0.1, target=target)
+    ctx.evidence.update(fail_ratio=round(med, 3), threshold=0.1, observed_5xx=saw_5xx, target=target)
     return med > 0.1
 
 
@@ -5219,7 +5225,8 @@ def redirect_loop(ctx, probe) -> bool | None:
     budget = probe.probe.get("max_attempts", 40)
     base = urllib.parse.urlparse(ctx.base_url)
     with make_client(ctx.base_url, ctx.headers, timeout=15.0, follow_redirects=False) as c:
-        starts = [_home_path(ctx, probe)]
+        home = _home_path(ctx, probe)
+        starts = [home]
         links = _same_origin_links(c, ctx, probe)
         if links is None and not starts:
             return None
@@ -5232,7 +5239,7 @@ def redirect_loop(ctx, probe) -> bool | None:
                 if urllib.parse.urlparse(url).netloc not in ("", base.netloc):
                     break                                  # left our origin -> resolves elsewhere, not our loop
                 if url in seen:                            # revisited a URL we already fetched -> cycle
-                    ctx.evidence.update(loop=True, entry=start, hops=len(seen),
+                    ctx.evidence.update(loop=True, entry=start, root_loop=(start == home), hops=len(seen),
                                         reason="redirect cycle", cycle_to=urllib.parse.urlparse(url).path)
                     return True
                 seen.add(url)
@@ -5245,7 +5252,7 @@ def redirect_loop(ctx, probe) -> bool | None:
                     break                                  # resolved to a final (non-redirect) response
                 url = urllib.parse.urljoin(url, r.headers["location"])
             else:
-                ctx.evidence.update(loop=True, entry=start, hops=cap + 1,
+                ctx.evidence.update(loop=True, entry=start, root_loop=(start == home), hops=cap + 1,
                                     reason="exceeded the browser redirect cap (ERR_TOO_MANY_REDIRECTS)")
                 return True                                # never resolved within the cap -> unbounded chain
     ctx.evidence.update(loop=False, routes_checked=len(dict.fromkeys(starts)))
@@ -5564,7 +5571,7 @@ def leaks_error_detail(ctx, probe) -> bool | None:
             return True
         m = _SQL_ERROR.search(r.text)
         if m:
-            ctx.evidence.update(status=r.status_code, leak="db-error",
+            ctx.evidence.update(status=r.status_code, leak="db-error", db_error=True,
                                 matched=r.text[m.start():m.start() + 200].strip(),
                                 repro=_repro_from_resp(r, matched="database error leaked in the error response"))
             return True

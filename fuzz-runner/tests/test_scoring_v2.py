@@ -296,6 +296,44 @@ def test_deps_scores_from_the_cve_own_cvss():
     assert ng and ng[0]["cvss"] == 5.4                               # -> penalty_override 54
 
 
+# --- QA / perf: ISO-25010 + Nielsen severity, the 6 evidence ladders, and the QA gate ---
+
+def test_qa_severity_classes_and_ladders():
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    by_id = {p.id: p for p in load_catalog(default_catalog_dir())}
+    assert by_id["qa-race-001"].severity_ref == "race-condition"
+    assert by_id["qa-integrity-001"].severity.default == 69          # misleading the user about their own data
+    assert by_id["qa-crash-010"].severity.default == 55              # RFC-anchored 5xx
+    assert by_id["qa-seo-001"].severity.default == 10                # outlier, corpus-only
+    # the six evidence ladders
+    assert _severity_penalty(by_id["qa-deploy-001"].severity, {}) == 0                      # presence-only
+    assert _severity_penalty(by_id["qa-deploy-001"].severity, {"observed": True}) == 85     # operative
+    assert _severity_penalty(by_id["qa-deploy-002"].severity, {}) == 50                     # subpage loop
+    assert _severity_penalty(by_id["qa-deploy-002"].severity, {"root_loop": True}) == 80    # root loop
+    assert _severity_penalty(by_id["perf-load-001"].severity, {"observed_5xx": True}) == 60
+    assert _severity_penalty(by_id["qa-deadctrl-001"].severity, {"primary_cta": True}) == 50
+    assert _severity_penalty(by_id["qa-console-001"].severity, {"error_overlay": True}) == 40
+    assert _severity_penalty(by_id["qa-errhyg-001"].severity, {"db_error": True}) == 35
+
+
+def test_every_scored_qa_probe_has_authority_anchored_severity():
+    """Every scored qa / non-Lighthouse-perf probe must carry iso_25010 + nielsen. Exempt: a11y (WCAG via
+    axe penalty_override), Lighthouse probes (CWV via penalty_override), qa-http-001 (report_only off-score)."""
+    from sloptic.catalog import default_catalog_dir, load_catalog
+    exempt_ids = {"qa-http-001"}
+    exempt_preds = {"a11y_violations_present", "a11y_hard_fails", "lighthouse_audit", "lighthouse_perf_score"}
+    missing = []
+    for p in load_catalog(default_catalog_dir()):
+        if p.bundle not in ("qa", "performance"):
+            continue
+        if p.id in exempt_ids or p.probe.get("predicate") in exempt_preds:
+            continue
+        s = p.severity
+        if s is None or not s.iso_25010 or not s.nielsen:
+            missing.append(p.id)
+    assert not missing, f"scored qa/perf probes missing iso_25010+nielsen: {sorted(missing)}"
+
+
 # --- the anti-vibe gate (SCORING_V2_SPEC.md section 7) ---
 
 def test_every_security_probe_has_authority_anchored_severity():

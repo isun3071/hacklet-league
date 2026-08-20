@@ -113,3 +113,17 @@ xss:                                                    # OWASP A05 Injection (C
   escalators:
     - {evidence: execution_confirmed, point: 61, vrt_variant: "reflected/DOM XSS executed in a browser"}
     - {evidence: stored, point: 85, vrt_variant: "stored XSS: runs for every viewer (VRT P2)"}
+
+# --- QA / perf classes (ISO-25010 characteristic + Nielsen 0-4 band; corpus-calibrated, see SCORING_V2_SPEC) ---
+
+race-condition:                                         # ISO-25010 reliability (concurrency)
+  iso_25010: "reliability"
+  nielsen: "3"
+  range: [50, 50]
+  default: 50                                           # concurrent creates collide on a shared id
+
+data-integrity:                                         # ISO-25010 functional suitability (data round-trip)
+  iso_25010: "functional-suitability"
+  nielsen: "3"
+  range: [69, 69]
+  default: 69                                           # a save that round-trips wrong/lost = misleading the user
