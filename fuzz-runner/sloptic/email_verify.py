@@ -223,6 +223,7 @@ class RegistrationOutcome:
     submitted: bool                 # we found a signup surface and submitted it with our address
     has_session: bool = False       # signup logged us straight in -> the app is NOT email-verification-gated
     announces_email: bool = False   # the signup response said a confirmation email is on the way
+    has_resend_control: bool = False  # the confirm page offers a 'resend' option (a resilience expectation)
     handle: Any = None
 
 
@@ -241,6 +242,8 @@ class EmailVerifyResult:
     attempted: bool                     # a signup with our address was submitted
     email_gated: bool = False           # signup is waiting on email verification (announced, or an email arrived)
     email_arrived: bool = False
+    first_leg_empty: bool = False       # no email by the resend_at checkpoint (even if it arrived later) -> slow send
+    has_resend_control: bool = False    # the confirm page offers a 'resend' option
     resent: bool = False                # we clicked the app's own 'resend' control at the halfway mark
     acted_on_verification: bool = False  # a followable link was found and acted on
     session_after_verify: bool = False
@@ -284,10 +287,11 @@ def verify_email_flow(
     if reg.has_session:
         return EmailVerifyResult(attempted=True, email_gated=False,
                                  na_reason="signup established a session immediately (not email-gated)")
-    resent = False
+    resent = first_leg_empty = False
     if reg.announces_email:
         first_leg = min(resend_at, announced_timeout)
         msg = receiver.poll(tag, first_leg)
+        first_leg_empty = msg is None                           # no email by the resend checkpoint -> slow send
         if msg is None and resend is not None and announced_timeout > first_leg:
             resent = bool(resend(reg))                          # give a flaky first send a second chance
             msg = receiver.poll(tag, announced_timeout - first_leg)
@@ -298,12 +302,13 @@ def verify_email_flow(
         return EmailVerifyResult(attempted=True, email_gated=False,
                                  na_reason="signup is not email-gated (no confirmation-email language, "
                                            "no email received, no immediate session)")
+    common = dict(first_leg_empty=first_leg_empty, has_resend_control=reg.has_resend_control, resent=resent)
     if msg is None:
-        return EmailVerifyResult(attempted=True, email_gated=True, email_arrived=False, resent=resent,
+        return EmailVerifyResult(attempted=True, email_gated=True, email_arrived=False, **common,
                                  detail=f"signup announced a confirmation email but none arrived to {address} "
                                         f"within {announced_timeout:.0f}s"
                                         + (" (even after clicking resend)" if resent else ""))
-    result = EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True, resent=resent, message=msg)
+    result = EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True, message=msg, **common)
     ver = follow(reg, msg)
     result.acted_on_verification = ver.acted
     result.session_after_verify = ver.session

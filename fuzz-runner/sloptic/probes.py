@@ -6088,6 +6088,16 @@ def _same_app_link(link: str, base: str) -> bool:
         return False
 
 
+def _has_resend_control(register_response) -> bool:
+    """Does the confirm page offer a 'resend' option at all? Assessed independent of email timing, so a
+    fast-email app that simply lacks a resend button is still flagged (a good app lets the user re-request the
+    mail). A resend link/form, or the page text mentioning resend, counts."""
+    body = _resp_text(register_response)
+    if any(h in body.lower() for h in _RESEND_TEXT_HINTS) or _RESEND_FORM_RE.search(body):
+        return True
+    return any("resend" in href.lower() for href, _ in _RESEND_LINK_RE.findall(body))
+
+
 def _try_resend(client, register_response, email) -> bool:
     """Best-effort: trigger the app's OWN 'resend confirmation email' control if it has one, giving a flaky
     first send a second chance. httpx-only (a JS-only button on an SPA is out of reach, but such apps don't
@@ -6156,7 +6166,8 @@ def _run_email_flow(ctx):
             return email_verify.RegistrationOutcome(submitted=False)
         return email_verify.RegistrationOutcome(
             submitted=True, has_session=auth._has_session(acct),
-            announces_email=email_verify.announces_pending_email(_resp_text(acct.register_response)), handle=acct)
+            announces_email=email_verify.announces_pending_email(_resp_text(acct.register_response)),
+            has_resend_control=_has_resend_control(acct.register_response), handle=acct)
 
     def follow(reg, msg):
         return _follow_verification(reg.handle, msg, base, ctx.profile, address)
@@ -6192,7 +6203,9 @@ def _email_verify_result(ctx):
 
 
 def email_never_arrives(ctx, probe) -> bool | None:
-    """qa-email-001: signup is email-gated but no confirmation email arrives -> the user is locked out."""
+    """qa-email-001: the email-verification signup flow is unreliable, on an evidence ladder (functional-
+    suitability, SCORING_V2_SPEC): no email within 60s even after a resend -> locked out (72); email only after
+    the 30s checkpoint -> unreliable send (24); a working-but-no-resend-control signup -> a resilience gap (5)."""
     res = _email_verify_result(ctx)
     ctx.evidence["report_only"] = True   # v1: off-score until the admission-test validates the family
     if not res.attempted or not res.email_gated:
@@ -6202,9 +6215,17 @@ def email_never_arrives(ctx, probe) -> bool | None:
     if res.message is not None:
         ctx.evidence["subject"] = (res.message.subject or "")[:120]
     if not res.email_arrived:
+        ctx.evidence["no_email_60s"] = True            # escalator -> 72
         ctx.evidence["detail"] = res.detail
-        return True    # gated + no email -> locked out
-    return False       # email arrived -> clean for THIS probe (qa-email-002 judges the link)
+    elif res.first_leg_empty:
+        ctx.evidence["email_late_30s"] = True          # escalator -> 24
+    if not res.has_resend_control:
+        ctx.evidence["no_resend_button"] = True        # the base-5 fire condition (evidence for the report)
+    # FIRE on any of: no email (60s), a late email (30s), or a missing resend control. Clean only when the email
+    # is prompt (<30s) AND a resend control exists (a working app is expected to offer a resend).
+    if not res.email_arrived or res.first_leg_empty or not res.has_resend_control:
+        return True
+    return False
 
 
 def email_verification_inert(ctx, probe) -> bool | None:

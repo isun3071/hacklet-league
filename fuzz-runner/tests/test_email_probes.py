@@ -39,26 +39,50 @@ def test_na_when_signup_is_not_email_gated(monkeypatch):
     assert probes.email_verification_inert(_ctx(email=RX), None) is None
 
 
-def test_email_001_fires_when_gated_and_no_email(monkeypatch):
+def test_email_001_ladder_no_email_60s_locks_out_top_rung(monkeypatch):
     _canned(monkeypatch, EmailVerifyResult(attempted=True, email_gated=True, email_arrived=False, detail="no mail"))
     c = _ctx(email=RX)
     assert probes.email_never_arrives(c, None) is True
-    assert c.evidence["report_only"] is True and c.evidence["email_gated"] is True
-    # 002 cannot judge a link that never arrived -> N/A, never a false fire
-    assert probes.email_verification_inert(_ctx(email=RX), None) is None
+    assert c.evidence["no_email_60s"] is True and c.evidence["report_only"] is True
+    assert probes.email_verification_inert(_ctx(email=RX), None) is None   # 002 N/A: no link ever arrived
+
+
+def test_email_001_ladder_late_email_sets_the_30s_escalator(monkeypatch):
+    _canned(monkeypatch, EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True,
+                                           first_leg_empty=True, has_resend_control=True))
+    c = _ctx(email=RX)
+    assert probes.email_never_arrives(c, None) is True
+    assert c.evidence.get("email_late_30s") is True and "no_email_60s" not in c.evidence
+
+
+def test_email_001_ladder_no_resend_control_fires_even_when_email_is_prompt(monkeypatch):
+    _canned(monkeypatch, EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True,
+                                           first_leg_empty=False, has_resend_control=False))
+    c = _ctx(email=RX)
+    assert probes.email_never_arrives(c, None) is True                    # base-5 fire on a working app
+    assert c.evidence.get("no_resend_button") is True
+    assert "email_late_30s" not in c.evidence and "no_email_60s" not in c.evidence
+
+
+def test_email_001_clean_only_when_prompt_and_a_resend_control_exists(monkeypatch):
+    _canned(monkeypatch, EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True,
+                                           first_leg_empty=False, has_resend_control=True))
+    assert probes.email_never_arrives(_ctx(email=RX), None) is False
 
 
 def test_email_002_fires_when_link_establishes_no_session(monkeypatch):
     msg = EmailMessage.parse("hl@app.test", "Verify", "http://app.test/v")
     _canned(monkeypatch, EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True,
-                                           acted_on_verification=True, session_after_verify=False, message=msg))
+                                           has_resend_control=True, acted_on_verification=True,
+                                           session_after_verify=False, message=msg))
     assert probes.email_verification_inert(_ctx(email=RX), None) is True
-    assert probes.email_never_arrives(_ctx(email=RX), None) is False   # 001 clean: the email DID arrive
+    assert probes.email_never_arrives(_ctx(email=RX), None) is False   # 001 clean: prompt email + resend control
 
 
 def test_both_clean_when_the_whole_flow_works(monkeypatch):
     msg = EmailMessage.parse("hl@app.test", "Verify", "http://app.test/v")
     _canned(monkeypatch, EmailVerifyResult(attempted=True, email_gated=True, email_arrived=True,
+                                           first_leg_empty=False, has_resend_control=True,
                                            acted_on_verification=True, session_after_verify=True, message=msg))
     assert probes.email_never_arrives(_ctx(email=RX), None) is False
     assert probes.email_verification_inert(_ctx(email=RX), None) is False
@@ -70,6 +94,12 @@ def _client(handler):
 
 def _reg(body):
     return httpx.Response(200, text=body, request=httpx.Request("POST", "http://app.test/signup"))
+
+
+def test_has_resend_control_detects_link_form_and_text_but_not_a_bare_page():
+    assert probes._has_resend_control(_reg("<p>Didn't receive it? <a href='/resend'>Resend</a></p>")) is True
+    assert probes._has_resend_control(_reg('<form action="/auth/resend"></form>')) is True
+    assert probes._has_resend_control(_reg("<html>Check your email to confirm.</html>")) is False
 
 
 def test_try_resend_follows_a_resend_link():
