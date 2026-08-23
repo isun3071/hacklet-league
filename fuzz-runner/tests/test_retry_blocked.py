@@ -85,6 +85,17 @@ def test_status_separates_full_partial_none_dnf():
     assert _status(blocked, None)[0] == "dnf"
 
 
+def test_status_counts_a_preflight_waf_block_as_a_challenge():
+    # deploy_and_grade now records a preflight 403/429/503 as a CHALLENGE (bot_challenge, not dead_url). The retry
+    # must count it as 'none' (re-challenged, recovered nothing) -- NOT a neutral dnf -- so a CASCADE of these
+    # trips the IP-block breaker and aborts, instead of fast-failing the whole tail (the sample3large DNF wave).
+    blocked = ["sec-cmdi-001", "sec-ssti-001"]
+    waf = {"bot_challenge": True, "challenge_stage": "entry", "deploy_error": "WAF/edge block — HTTP 403"}
+    kind = _status(blocked, waf)[0]
+    assert kind == "none"                                                    # a challenge, not a neutral dnf
+    assert _looks_like_ip_block([(kind, True)] * _IP_BLOCK_SAMPLE) is True   # a cascade now trips the breaker
+
+
 def test_variant_group_collapses_through_the_serialized_group_key():
     # REGRESSION: the serialized key is "group", not "variant_group_id". One flaw probed via several SQLi
     # syntaxes (same group) must count ONCE at its max penalty on recompute — not once per variant. If merge

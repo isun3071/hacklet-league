@@ -130,6 +130,11 @@ def _status(blocked, rec):
       none    — re-challenged immediately, recovered nothing (sticky/collapse app)
       dnf     — the retry grade itself failed (dead url / timeout) -> recovered nothing, NOT a WAF verdict"""
     total = len(blocked)
+    if rec and rec.get("bot_challenge") and not _graded(rec):
+        # WAF/edge-blocked at the PREFLIGHT (deploy_and_grade recorded a challenge, not dead_url) -> re-challenged,
+        # recovered nothing. Counts as a WAF verdict (unlike a dead-url DNF) so a CASCADE of these trips the
+        # IP-block circuit breaker, which aborts the rest instead of re-hammering and re-warming the flag.
+        return "none", 0, total, "preflight"
     if not _graded(rec):
         return "dnf", 0, total, None
     still = set(rec.get("blocked_probes") or []) & set(blocked)
