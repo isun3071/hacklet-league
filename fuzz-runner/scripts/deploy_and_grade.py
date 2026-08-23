@@ -1528,7 +1528,10 @@ def main():
                       challenge_stage=report.challenge_stage, challenge_onset=report.challenge_onset,
                       request_counts=report.request_counts, blocked_probes=report.blocked_probes,
                       incomplete_axes=report.incomplete_axes, findings=findings,
-                      verdicts=_verdicts(report.outcomes))   # applied-but-unfired probes -> dark-recall audit set
+                      verdicts=_verdicts(report.outcomes),   # applied-but-unfired probes -> dark-recall audit set
+                      session_established=report.session_established)
+        if report.session_replay:   # the session the grade established -> retry_blocked replays it via --header and
+            result["session_replay"] = report.session_replay   # SKIPS the 26-nav register walk (the block re-trip)
         if report.trace:   # --trace only: per-probe request log (payloads/endpoints), viewable via stats.py --audit
             result["trace"] = report.trace
         if args.recon:

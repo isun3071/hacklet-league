@@ -10,7 +10,8 @@ from collections import Counter
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from retry_blocked import (  # noqa: E402
-    _IP_BLOCK_SAMPLE, _fold_and_summary, _load_jobs, _looks_like_ip_block, _status, _to_outcome, merge)
+    _IP_BLOCK_SAMPLE, _fold_and_summary, _load_jobs, _looks_like_ip_block, _session_flags, _status,
+    _to_outcome, merge)
 
 from sloptic.aggregate import compute_slop_score  # noqa: E402
 
@@ -157,7 +158,32 @@ def test_load_jobs_dedups_by_url_and_skips_unblocked():
             {"repo": "https://b", "blocked_probes": []},                 # not blocked -> skip
             {"repo": "local-ingest-id", "blocked_probes": ["sec-cmdi-001"]},  # non-url repo -> skip
             {"repo": "https://c", "blocked_probes": ["sec-ssti-001"]}]
-    assert [u for u, _ in _load_jobs(recs)] == ["https://a", "https://c"]
+    assert [u for u, _bp, _rec in _load_jobs(recs)] == ["https://a", "https://c"]
+
+
+def test_session_flags_reuses_a_captured_session_no_rewalk():
+    # the main grade established a session -> the retry replays it via --header (auth-crawl off + _authed_headers
+    # short-circuits -> NO 26-nav register walk that would re-trip the app's per-app WAF block).
+    rec = {"session_replay": {"Authorization": "Bearer TOK", "Cookie": "sid=abc"}, "session_established": True}
+    flags, mode = _session_flags(rec, ["--browser-auth"])
+    assert mode == "reuse"
+    assert "--header" in flags and "Authorization: Bearer TOK" in flags and "Cookie: sid=abc" in flags
+    assert "--browser-auth" in flags        # browser probes still run; the supplied session skips the walk
+
+
+def test_session_flags_skips_a_doomed_signup():
+    # the main grade PROVED no self-serve session (attempted + failed) -> drop --browser-auth so the retry never
+    # re-walks a signup that cannot succeed (browser render still runs -- --browser is on by default).
+    rec = {"session_replay": None, "session_established": False}
+    flags, mode = _session_flags(rec, ["--browser-auth"])
+    assert mode == "no-signup" and "--browser-auth" not in flags
+
+
+def test_session_flags_as_is_when_no_session_info():
+    # a record with no session outcome (older run, or auth never attempted) -> behave as before (re-walk allowed).
+    rec = {}
+    flags, mode = _session_flags(rec, ["--browser-auth"])
+    assert mode == "as-is" and flags == ["--browser-auth"]
 
 
 def test_fold_and_summary_folds_blocked_and_copies_the_rest(tmp_path):
