@@ -2422,7 +2422,8 @@ def api_bola_collection(ctx, probe) -> bool | None:
     private-by-declaration contract) yet leaks cross-user objects. N/A when there's no auth-gated JSON
     collection or two accounts can't be minted."""
     paths = _collection_paths(ctx.profile.endpoints)
-    if not paths:
+    has_browser = bool(getattr(ctx, "profile", None) is not None and ctx.profile.capabilities.get("browser"))
+    if not paths and not has_browser:
         ctx.evidence["na_reason"] = "no non-templated collection endpoint to test for cross-user leakage"
         return None
     a, b = _two_accounts(ctx)
@@ -2453,6 +2454,21 @@ def api_bola_collection(ctx, probe) -> bool | None:
                                         repro=_repro_from_resp(rb, matched="%d distinct owners / %d shared objects visible to a 2nd account"
                                                                % (len(owners_a), len(shared))))
                     return True   # a private-by-declaration list returns >=2 owners' objects to strangers
+        # BROWSER cross-user fallback: the SPA client-render case the httpx collection scan is blind to -- A
+        # creates a gated canary in a browser, and if an independent identity B sees it (anon does NOT), that's a
+        # cross-user read. The primitive carries the private-by-observation (anon) + A-confirm precision guards.
+        if has_browser:
+            a_sess = {**(ctx.headers or {}), **(_snapshot_session(a).get("headers") or {})}
+            b_sess = {**(ctx.headers or {}), **(_snapshot_session(b).get("headers") or {})}
+            canary = "hlxidor" + secrets.token_hex(6)
+            verdict = browser.cross_user_read_back(ctx.base_url, canary, canary, a_sess, b_sess)
+            if verdict is True:
+                ctx.evidence.update(bola_collection=True, cross_user_read=True, via="browser",
+                                    verified_by="two-session-read-back")
+                return True    # B, an independent identity, saw A's gated created value -> broken object auth
+            if verdict is False:
+                ctx.evidence.update(bola_collection=False, via="browser")
+                return False   # A saw it, anon+B did not -> owner-scoped (an OBSERVED clean, not a vacuous N/A)
         ctx.evidence.update(bola_collection=False, paths_tested=len(paths))
         return False if tested else None
     finally:

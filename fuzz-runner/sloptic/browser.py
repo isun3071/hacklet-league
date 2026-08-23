@@ -800,6 +800,89 @@ def create_and_check_execution(base_url: str, payload: str, marker: str, headers
     return bool(_drive_create_and_observe(base_url, payload, headers, timeout, observe))
 
 
+def _render_and_find(browser_obj, base_url, headers, locate, timeout):
+    """Open an ISOLATED context (its own cookie jar) as `headers`' identity, render base_url, reveal any
+    behind-a-CTA feed, and report whether `locate` appears in the rendered DOM text (one reload retry). The
+    read half of the cross-user round trip -- each identity gets a fresh context so A's and B's sessions never mix."""
+    ctxt = browser_obj.new_context()
+    try:
+        page = ctxt.new_page()
+        _apply_auth(page, base_url, headers)
+        with contextlib.suppress(Exception):
+            page.goto(base_url.rstrip("/") + "/", timeout=timeout * 1000, wait_until="load")
+            page.wait_for_timeout(400)
+            _reveal_hidden_controls(page)                        # open a feed/list that only paints on interaction
+            page.wait_for_load_state("networkidle", timeout=6000)
+        for _ in (0, 1):
+            if locate in _dom_text(page):
+                return True
+            with contextlib.suppress(Exception):
+                page.reload(timeout=timeout * 1000, wait_until="load")
+                page.wait_for_timeout(600)
+        return False
+    finally:
+        with contextlib.suppress(Exception):
+            ctxt.close()
+
+
+def cross_user_read_back(base_url: str, submit_value: str, locate: str,
+                         a_headers, b_headers, timeout: float = 12.0):
+    """Two-session cross-user read-back for IDOR/BOLA on the SPA data plane. CREATE as identity A (a_headers) in a
+    browser and confirm A can see its own canary `locate`; then check an ANONYMOUS render CANNOT see it (the app
+    gates the data -- else it's public by intent, not a leak); then render as an INDEPENDENT identity B (b_headers)
+    and report whether A's canary surfaces in B's OWN view. Returns True (B sees A's gated value -> broken
+    object-level authorization), False (owner-scoped: A saw it, anon/B did not -> clean), or None (A's create
+    couldn't be established/observed -> untestable, never a false clean). Isolated contexts per identity so
+    sessions never mix. Residual intent boundary (same as api_bola_collection): an app that INTENDS a shared feed
+    behind login reads as a leak here -- rare in a CRUD corpus, and the anon gate removes the public-feed case."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            bobj = _launch(pw)
+            if bobj is None:
+                return None
+            try:
+                # --- create as A, in A's own isolated context, and confirm A sees the canary ---
+                ctx_a = bobj.new_context()
+                try:
+                    pa = ctx_a.new_page()
+                    _apply_auth(pa, base_url, a_headers)
+                    with contextlib.suppress(Exception):
+                        pa.goto(base_url.rstrip("/") + "/", timeout=timeout * 1000, wait_until="load")
+                        pa.wait_for_timeout(300)
+                        _reveal_hidden_controls(pa)
+                    if not _fill_content_form(pa, submit_value, timeout):
+                        return None                              # no create surface for A to write through
+                    with contextlib.suppress(Exception):
+                        pa.wait_for_load_state("networkidle", timeout=6000)
+                    pa.wait_for_timeout(500)
+                    seen_by_a = False
+                    for _ in (0, 1):
+                        if locate in _dom_text(pa):
+                            seen_by_a = True
+                            break
+                        with contextlib.suppress(Exception):
+                            pa.reload(timeout=timeout * 1000, wait_until="load")
+                            pa.wait_for_timeout(600)
+                    if not seen_by_a:
+                        return None                              # create never surfaced even to A -> untestable
+                finally:
+                    with contextlib.suppress(Exception):
+                        ctx_a.close()
+                # --- anon must NOT see it (private-by-observation gate) -> else public by intent, not IDOR ---
+                if _render_and_find(bobj, base_url, None, locate, timeout):
+                    return False                                 # visible anonymously -> public data, not a leak
+                # --- render as B (independent identity): B seeing A's gated canary = cross-user read ---
+                return True if _render_and_find(bobj, base_url, b_headers, locate, timeout) else False
+            finally:
+                bobj.close()
+    except Exception:
+        return None
+
+
 def register_in_browser(base_url: str, headers=None, timeout: float = 12.0, total_timeout: float = 45.0,
                         email: str | None = None, code_getter=None):
     """SPA self-registration THROUGH the browser (the auth self-oracle's client-rendered path): open the signup
