@@ -459,6 +459,60 @@ def _fill_and_submit_signup(page, creds) -> bool:
     return False
 
 
+# A magic-link / email-OTP button: "Send magic link", "Continue with email", "Email me a link", plus a bare
+# passwordless "Sign in". Only ever consulted on a form we've confirmed has NO password field, so matching
+# sign-in is safe. Deliberately NOT a bare "send" (a contact form's Send would match) -- it must pair with link/
+# email or be an auth verb.
+_MAGIC_SUBMIT = re.compile(r"magic|send.*link|email.*link|link.*email|get.*link|passwordless|one.?time|"
+                           r"continue with email|email me|sign ?in|log ?in|continue|get started", re.I)
+# The click denylist, magic-scoped: the genuinely dangerous / off-site verbs, but NOT "send"/"confirm" -- a
+# magic-link button legitimately says "Send magic link" / "Confirm your email", and it only ever mails OUR own
+# controlled address. Everything destructive (pay/delete/logout/publish/share/social/external) still blocked.
+_MAGIC_NO_CLICK = re.compile(r"log ?out|sign ?out|delete|remove|pay\b|buy\b|checkout|subscribe|purchase|"
+                             r"publish|invite|download|share|tweet|facebook|instagram|external|https?://", re.I)
+
+
+def _fill_and_submit_magic(page, creds) -> bool:
+    """PASSWORDLESS magic-link / email-OTP request: a visible email field on a form with NO password anywhere.
+    Fill our controlled address and submit so the app's JS mails a magic link (verify_in_browser then follows it).
+    Strictly gated -- if any visible password field exists we do nothing (that's the password lane's job, and an
+    email-only submit there would be wrong). Runs only AFTER every password-signup attempt failed, so it can only
+    convert a dead-end N/A, never disturb the tuned password path. True once an email-first form was submitted."""
+    with contextlib.suppress(Exception):
+        for pw in page.query_selector_all("input[type=password]"):
+            if pw.is_visible():
+                return False                                 # a password form is present -> not passwordless, not ours
+        email_el = None
+        for el in page.query_selector_all("input"):
+            with contextlib.suppress(Exception):
+                if not el.is_visible():
+                    continue
+                typ = (el.get_attribute("type") or "text").lower()
+                hint = _field_hint(el)
+                if typ == "email" or "email" in hint or "mail" in hint:
+                    el.fill(creds["email"]); email_el = el
+                elif typ in ("text", "") and any(h in hint for h in ("user", "name", "handle", "login")):
+                    el.fill(creds["email"])                  # some passwordless forms label the email field 'username'
+                elif typ == "checkbox":
+                    el.check()                               # terms / agree
+                elif (el.get_attribute("required") is not None
+                      and typ not in ("checkbox", "radio", "hidden", "submit", "button", "file")
+                      and not (el.input_value() or "").strip()):
+                    el.fill(creds["email"])                  # keep a required field from silently blocking submit
+        if email_el is None:
+            return False                                     # no email field -> not an email-first auth form
+        for btn in page.query_selector_all("button, input[type=submit], [role=button]"):
+            with contextlib.suppress(Exception):
+                lbl = ((btn.inner_text() or "") + " " + (btn.get_attribute("value") or "") + " "
+                       + (btn.get_attribute("aria-label") or "")).strip().lower()[:60]
+                if (_MAGIC_SUBMIT.search(lbl) or _SIGNUP_SUBMIT.search(lbl)) and not _MAGIC_NO_CLICK.search(lbl) and btn.is_visible():
+                    btn.click(timeout=2500)
+                    return True
+        page.keyboard.press("Enter")                         # fallback: submit the focused email field's form
+        return True
+    return False
+
+
 # Conventional signup routes a 'Get Started' / 'Sign up' CTA navigates to via the JS router (QuizForge's
 # /register et al.) — an <a> LINK the button-only reveal can't open. Tried in order when the homepage has no
 # fillable signup, so a separate-route signup (the common SPA shape) is still reached.
@@ -552,6 +606,22 @@ def _reach_and_submit_signup(page, base_url, creds, timeout) -> bool:
             page.wait_for_timeout(400)
             _reveal_hidden_controls(page)
             if _fill_and_submit_signup(page, creds):
+                return True
+    return False
+
+
+def _reach_and_submit_magic(page, base_url, creds, timeout) -> bool:
+    """PASSWORDLESS magic-link / email-OTP request (LANE C). Try the homepage and the common auth routes with the
+    email-first submitter. THE LAST RESORT -- register_in_browser calls this only after the password-signup lane
+    AND the email-first wizard (LANE B) both found nothing, so it converts a dead-end N/A and never preempts a
+    password signup or a code wizard. True once an email-only auth form was submitted (the app then mails a link
+    that verify_in_browser follows)."""
+    for route in ("/", "/login", "/signin"):                 # where a magic-link / passwordless form actually lives
+        with contextlib.suppress(Exception):
+            page.goto(base_url.rstrip("/") + route, timeout=timeout * 1000, wait_until="load")
+            page.wait_for_timeout(350)
+            _reveal_hidden_controls(page)
+            if _fill_and_submit_magic(page, creds):
                 return True
     return False
 
@@ -940,10 +1010,13 @@ def register_in_browser(base_url: str, headers=None, timeout: float = 12.0, tota
                 page.on("request", _on_request)
 
                 if not _reach_and_submit_signup(page, base_url, creds, timeout):
-                    # LANE B fallback: no password-signup form, but maybe an EMAIL-FIRST wizard (email + emailed
-                    # code, password on a later step). Only when we have an inbox (email) AND a code fetcher.
-                    if not (email is not None and code_getter is not None
-                            and _drive_email_first(page, base_url, email, code_getter, creds, timeout)):
+                    # LANE B: EMAIL-FIRST wizard (email + emailed code, password on a later step) when we have an
+                    # inbox AND a code fetcher. LANE C: passwordless magic-link (email-only form). Ordered so the
+                    # wizard, the more complete flow, is tried BEFORE the email-only magic submit -- else magic
+                    # would submit the wizard's step-1 email form and short-circuit it.
+                    wizard_ok = (email is not None and code_getter is not None
+                                 and _drive_email_first(page, base_url, email, code_getter, creds, timeout))
+                    if not wizard_ok and not _reach_and_submit_magic(page, base_url, creds, timeout):
                         LAST_STAGE["stage"] = ("no fillable signup reached: no visible password field on the "
                                                "homepage (after revealing hidden controls) or at any of %d "
                                                "conventional signup routes" % len(_SIGNUP_ROUTES))
