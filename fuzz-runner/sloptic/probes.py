@@ -7038,6 +7038,54 @@ def _reset_result(ctx, suffix=""):
     return cache[key]
 
 
+# A SPA's forgot-password is a JS fetch to a JSON endpoint, not a server-rendered <form> -- so the form lane
+# (_forgot_form) and the Supabase lane both miss it, and qa-reset reads N/A on an app that has a perfectly good
+# recovery endpoint. Match a REQUEST-side reset trigger (emails a link) and, to keep the fire honest, require it
+# take an email but NOT a token/password (that shape is the COMPLETION endpoint, which consumes a token and mails
+# nothing). Path hints alone would misfire on the completion route; the field shape is the discriminator.
+_RESET_REQUEST_PATH = re.compile(r"forgot|recover|reset", re.I)   # request-side reset hints
+_RESET_FIELD_EMAIL = re.compile(r"e?mail|^username$", re.I)
+_RESET_FIELD_SECRET = re.compile(r"token|password|otp|code|secret", re.I)
+
+
+def _json_reset_endpoints(endpoints):
+    """Discovered JSON endpoints that REQUEST a password reset (email in, no token/password) -- the SPA analog of
+    a forgot-password form. Excludes the completion endpoint (consumes a token, mails nothing) by field shape."""
+    out = []
+    for e in endpoints or []:
+        if (e.method or "get").lower() not in ("post", "put"):
+            continue
+        path = (e.raw_path or e.path or "").lower()
+        if not _RESET_REQUEST_PATH.search(path):
+            continue
+        fields = list(e.body_fields or [])
+        has_email = any(_RESET_FIELD_EMAIL.search(f) for f in fields)
+        has_secret = any(_RESET_FIELD_SECRET.search(f) for f in fields)
+        if has_secret:
+            continue                                          # a token/password body -> the completion route, not the request
+        if has_email or (not fields and ("forgot" in path or "recover" in path)):
+            out.append(e)
+    return out
+
+
+def _trigger_reset_json(client, base, endpoint, email) -> bool:
+    """POST a discovered JSON forgot/recover endpoint with OUR controlled address so the app mails a reset link.
+    Uses the endpoint's own body_fields (the email-ish field <- our address, others benign), else a couple of
+    common shapes. True when accepted (<400). Reset endpoints intentionally 200 regardless (enumeration-safe), so
+    'accepted' just means the request took; the EMAIL's arrival is what the probe judges. Address is ALWAYS ours."""
+    if endpoint.body_fields:
+        bodies = [{f: (email if _RESET_FIELD_EMAIL.search(f) else "hl_reset") for f in endpoint.body_fields}]
+    else:
+        bodies = [{"email": email}, {"username": email}]
+    for body in bodies:
+        try:
+            if client.post(endpoint.path, json=body).status_code < 400:
+                return True
+        except (httpx.HTTPError, httpx.InvalidURL):
+            continue
+    return False
+
+
 def _run_reset_flow(ctx, suffix=""):
     """Request a password reset for an account WE established (our controlled address) and judge whether the
     recovery path works. PRECONDITION: an account with our address must plausibly exist -- else a reset request
@@ -7080,12 +7128,17 @@ def _run_reset_flow(ctx, suffix=""):
         if gw is not None and baas.recover(gw[0], gw[1], addr):
             used["lane"] = "baas"
             return True
+        for e in _json_reset_endpoints(profile.endpoints if profile is not None else []):
+            if _trigger_reset_json(forgot_client, base, e, addr):   # SPA JSON forgot/recover endpoint
+                used["lane"] = "json"
+                used["endpoint"] = e.path
+                return True
         return False
 
     def follow(msg):
         # only the app-hosted reset link (form lane) is a GET-able page; a Supabase recover link is a gateway
         # endpoint a bare GET can't judge, so leave link_alive None there (delivery is still judged).
-        if used.get("lane") != "form":
+        if used.get("lane") not in ("form", "json"):        # app-hosted reset link is GET-able (form + SPA-JSON lanes)
             return None
         for link in [ln for ln in msg.links if _same_app_link(ln, base)][:3]:
             try:
